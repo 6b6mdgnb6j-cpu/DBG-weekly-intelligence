@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DBG Weekly Intelligence</title>
+  <style>
+    :root {
+      --nav: #062b4f;
+      --ink: #12304a;
+      --muted: #667085;
+      --line: #d9e2ec;
+      --paper: #ffffff;
+      --bg: #f3f6fa;
+      --gold: #d79a2b;
+      --blue: #0057a8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+    aside {
+      background: var(--nav);
+      color: white;
+      padding: 28px 22px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .brand { font-size: 27px; font-weight: 800; line-height: 1.18; margin-bottom: 22px; }
+    .sub { font-size: 13px; line-height: 1.7; opacity: .9; margin-bottom: 26px; }
+    .nav button, .lang button, .tabs button {
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+    }
+    .nav button {
+      width: 100%;
+      display: block;
+      text-align: left;
+      color: white;
+      background: rgba(255,255,255,.08);
+      border-left: 3px solid transparent;
+      padding: 12px 13px;
+      margin-bottom: 8px;
+    }
+    .nav button.active { border-left-color: var(--gold); background: rgba(255,255,255,.16); }
+    .meta { border-top: 1px solid rgba(255,255,255,.25); margin-top: 22px; padding-top: 18px; font-size: 12px; line-height: 1.7; opacity: .82; }
+    main { padding: 34px 44px 52px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+    .eyebrow { color: var(--gold); font-weight: 700; letter-spacing: 3px; font-size: 13px; }
+    h1 { margin: 10px 0 8px; font-size: 39px; line-height: 1.16; }
+    .period { color: var(--muted); }
+    .lang { display: flex; gap: 8px; }
+    .lang button {
+      background: white;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      padding: 9px 13px;
+    }
+    .lang button.active { background: var(--ink); color: white; border-color: var(--ink); }
+    section { margin: 24px 0; }
+    .section-head {
+      width: 100%;
+      background: white;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 17px 20px;
+      font-size: 20px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .section-body { display: none; padding-top: 16px; }
+    section.open .section-body { display: block; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .tabs button {
+      background: #eaf1fa;
+      color: var(--ink);
+      padding: 8px 13px;
+      border: 1px solid transparent;
+    }
+    .tabs button.active { background: white; border-color: var(--blue); color: var(--blue); }
+    .card, .highlight {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      padding: 18px 20px;
+      margin-bottom: 12px;
+    }
+    .highlight { border-left: 5px solid var(--gold); }
+    .date {
+      display: inline-block;
+      background: #eaf1fa;
+      padding: 5px 10px;
+      color: var(--ink);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    h2 { margin: 0 0 14px; font-size: 22px; }
+    h3 { margin: 6px 0 8px; font-size: 18px; line-height: 1.35; }
+    p { color: var(--muted); line-height: 1.65; margin: 8px 0; }
+    a { color: var(--blue); font-weight: 700; text-decoration: none; }
+    .source { color: var(--muted); font-size: 13px; margin: 10px 0; }
+    .empty { color: var(--muted); background: white; border: 1px dashed var(--line); padding: 16px; }
+    @media (max-width: 800px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: static; height: auto; }
+      main { padding: 24px 18px 36px; }
+      header { display: block; }
+      .lang { margin-top: 14px; }
+      h1 { font-size: 30px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">DBG Weekly<br>Intelligence</div>
+      <div class="sub">Deutsche Börse Group<br>Beijing Representative Office<br><br>Weekly Information Dashboard</div>
+      <nav class="nav" id="nav"></nav>
+      <div class="meta" id="meta"></div>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <div class="eyebrow">WEEKLY BRIEFING</div>
+          <h1 data-cn="德交所集团北京代表处<br>周报简报" data-en="Deutsche Börse Group Beijing<br>Weekly Intelligence">德交所集团北京代表处<br>周报简报</h1>
+          <div class="period" id="period"></div>
+        </div>
+        <div class="lang">
+          <button id="lang-cn" class="active">中文</button>
+          <button id="lang-en">English</button>
+        </div>
+      </header>
+      <section class="open" id="highlights-section">
+        <button class="section-head" data-target="highlights-body"><span data-cn="本期导读 / Highlights" data-en="Highlights">本期导读 / Highlights</span><span>⌄</span></button>
+        <div class="section-body" id="highlights-body"></div>
+      </section>
+      <div id="sections"></div>
+    </main>
+  </div>
+  <script type="application/json" id="report-data">__REPORT_DATA__</script>
+  <script>
+    const data = JSON.parse(document.getElementById("report-data").textContent);
+    let lang = "cn";
+    const groupState = {};
+    const sectionState = { "highlights-section": true };
+
+    function text(item, cnKey, enKey) {
+      return lang === "cn" ? (item[cnKey] || item[enKey] || "") : (item[enKey] || item[cnKey] || "");
+    }
+    function label(cn, en) { return lang === "cn" ? cn : en; }
+    function titleFor(item) { return lang === "cn" ? (item.title_cn || item.title_original) : (item.title_en || item.title_original); }
+    function formatDate(value) {
+      if (!value) return "";
+      const d = new Date(value + "T00:00:00");
+      if (Number.isNaN(d.getTime())) return value;
+      return lang === "cn"
+        ? `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`
+        : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+    function escapeHtml(value) {
+      return String(value || "").replace(/[&<>"']/g, s => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[s]));
+    }
+    function card(item, highlight=false) {
+      const cls = highlight ? "highlight" : "card";
+      return `<article class="${cls}">
+        <div class="date">${escapeHtml(formatDate(item.date))}</div>
+        <h3>${escapeHtml(titleFor(item))}</h3>
+        ${item.summary ? `<p>${escapeHtml(item.summary)}</p>` : ""}
+        <div class="source">${escapeHtml(item.source)}${item.official ? " · Official" : ""}</div>
+        <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${label("阅读原文", "Read original")}</a>
+      </article>`;
+    }
+    function matchesGroup(item, section, group) {
+      if (section.key === "Competitor") return item.brand === group;
+      return item.subcategory === group;
+    }
+    function renderHighlights() {
+      const box = document.getElementById("highlights-body");
+      box.innerHTML = data.highlights.length
+        ? data.highlights.map(item => card(item, true)).join("")
+        : `<div class="empty">${label("本周暂无更新", "No updates this week.")}</div>`;
+    }
+    function renderSections() {
+      const root = document.getElementById("sections");
+      root.innerHTML = data.sections.map((section, index) => {
+        const activeGroup = groupState[section.key] || section.groups[0] || "";
+        const tabs = section.groups.map(group => `<button class="${group === activeGroup ? "active" : ""}" data-section="${section.key}" data-group="${escapeHtml(group)}">${escapeHtml(group)}</button>`).join("");
+        const items = data.items.filter(item => item.category === section.key && matchesGroup(item, section, activeGroup));
+        const body = items.length ? items.map(item => card(item)).join("") : `<div class="empty">${label("本周暂无更新", "No updates this week.")}</div>`;
+        const sectionId = `section-${section.key}`;
+        if (sectionState[sectionId] == null) sectionState[sectionId] = index === 0;
+        return `<section id="${sectionId}" class="${sectionState[sectionId] ? "open" : ""}">
+          <button class="section-head" data-target="body-${section.key}"><span>${label(section.label_cn, section.label_en)}</span><span>⌄</span></button>
+          <div class="section-body" id="body-${section.key}">
+            <div class="tabs">${tabs}</div>
+            <div>${body}</div>
+          </div>
+        </section>`;
+      }).join("");
+    }
+    function renderNav() {
+      document.getElementById("nav").innerHTML = [
+        `<button data-scroll="highlights-section">${label("本期导读", "Highlights")}</button>`,
+        ...data.sections.map(section => `<button data-scroll="section-${section.key}">${label(section.label_cn, section.label_en)}</button>`)
+      ].join("");
+      document.getElementById("meta").innerHTML = `${label("数据周期", "Data period")}: ${escapeHtml(formatDate(data.week_start))} - ${escapeHtml(formatDate(data.week_end))}<br>${label("信息源", "Information sources")}: ${data.source_count}<br>${label("新闻数", "News items")}: ${data.item_count}`;
+      document.getElementById("period").textContent = `${formatDate(data.week_start)} - ${formatDate(data.week_end)}`;
+    }
+    function renderStaticText() {
+      document.querySelectorAll("[data-cn][data-en]").forEach(el => {
+        el.innerHTML = lang === "cn" ? el.dataset.cn : el.dataset.en;
+      });
+      document.getElementById("lang-cn").classList.toggle("active", lang === "cn");
+      document.getElementById("lang-en").classList.toggle("active", lang === "en");
+    }
+    function renderAll() {
+      renderStaticText();
+      renderNav();
+      renderHighlights();
+      renderSections();
+    }
+    document.addEventListener("click", event => {
+      const tab = event.target.closest(".tabs button");
+      if (tab) {
+        event.preventDefault();
+        event.stopPropagation();
+        groupState[tab.dataset.section] = tab.dataset.group;
+        renderAll();
+        return;
+      }
+      const head = event.target.closest(".section-head");
+      if (head) {
+        const section = head.closest("section");
+        sectionState[section.id] = !section.classList.contains("open");
+        renderAll();
+        return;
+      }
+      const nav = event.target.closest(".nav button");
+      if (nav) {
+        event.preventDefault();
+        const target = document.getElementById(nav.dataset.scroll);
+        if (target) {
+          Object.keys(sectionState).forEach(key => { sectionState[key] = false; });
+          sectionState[target.id] = true;
+          renderAll();
+          document.getElementById(target.id).scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        return;
+      }
+    });
+    document.getElementById("lang-cn").addEventListener("click", () => { lang = "cn"; renderAll(); });
+    document.getElementById("lang-en").addEventListener("click", () => { lang = "en"; renderAll(); });
+    renderAll();
+  </script>
+</body>
+</html>
