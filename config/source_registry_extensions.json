@@ -1,0 +1,68 @@
+[
+  {
+    "source_id": "SRC-180",
+    "source_name": "ISS STOXX",
+    "official_url": "https://www.iss-stoxx.com",
+    "category": "DBG",
+    "subcategory": "投资管理解决方案",
+    "brand": "ISS STOXX",
+    "competitor_type": "",
+    "reason_added": "Coverage gap extension for DBG index, analytics, benchmark, ESG data, and investment-management-solutions business coverage. The probed RSS feed returned no entries, so the source is registered but disabled for later repair.",
+    "added_from_baseline": "baseline-53-sources"
+  },
+  {
+    "source_id": "SRC-181",
+    "source_name": "HashKey",
+    "official_url": "https://group.hashkey.com",
+    "category": "Competitor",
+    "subcategory": "交易与清算",
+    "brand": "HashKey",
+    "competitor_type": "china",
+    "reason_added": "Coverage gap extension for Crypto Finance competitor coverage in digital asset infrastructure, custody, trading, and China/Hong Kong-facing institutional crypto activity.",
+    "added_from_baseline": "baseline-53-sources"
+  },
+  {
+    "source_id": "SRC-182",
+    "source_name": "EEX",
+    "official_url": "https://www.eex.com",
+    "category": "DBG",
+    "subcategory": "交易与清算",
+    "brand": "EEX",
+    "competitor_type": "",
+    "reason_added": "Coverage gap extension for direct DBG internal coverage of EEX energy, commodities, environmental markets, trading, clearing, products, and market development.",
+    "added_from_baseline": "baseline-53-sources"
+  },
+  {
+    "source_id": "SRC-183",
+    "source_name": "360T",
+    "official_url": "https://www.360t.com",
+    "category": "DBG",
+    "subcategory": "交易与清算",
+    "brand": "360T",
+    "competitor_type": "",
+    "reason_added": "Coverage gap extension for direct DBG internal coverage of institutional FX, platform developments, partnerships, liquidity, FX technology, market access, and product launches.",
+    "added_from_baseline": "baseline-53-sources"
+  },
+  {
+    "source_id": "SRC-184",
+    "source_name": "DTCC",
+    "official_url": "https://www.dtcc.com",
+    "category": "Competitor",
+    "subcategory": "证券与基金服务",
+    "brand": "DTCC",
+    "competitor_type": "international",
+    "reason_added": "Coverage gap extension for Clearstream competitor coverage in settlement, clearing, custody, post-trade, collateral, market infrastructure, regulatory, and technology developments.",
+    "added_from_baseline": "baseline-53-sources"
+  },
+  {
+    "source_id": "SRC-185",
+    "source_name": "SimCorp",
+    "official_url": "https://www.simcorp.com",
+    "category": "DBG",
+    "subcategory": "投资管理解决方案",
+    "brand": "SimCorp",
+    "competitor_type": "",
+    "reason_added": "Coverage gap extension for direct DBG investment-management-technology coverage. The probed static page exposed only an old fraud-warning item and did not reach the target period, so the source is registered but disabled for later repair.",
+    "added_from_baseline": "baseline-53-sources"
+  }
+]

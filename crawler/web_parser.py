@@ -337,7 +337,12 @@ def collect_web(source, week_start, week_end, logger):
 
         while current_url and pages_scanned < max_pages and candidates_scanned < max_scan_candidates:
             seen_pages.add(current_url)
-            response = request_get(current_url, timeout=20, attempts=2)
+            response = request_get(
+                current_url,
+                timeout=20,
+                attempts=2,
+                headers=source.get("request_headers"),
+            )
             pages_scanned += 1
 
             soup = BeautifulSoup(response.text, "html.parser")

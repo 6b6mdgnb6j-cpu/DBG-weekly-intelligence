@@ -10,9 +10,12 @@ from .osc import parse_osc_list
 from .sfc import parse_sfc_list
 from .expansion import (
     parse_adgm_list,
+    parse_360t_press_list,
     parse_article_release_list,
     parse_b3_list,
     parse_bma_list,
+    parse_dtcc_list,
+    parse_eex_list,
     parse_korea_fsc_list,
     parse_naic_list,
     parse_six_list,
@@ -46,6 +49,9 @@ ADAPTERS = {
     "SRC-126": parse_article_release_list,
     "SRC-130": parse_article_release_list,
     "SRC-134": parse_article_release_list,
+    "SRC-182": parse_eex_list,
+    "SRC-183": parse_360t_press_list,
+    "SRC-184": parse_dtcc_list,
 }
 
 

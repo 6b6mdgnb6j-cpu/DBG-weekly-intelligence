@@ -7,11 +7,11 @@ from bs4 import BeautifulSoup
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-def request_get(url, timeout=20, attempts=2):
+def request_get(url, timeout=20, attempts=2, headers=None):
     last_error = None
     for _ in range(attempts):
         try:
-            response = requests.get(url, headers=HEADERS, timeout=timeout)
+            response = requests.get(url, headers=headers or HEADERS, timeout=timeout)
             response.raise_for_status()
             if (response.encoding or "").lower() in ("iso-8859-1", "windows-1252"):
                 response.encoding = response.apparent_encoding

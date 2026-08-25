@@ -174,3 +174,77 @@ def parse_naic_list(soup, current_url, source, week_start=None, week_end=None):
         summary = _strip_date(text, raw_date)
         _append_unique(items, seen, title, absolute_url(current_url, link["href"]), raw_date, summary)
     return items
+
+
+def parse_eex_list(soup, current_url, source, week_start=None, week_end=None):
+    items = []
+    seen = set()
+    for link in soup.find_all("a", href=True):
+        href = link.get("href", "")
+        if "tx_news_pi1" not in href and "/newsroom/detail" not in href:
+            continue
+        block = link
+        for parent in link.parents:
+            classes = " ".join(parent.get("class", [])).lower()
+            if any(token in classes for token in ("news", "card", "teaser", "item")):
+                block = parent
+                break
+        text = clean_text(block.get_text(" ", strip=True))
+        date_match = re.search(r"\b\d{1,2}\.\d{1,2}\.\d{4}\b", text)
+        raw_date = date_match.group(0) if date_match else _date_from_text(text)
+        if not raw_date:
+            continue
+        title = _strip_date(link.get_text(" ", strip=True), raw_date)
+        if not title or len(title) < 12:
+            title = _title_from_block(block, link, raw_date)
+        summary = _strip_date(text, raw_date)
+        _append_unique(items, seen, title, absolute_url(current_url, href), raw_date, summary)
+    return items
+
+
+def parse_360t_press_list(soup, current_url, source, week_start=None, week_end=None):
+    items = []
+    seen = set()
+    for link in soup.find_all("a", href=True):
+        href = link.get("href", "")
+        if "/news_press/" not in href:
+            continue
+        block = link
+        for parent in link.parents:
+            text = clean_text(parent.get_text(" ", strip=True))
+            if _date_from_text(text) and "Press Release" in text:
+                block = parent
+                break
+        text = clean_text(block.get_text(" ", strip=True))
+        date_match = re.search(r"\b\d{1,2}\.\d{1,2}\.\d{4}\b", text)
+        raw_date = date_match.group(0) if date_match else _date_from_text(text)
+        if not raw_date:
+            continue
+        after_date = text.split(raw_date, 1)[-1]
+        title = clean_text(after_date.split(" Read more", 1)[0])
+        title = re.split(
+            r"\s+360T,\s+| Frankfurt[/A-Za-z ]*[–-]|\s+[A-Z][a-z]+ \d{1,2}, \d{4}\s+[–-]",
+            title,
+        )[0]
+        title = clean_text(title)
+        if not title or title.lower() in ("read more", "learn more"):
+            title = _strip_date(link.get_text(" ", strip=True), raw_date)
+        summary = _strip_date(text, raw_date)
+        _append_unique(items, seen, title, absolute_url(current_url, href), raw_date, summary)
+    return items
+
+
+def parse_dtcc_list(soup, current_url, source, week_start=None, week_end=None):
+    items = []
+    seen = set()
+    for card in soup.select(".post-card"):
+        date_tag = card.select_one(".post-card__date")
+        link = card.select_one("a.post-card__link-wrapper[href]")
+        if not date_tag or not link:
+            continue
+        raw_date = clean_text(date_tag.get_text(" ", strip=True))
+        title = _strip_date(link.get_text(" ", strip=True), raw_date)
+        title = title.replace("Learn More", "").strip()
+        summary = _strip_date(card.get_text(" ", strip=True), raw_date)
+        _append_unique(items, seen, title, absolute_url(current_url, link["href"]), raw_date, summary)
+    return items
