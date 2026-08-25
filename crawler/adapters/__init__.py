@@ -8,6 +8,16 @@ from .hkex import parse_hkex_list
 from .jpx import parse_jpx_list
 from .osc import parse_osc_list
 from .sfc import parse_sfc_list
+from .expansion import (
+    parse_adgm_list,
+    parse_article_release_list,
+    parse_b3_list,
+    parse_bma_list,
+    parse_korea_fsc_list,
+    parse_naic_list,
+    parse_six_list,
+    parse_table_release_list,
+)
 
 
 ADAPTERS = {
@@ -22,6 +32,20 @@ ADAPTERS = {
     "SRC-144": parse_crypto_finance_list,
     "SRC-152": parse_hkex_list,
     "SRC-045": parse_osc_list,
+    "SRC-014": parse_table_release_list,
+    "SRC-016": parse_table_release_list,
+    "SRC-035": parse_article_release_list,
+    "SRC-037": parse_article_release_list,
+    "SRC-046": parse_article_release_list,
+    "SRC-048": parse_bma_list,
+    "SRC-050": parse_korea_fsc_list,
+    "SRC-052": parse_adgm_list,
+    "SRC-070": parse_six_list,
+    "SRC-087": parse_b3_list,
+    "SRC-123": parse_naic_list,
+    "SRC-126": parse_article_release_list,
+    "SRC-130": parse_article_release_list,
+    "SRC-134": parse_article_release_list,
 }
 
 

@@ -13,6 +13,8 @@ def request_get(url, timeout=20, attempts=2):
         try:
             response = requests.get(url, headers=HEADERS, timeout=timeout)
             response.raise_for_status()
+            if (response.encoding or "").lower() in ("iso-8859-1", "windows-1252"):
+                response.encoding = response.apparent_encoding
             return response
         except Exception as exc:
             last_error = exc

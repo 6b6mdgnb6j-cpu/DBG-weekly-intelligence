@@ -32,8 +32,8 @@ def in_week(date_value, start, end):
     return start <= parsed.date() <= end
 
 
-US_MM_DD_YYYY_SOURCE_IDS = {"SRC-013"}
-US_MM_DD_YYYY_SOURCE_NAMES = {"商品期货交易委员会", "CFTC"}
+US_MM_DD_YYYY_SOURCE_IDS = {"SRC-013", "SRC-014", "SRC-016"}
+US_MM_DD_YYYY_SOURCE_NAMES = {"商品期货交易委员会", "CFTC", "货币监理署", "全国信用社管理局"}
 
 
 def source_uses_us_numeric_dates(source=None):

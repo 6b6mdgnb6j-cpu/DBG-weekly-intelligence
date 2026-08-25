@@ -60,6 +60,10 @@ HIGH_VALUE_MACRO_TERMS = [
     "settlement regulation",
     "derivatives regulation",
     "financial stability policy",
+    "intermediários estrangeiros",
+    "mercados admitidos",
+    "contratos futuros",
+    "asset management hub",
 ]
 
 
@@ -117,6 +121,8 @@ NEGATIVE_TERMS = [
 NON_FINANCIAL_POLICY_TERMS = [
     "narcotics", "cartel", "cartels", "cocaine", "violent gangs",
     "illegal aliens", "refundable tax credits", "tax credits from abuse",
+    "venezuela's economic recovery", "venezuela’s economic recovery",
+    "earthquake relief",
 ]
 
 

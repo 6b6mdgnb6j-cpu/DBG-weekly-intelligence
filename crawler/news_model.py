@@ -40,6 +40,9 @@ def is_garbled_text(text):
     if not text:
         return False
     stripped = text.lstrip()
+    lowered = stripped.lower()
+    if lowered.startswith("log ins to www.aima.org"):
+        return True
     if stripped.startswith("%PDF"):
         return True
     if text.count("\ufffd") >= 3:
@@ -64,7 +67,7 @@ def normalize_text_encoding(value, clear_garbage=False):
     text = html.unescape(value or "").strip()
     if clear_garbage and is_garbled_text(text):
         return ""
-    if any(marker in text for marker in ("â", "Â", "Ã")):
+    if any(marker in text for marker in ("â", "Â", "Ã", "å", "æ", "ä")):
         try:
             repaired = text.encode("latin1").decode("utf-8")
             if repaired.count("\ufffd") <= text.count("\ufffd"):
