@@ -1,9 +1,16 @@
 from .content_filter import (
+    HIGH_VALUE_BUSINESS_TERMS,
+    HIGH_VALUE_MACRO_TERMS,
     HIGH_IMPORTANCE_TERMS,
     INDIVIDUAL_ENFORCEMENT_TERMS,
     MARKET_WIDE_TERMS,
     NEGATIVE_TERMS,
+    contains_term,
+    has_material_development_signal,
+    has_routine_operational_signal,
+    is_recurring_market_commentary,
     normalize_text,
+    routine_operational_is_overridden,
 )
 
 
@@ -25,6 +32,12 @@ SOURCE_IMPORTANCE = {
 
 def topic_key(item):
     text = normalize_text(item.get("title_original"), item.get("summary"))
+    for term in HIGH_VALUE_MACRO_TERMS:
+        if term in text:
+            return term
+    for term in HIGH_VALUE_BUSINESS_TERMS:
+        if term in text:
+            return term
     for term in HIGH_IMPORTANCE_TERMS:
         if term in text:
             return term
@@ -32,9 +45,76 @@ def topic_key(item):
     return " ".join(words[:3]) if words else item.get("source", "")
 
 
+TIER_1_HIGHLIGHT_TERMS = [
+    "fomc statement",
+    "fomc minutes",
+    "federal open market committee",
+    "monetary policy decision",
+    "notice of proposed rulemaking",
+    "proposed rulemaking",
+    "proposed regulation",
+    "sef",
+    "order book requirement",
+    "derivatives contracts",
+    "derivatives rule",
+    "market structure",
+    "market mechanism",
+    "market access",
+    "foreign market access",
+    "mercados admitidos",
+    "intermediários estrangeiros",
+    "invest in hong kong etfs",
+    "financial results",
+    "quarterly results",
+    "q2 2026 results",
+    "capital markets rules change",
+]
+
+
+TIER_2_HIGHLIGHT_TERMS = [
+    "new product",
+    "data products",
+    "ownership datasets",
+    "index series",
+    "new futures",
+    "new options",
+    "market expansion",
+    "expansion and harmonisation",
+    "strategic partnership",
+    "stablecoin partnership",
+    "cross-border",
+    "crypto assets",
+    "stablecoin",
+    "asset management hub",
+    "central moneymarkets unit",
+    "renminbi sovereign bonds",
+]
+
+
+LOW_VALUE_HIGHLIGHT_TERMS = [
+    "survey",
+    "year in review",
+    "webinar",
+    "event",
+    "speech",
+    "forum",
+    "research institute",
+]
+
+
+MONETARY_POLICY_HIGHLIGHT_TERMS = [
+    "fomc statement",
+    "fomc minutes",
+    "federal open market committee",
+    "monetary policy decision",
+]
+
+
 def highlight_score(item):
     text = normalize_text(item.get("title_original"), item.get("summary"))
-    if any(term in text for term in NEGATIVE_TERMS):
+    if any(contains_term(text, term) for term in NEGATIVE_TERMS):
+        return 0
+    if has_routine_operational_signal(text) and not routine_operational_is_overridden(text):
         return 0
 
     score = int(item.get("relevance_score") or 0)
@@ -47,6 +127,20 @@ def highlight_score(item):
         score += 3
     if any(term in text for term in MARKET_WIDE_TERMS):
         score += 3
+    if any(term in text for term in HIGH_VALUE_MACRO_TERMS):
+        score += 7
+    if any(term in text for term in HIGH_VALUE_BUSINESS_TERMS):
+        score += 5
+    if any(term in text for term in TIER_1_HIGHLIGHT_TERMS):
+        score += 10
+    elif any(term in text for term in TIER_2_HIGHLIGHT_TERMS):
+        score += 6
+    elif any(term in text for term in LOW_VALUE_HIGHLIGHT_TERMS):
+        score -= 4
+    if any(term in text for term in MONETARY_POLICY_HIGHLIGHT_TERMS):
+        score += 8
+    if is_recurring_market_commentary(item, text) and not has_material_development_signal(text):
+        score -= 8
     if any(term in text for term in INDIVIDUAL_ENFORCEMENT_TERMS):
         score -= 5
         if any(term in text for term in MARKET_WIDE_TERMS):

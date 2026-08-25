@@ -64,6 +64,13 @@ HIGH_VALUE_MACRO_TERMS = [
     "mercados admitidos",
     "contratos futuros",
     "asset management hub",
+    "proposes new regulation",
+    "proposed regulation",
+    "requests comment",
+    "request for comment",
+    "foreign-listed etf",
+    "foreign-listed etfs",
+    "merger value",
 ]
 
 
@@ -89,6 +96,76 @@ HIGH_VALUE_BUSINESS_TERMS = [
     "regulatory approval",
     "insurance funds",
     "invest in hong kong etfs",
+    "new futures",
+    "new options",
+    "new market",
+    "new index",
+    "index series",
+    "data products",
+    "freight data products",
+    "product launch",
+    "market expansion",
+    "platform migration",
+    "stablecoin partnership",
+    "market data portfolio",
+]
+
+
+MATERIAL_DEVELOPMENT_TERMS = [
+    "launch", "launches", "introduction of", "new product", "new futures",
+    "new options", "new market", "new data product", "data products",
+    "new index", "index series", "expansion", "extended expiries",
+    "harmonisation", "acquisition", "partnership", "strategic",
+    "market access", "foreign market access", "regulatory approval",
+    "financial results", "quarterly results", "annual results", "earnings",
+    "clearing expansion", "settlement infrastructure", "technology migration",
+    "stablecoin partnership", "public consultation", "proposed rulemaking",
+    "notice of proposed rulemaking", "proposed regulation", "fomc statement",
+    "fomc minutes", "monetary policy", "capital markets rules change",
+]
+
+
+ROUTINE_OPERATIONAL_OVERRIDE_TERMS = [
+    "launch", "launches", "introduction of", "new product", "new futures",
+    "new options", "new market", "new index", "index series", "expansion",
+    "extended expiries", "harmonisation", "acquisition", "partnership",
+    "strategic", "market access", "foreign market access",
+    "regulatory approval", "financial results", "quarterly results",
+    "annual results", "earnings", "clearing expansion",
+    "settlement infrastructure", "major technology migration",
+    "public consultation", "proposed rulemaking",
+    "notice of proposed rulemaking", "proposed regulation",
+    "fomc statement", "fomc minutes", "monetary policy",
+    "capital markets rules change",
+]
+
+
+ROUTINE_OPERATIONAL_TERMS = [
+    "final settlement price",
+    "final settlement prices",
+    "routine settlement notice",
+    "missing trades",
+    "missing price",
+    "missing index",
+    "data alert",
+    "submission window closes",
+    "mandatory reporting reminder",
+    "mandatory reporting",
+    "annual usage reporting",
+    "usage reporting",
+    "action required reminder",
+    "service interruption",
+    "routine customer notice",
+    "routine migration reminder",
+    "migration mandatory",
+    "sftp discontinuation",
+    "no eod data",
+]
+
+
+RECURRING_COMMENTARY_TERMS = [
+    "ta tuesday",
+    "market deep dive",
 ]
 
 
@@ -169,6 +246,26 @@ def contains_term(text, term):
     return re.search(rf"\b{re.escape(term)}\b", text) is not None
 
 
+def has_material_development_signal(text):
+    return any(term in text for term in MATERIAL_DEVELOPMENT_TERMS)
+
+
+def has_routine_operational_signal(text):
+    return any(term in text for term in ROUTINE_OPERATIONAL_TERMS)
+
+
+def routine_operational_is_overridden(text):
+    return any(term in text for term in ROUTINE_OPERATIONAL_OVERRIDE_TERMS)
+
+
+def is_recurring_market_commentary(item, text):
+    source = (item.get("source") or "").lower()
+    brand = (item.get("brand") or "").lower()
+    if "crypto finance" not in source and "crypto finance" not in brand:
+        return False
+    return any(term in text for term in RECURRING_COMMENTARY_TERMS)
+
+
 def score_item(item):
     category = (item.get("category") or "").lower()
     bucket = "macro"
@@ -218,6 +315,14 @@ def score_item(item):
         if contains_term(text, term):
             score -= 5
             reasons.append(f"downrank:{term}")
+
+    if has_routine_operational_signal(text) and not routine_operational_is_overridden(text):
+        score -= 14
+        reasons.append("downrank:routine_operational")
+
+    if is_recurring_market_commentary(item, text) and not has_material_development_signal(text):
+        score -= 4
+        reasons.append("downrank:recurring_market_commentary")
 
     individual_enforcement = any(term in text for term in INDIVIDUAL_ENFORCEMENT_TERMS)
     market_wide = any(term in text for term in MARKET_WIDE_TERMS)

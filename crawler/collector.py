@@ -10,6 +10,7 @@ from .news_model import ensure_news_schema
 from .rss_parser import collect_rss
 from .translator import TitleTranslator
 from .web_parser import collect_web
+from .wp_json_parser import collect_wp_json
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -102,6 +103,8 @@ def classify_error(error):
 def classify_empty_status(status, source):
     if status["error"]:
         return classify_error(status["error"])
+    if source.get("method") == "wp_json" and status.get("target_period_reached") and status["candidates"] == 0:
+        return "true_no_updates"
     if status["candidates"] == 0:
         return "no_candidates"
     if status["dated_candidates"] == 0:
@@ -111,7 +114,7 @@ def classify_empty_status(status, source):
             return "date_parse_failed"
         if source.get("method") == "web" and not status.get("target_period_reached"):
             return "parser_failed"
-        if source.get("method") == "rss":
+        if source.get("method") in ("rss", "wp_json"):
             return "true_no_updates"
         return "all_outside_period"
     if status["after_relevance"] == 0:
@@ -164,6 +167,8 @@ def collect_week(start_arg=None, translate=True):
 
             if method == "rss":
                 source_raw, source_filtered, meta = collect_rss(source, week_start, week_end, logger)
+            elif method == "wp_json":
+                source_raw, source_filtered, meta = collect_wp_json(source, week_start, week_end, logger)
             elif method == "web":
                 source_raw, source_filtered, meta = collect_web(source, week_start, week_end, logger)
             else:
