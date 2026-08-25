@@ -179,6 +179,19 @@ def parse_naic_list(soup, current_url, source, week_start=None, week_end=None):
 def parse_eex_list(soup, current_url, source, week_start=None, week_end=None):
     items = []
     seen = set()
+    for row in soup.select("table.news-list tr"):
+        text = clean_text(row.get_text(" ", strip=True))
+        raw_date = _date_from_text(text)
+        link = row.find("a", href=True)
+        if not raw_date or not link:
+            continue
+        href = link.get("href", "")
+        if "/newsroom/detail" not in href or href.lower().endswith(".pdf"):
+            continue
+        title = _strip_date(link.get_text(" ", strip=True), raw_date)
+        summary = _strip_date(text, raw_date)
+        _append_unique(items, seen, title, absolute_url(current_url, href), raw_date, summary)
+
     for link in soup.find_all("a", href=True):
         href = link.get("href", "")
         if "tx_news_pi1" not in href and "/newsroom/detail" not in href:

@@ -3903,16 +3903,16 @@
     "max_items": 10,
     "brand": "EEX",
     "competitor_type": "",
-    "enabled": false,
+    "enabled": true,
     "status": "active",
     "technical_class": "static_web",
-    "technical_status": "parser_failed",
+    "technical_status": "working",
     "max_candidates": 20,
     "registry_source": "coverage_gap_extension",
     "registry_raw": "Coverage gap extension from baseline-53-sources: EEX official newsroom",
-    "crawl_url": "https://www.eex.com/en/newsroom",
-    "max_pages": 1,
-    "max_scan_candidates": 50
+    "crawl_url": "https://www.eex.com/en/newsroom/news",
+    "max_pages": 8,
+    "max_scan_candidates": 120
   },
   {
     "id": "SRC-183",

@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -206,8 +206,27 @@ def make_list_item(source, url, title, raw_date):
 
 
 def find_next_page(soup, current_url, seen_pages):
-    rel_next = soup.find("a", rel=lambda value: value and "next" in value)
+    current_page = 1
+    parsed_url = urlparse(current_url)
+    page_match = re.search(r"/page/(\d+)/?", current_url)
+    query_page = parse_qs(parsed_url.query).get("tx_news_pi1[currentPage]", [])
+    if page_match:
+        current_page = int(page_match.group(1))
+    elif query_page:
+        try:
+            current_page = int(query_page[0])
+        except ValueError:
+            current_page = 1
+
     candidates = []
+    next_page_labels = {str(current_page + 1), f"page {current_page + 1}"}
+    for anchor in soup.find_all("a"):
+        text = anchor.get_text(" ", strip=True).lower()
+        href = anchor.get("href") or ""
+        if text in next_page_labels or f"/page/{current_page + 1}/" in href:
+            candidates.append(anchor)
+
+    rel_next = soup.find("a", rel=lambda value: value and "next" in value)
     if rel_next and rel_next.get("href"):
         candidates.append(rel_next)
 
@@ -219,17 +238,6 @@ def find_next_page(soup, current_url, seen_pages):
             token in f"{text} {aria} {classes}"
             for token in ("next", "older", "load more", "more results", "下一", "older posts")
         ):
-            candidates.append(anchor)
-
-    current_page = 1
-    page_match = re.search(r"/page/(\d+)/?", current_url)
-    if page_match:
-        current_page = int(page_match.group(1))
-    next_page_labels = {str(current_page + 1), f"page {current_page + 1}"}
-    for anchor in soup.find_all("a"):
-        text = anchor.get_text(" ", strip=True).lower()
-        href = anchor.get("href") or ""
-        if text in next_page_labels or f"/page/{current_page + 1}/" in href:
             candidates.append(anchor)
 
     for anchor in candidates:
