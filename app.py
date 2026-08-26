@@ -1,7 +1,8 @@
 import streamlit as st
 
-from utils.loader import load_news
+from utils.loader import list_published_reports
 from utils.loader import load_news_payload
+from utils.loader import report_label
 from utils.style import load_style
 
 
@@ -21,19 +22,24 @@ load_style()
 
 
 # ======================
+if "lang" not in st.session_state:
+    st.session_state.lang = "中文"
+
+
+# ======================
 # Data
 # ======================
 
-payload = load_news_payload()
-news = payload["items"]
+published_reports = list_published_reports()
+selected_report = None
+if published_reports:
+    labels = [report_label(path) for path in published_reports]
+    selected_label = st.sidebar.selectbox("Published week", labels, index=0)
+    selected_report = published_reports[labels.index(selected_label)]
 
-
-# ======================
-# Language
-# ======================
-
-if "lang" not in st.session_state:
-    st.session_state.lang = "中文"
+payload = load_news_payload(selected_report)
+news = payload.get("items", [])
+highlights = payload.get("highlights", news[:5])
 
 
 # ======================
@@ -97,6 +103,16 @@ with st.sidebar:
 # ======================
 # Header
 # ======================
+
+if not news:
+    st.info(
+        """
+        No published weekly report is available yet.
+
+        Publish an already-generated weekly JSON before deploying or viewing this app.
+        """
+    )
+    st.stop()
 
 
 col1, col2 = st.columns([5,1])
@@ -164,19 +180,25 @@ if section == "Highlights":
     )
 
 
-    for i,item in enumerate(news[:5],1):
+    for i,item in enumerate(highlights,1):
 
         st.markdown(
             f"""
             <div class="highlight-item">
 
-            <b>{i}. [{item['category']}] 
+            <b>{i}. [{item.get('category', '')}]
             {item.get('title_cn') if st.session_state.lang == "中文" else item.get('title_en') or item.get('title_original')}</b>
 
             <br><br>
 
             来源：
-            {item['source']}
+            {item.get('source', '')}
+
+            <br><br>
+
+            <a href="{item.get('url', '#')}" target="_blank">
+            阅读原文 →
+            </a>
 
             </div>
 
@@ -213,7 +235,7 @@ else:
 
     filtered = [
         x for x in news
-        if x["category"] == target
+        if x.get("category") == target
     ]
 
 
@@ -231,7 +253,7 @@ else:
         subcategories = sorted(
             list(
                 set(
-                    x["subcategory"]
+                    x.get("subcategory", "")
                     for x in filtered
                 )
             )
@@ -253,7 +275,7 @@ else:
 
                 items = [
                     x for x in filtered
-                    if x["subcategory"] == subcategory
+                    if x.get("subcategory", "") == subcategory
                 ]
 
 
@@ -267,7 +289,7 @@ else:
 
 
                         <div class="date">
-                        {item['date']}
+                        {item.get('date', '')}
                         </div>
 
 
@@ -283,7 +305,7 @@ else:
 
                         <div class="source">
 
-                        🏢 {item['source']}
+                        🏢 {item.get('source', '')}
 
                         </div>
 

@@ -10,4 +10,5 @@ venv/
 logs/
 raw/
 output/
+cache/
 data/news.json
