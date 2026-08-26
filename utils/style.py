@@ -118,6 +118,16 @@ box-shadow:
 
 }
 
+.highlight-summary {
+
+margin:0 0 14px 0;
+
+line-height:1.6;
+
+color:#34495E;
+
+}
+
 
 
 /* news card */

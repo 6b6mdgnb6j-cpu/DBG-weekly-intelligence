@@ -244,6 +244,8 @@ if section == "Highlights":
 
 
     for i,item in enumerate(highlights,1):
+        summary = (item.get("summary") or "").strip()
+        summary_html = f'<p class="highlight-summary">{summary}</p>' if summary else ""
 
         st.markdown(
             f"""
@@ -253,6 +255,8 @@ if section == "Highlights":
             {localized_title(item)}</b>
 
             <br><br>
+
+            {summary_html}
 
             来源：
             {item.get('source', '')}

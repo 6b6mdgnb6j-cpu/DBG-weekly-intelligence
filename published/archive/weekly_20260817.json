@@ -1,9 +1,9 @@
 {
   "week_start": "2026-08-17",
   "week_end": "2026-08-23",
-  "source_count": 58,
+  "source_count": 59,
   "registered_source_count": 185,
-  "item_count": 15,
+  "item_count": 16,
   "items": [
     {
       "date": "2026-08-17",
@@ -55,6 +55,23 @@
       "relevance_score": 4,
       "relevance_reason": "repo, official, priority=1",
       "url": "https://www.iss-stoxx.com/press-releases/strong-governance-foundations-in-the-ai-era/"
+    },
+    {
+      "date": "2026-08-18",
+      "title_original": "Clearstream’s July 2026 figures",
+      "title_cn": "Clearstream’s July 2026 figures",
+      "title_en": "Clearstream’s July 2026 figures",
+      "summary": "",
+      "source": "明讯银行",
+      "category": "DBG",
+      "subcategory": "证券与基金服务",
+      "brand": "Clearstream",
+      "competitor_type": "",
+      "priority": 1,
+      "official": true,
+      "relevance_score": 8,
+      "relevance_reason": "settlement, collateral, important:settlement, official, priority=1",
+      "url": "https://www.clearstream.com/clearstream-en/newsroom/20260713-5438524"
     },
     {
       "date": "2026-08-20",
@@ -282,6 +299,24 @@
     },
     {
       "date": "2026-08-18",
+      "title_original": "Clearstream’s July 2026 figures",
+      "title_cn": "Clearstream’s July 2026 figures",
+      "title_en": "Clearstream’s July 2026 figures",
+      "summary": "",
+      "source": "明讯银行",
+      "category": "DBG",
+      "subcategory": "证券与基金服务",
+      "brand": "Clearstream",
+      "competitor_type": "",
+      "priority": 1,
+      "official": true,
+      "relevance_score": 8,
+      "relevance_reason": "settlement, collateral, important:settlement, official, priority=1",
+      "url": "https://www.clearstream.com/clearstream-en/newsroom/20260713-5438524",
+      "highlight_score": 12
+    },
+    {
+      "date": "2026-08-18",
       "title_original": "HKEX Welcomes Mainland Insurance Funds to Invest in Hong Kong ETFs",
       "title_cn": "HKEX Welcomes Mainland Insurance Funds to Invest in Hong Kong ETFs",
       "title_en": "HKEX Welcomes Mainland Insurance Funds to Invest in Hong Kong ETFs",
@@ -333,24 +368,6 @@
       "relevance_reason": "securities, crypto, important:regulation, important:crypto, hard_signal:proposes new regulation, official, priority=1",
       "url": "https://www.sec.gov/newsroom/press-releases/2026-76-sec-proposes-new-regulation-crypto-assets",
       "highlight_score": 39
-    },
-    {
-      "date": "2026-08-19",
-      "title_original": "Minutes of the Federal Open Market Committee, July 28–29, 2026",
-      "title_cn": "Minutes of the Federal Open Market Committee, July 28–29, 2026",
-      "title_en": "Minutes of the Federal Open Market Committee, July 28–29, 2026",
-      "summary": "Minutes of the Federal Open Market Committee, July 28–29, 2026",
-      "source": "联邦储备系统",
-      "category": "Macro",
-      "subcategory": "美国",
-      "brand": "",
-      "competitor_type": "",
-      "priority": 1,
-      "official": true,
-      "relevance_score": 8,
-      "relevance_reason": "hard_signal:federal open market committee, official, priority=1",
-      "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260819a.htm",
-      "highlight_score": 37
     }
   ],
   "sections": [
