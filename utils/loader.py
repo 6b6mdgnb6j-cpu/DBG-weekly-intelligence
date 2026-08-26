@@ -10,8 +10,22 @@ LATEST_FILE = PUBLISHED_DIR / "latest.json"
 
 def list_published_reports():
     reports = []
+    seen = set()
+
+    if LATEST_FILE.exists():
+        latest_payload = load_news_payload(LATEST_FILE)
+        latest_key = (latest_payload.get("week_start"), latest_payload.get("week_end"))
+        reports.append(LATEST_FILE)
+        seen.add(latest_key)
+
     if ARCHIVE_DIR.exists():
-        reports = sorted(ARCHIVE_DIR.glob("weekly_*.json"), reverse=True)
+        for path in sorted(ARCHIVE_DIR.glob("weekly_*.json"), reverse=True):
+            payload = load_news_payload(path)
+            key = (payload.get("week_start"), payload.get("week_end"))
+            if key in seen:
+                continue
+            reports.append(path)
+            seen.add(key)
     return reports
 
 
@@ -19,7 +33,7 @@ def report_label(path):
     payload = load_news_payload(path)
     start = payload.get("week_start", "")
     end = payload.get("week_end", "")
-    return f"{start} to {end}" if start and end else path.stem
+    return f"{start} – {end}" if start and end else path.stem
 
 
 def latest_weekly_data_file():

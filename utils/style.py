@@ -36,6 +36,16 @@ section[data-testid="stSidebar"] * {
 }
 
 
+section[data-testid="stSidebar"] [data-baseweb="select"] *,
+section[data-testid="stSidebar"] [data-baseweb="popover"] *,
+section[data-testid="stSidebar"] input,
+section[data-testid="stSidebar"] div[role="combobox"] * {
+
+    color:#12304A !important;
+
+}
+
+
 
 .sidebar-title {
 

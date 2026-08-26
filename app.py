@@ -26,6 +26,70 @@ if "lang" not in st.session_state:
     st.session_state.lang = "中文"
 
 
+NAVIGATION = [
+    ("Highlights", "一、本期导读", "Highlights", None),
+    ("Macro Policy & Regulatory Updates", "二、宏观政策与监管动态", "Macro Policy & Regulatory Updates", "Macro"),
+    ("DBG Internal Updates", "三、德交所集团内部动态", "DBG Internal Updates", "DBG"),
+    ("Competitor News", "四、竞争对手动态", "Competitor News", "Competitor"),
+]
+
+
+FALLBACK_SECTIONS = {
+    "Macro": ["中国", "美国", "英国", "欧洲", "国际组织", "亚太", "其他地区"],
+    "DBG": ["集团要闻", "交易与清算", "投资管理解决方案", "证券与基金服务", "信息技术"],
+    "Competitor": [
+        "Eurex",
+        "EEX",
+        "360T",
+        "Crypto Finance",
+        "SimCorp",
+        "ISS STOXX",
+        "STOXX",
+        "Clearstream",
+        "DBG Market Data",
+        "7 Market Technology",
+    ],
+}
+
+
+def current_language():
+    return st.session_state.lang
+
+
+def label(cn, en):
+    return cn if current_language() == "中文" else en
+
+
+def title_for_section(section_key):
+    for key, cn, en, _ in NAVIGATION:
+        if key == section_key:
+            return label(cn, en)
+    return section_key
+
+
+def groups_for_category(payload, category):
+    for section in payload.get("sections", []):
+        if section.get("key") == category and section.get("groups"):
+            return section.get("groups", [])
+    return FALLBACK_SECTIONS.get(category, [])
+
+
+def group_value(item, category):
+    if category == "Competitor":
+        return item.get("brand") or item.get("subcategory", "")
+    return item.get("subcategory", "")
+
+
+def localized_title(item):
+    if current_language() == "中文":
+        return item.get("title_cn") or item.get("title_en") or item.get("title_original")
+    return item.get("title_en") or item.get("title_original") or item.get("title_cn")
+
+
+def empty_message():
+    return "本周暂无更新" if current_language() == "中文" else "No updates this week."
+
+
 # ======================
 # Data
 # ======================
@@ -33,9 +97,12 @@ if "lang" not in st.session_state:
 published_reports = list_published_reports()
 selected_report = None
 if published_reports:
-    labels = [report_label(path) for path in published_reports]
-    selected_label = st.sidebar.selectbox("Published week", labels, index=0)
-    selected_report = published_reports[labels.index(selected_label)]
+    selected_report = st.sidebar.selectbox(
+        "Published week",
+        published_reports,
+        index=0,
+        format_func=report_label,
+    )
 
 payload = load_news_payload(selected_report)
 news = payload.get("items", [])
@@ -77,12 +144,8 @@ with st.sidebar:
 
     section = st.radio(
         "Navigation",
-        [
-            "Highlights",
-            "Macro Policy & Regulatory Updates",
-            "DBG Internal Updates",
-            "Competitor News"
-        ]
+        [item[0] for item in NAVIGATION],
+        format_func=title_for_section,
     )
 
 
@@ -167,11 +230,11 @@ st.write("")
 if section == "Highlights":
 
     st.markdown(
-        """
+        f"""
         <div class="highlight-box">
 
         <h3>
-        ━ 本期导读 · Highlights
+        {title_for_section("Highlights")}
         </h3>
 
         </div>
@@ -187,7 +250,7 @@ if section == "Highlights":
             <div class="highlight-item">
 
             <b>{i}. [{item.get('category', '')}]
-            {item.get('title_cn') if st.session_state.lang == "中文" else item.get('title_en') or item.get('title_original')}</b>
+            {localized_title(item)}</b>
 
             <br><br>
 
@@ -239,103 +302,78 @@ else:
     ]
 
 
-    st.markdown(
-        f"""
-        ## {section}
-
-        """
-    )
+    st.markdown(f"## {title_for_section(section)}")
 
 
-    if filtered:
+    subcategories = groups_for_category(payload, target)
+    tabs = st.tabs(subcategories)
 
 
-        subcategories = sorted(
-            list(
-                set(
-                    x.get("subcategory", "")
-                    for x in filtered
+
+    for tab,subcategory in zip(
+        tabs,
+        subcategories
+    ):
+
+
+        with tab:
+
+
+            items = [
+                x for x in filtered
+                if group_value(x, target) == subcategory
+            ]
+
+
+            if not items:
+                st.info(empty_message())
+                continue
+
+            for item in items:
+
+
+                st.markdown(
+                    f"""
+
+                    <div class="news-card">
+
+
+                    <div class="date">
+                    {item.get('date', '')}
+                    </div>
+
+
+                    <h3>
+                    {localized_title(item)}
+                    </h3>
+
+
+                    <p>
+                    {item.get('summary','')}
+                    </p>
+
+
+                    <div class="source">
+
+                    🏢 {item.get('source', '')}
+
+                    </div>
+
+
+                    <br>
+
+
+                    <a href="{item.get('url', '#')}"
+                    target="_blank">
+
+                    阅读原文 →
+
+                    </a>
+
+
+                    </div>
+
+
+                    """,
+                    unsafe_allow_html=True
                 )
-            )
-        )
-
-
-        tabs = st.tabs(subcategories)
-
-
-
-        for tab,subcategory in zip(
-            tabs,
-            subcategories
-        ):
-
-
-            with tab:
-
-
-                items = [
-                    x for x in filtered
-                    if x.get("subcategory", "") == subcategory
-                ]
-
-
-                for item in items:
-
-
-                    st.markdown(
-                        f"""
-
-                        <div class="news-card">
-
-
-                        <div class="date">
-                        {item.get('date', '')}
-                        </div>
-
-
-                        <h3>
-                        {item.get('title_cn') if st.session_state.lang == "中文" else item.get('title_en') or item.get('title_original')}
-                        </h3>
-
-
-                        <p>
-                        {item.get('summary','')}
-                        </p>
-
-
-                        <div class="source">
-
-                        🏢 {item.get('source', '')}
-
-                        </div>
-
-
-                        <br>
-
-
-                        <a href="{item['url']}"
-                        target="_blank">
-
-                        阅读原文 →
-
-                        </a>
-
-
-                        </div>
-
-
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-
-    else:
-
-
-        st.info(
-            """
-            本周暂无更新
-
-            No updates this week.
-            """
-        )
