@@ -279,6 +279,7 @@ def score_item(item):
         item.get("title_cn"),
         item.get("title_en"),
         item.get("summary"),
+        item.get("relevance_context"),
         item.get("source"),
         item.get("subcategory"),
         item.get("brand"),

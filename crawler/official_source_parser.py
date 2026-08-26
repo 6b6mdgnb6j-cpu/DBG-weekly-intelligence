@@ -1,0 +1,406 @@
+import json
+import re
+from datetime import timedelta
+from urllib.parse import urljoin
+
+import requests
+from bs4 import BeautifulSoup
+
+from .adapters.common import request_get
+from .date_utils import in_week, parse_date_for_source
+from .news_model import normalize_text_encoding, standardize_news
+
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 weekly-report-contact",
+    "Accept": "text/html,application/xhtml+xml,application/xml,text/x-component",
+}
+
+CLEARSTREAM_ACTION = "7fab35ad2b2486b54594ca187dc07db87e015b8215"
+CLEARSTREAM_ACTION_ID = "4604146"
+CLEARSTREAM_TABLE_SUMMARY_TERMS = (
+    "business overview",
+    "change (%",
+    "ytd",
+    "securities deposits",
+    "number of transactions",
+    "assets under custody",
+    "volume outstanding",
+)
+
+
+def _empty_meta(source, list_url):
+    return {
+        "error": "",
+        "list_url": list_url,
+        "candidates": 0,
+        "candidates_discovered": 0,
+        "candidates_scanned": 0,
+        "pages_scanned": 0,
+        "list_items_with_date": 0,
+        "detail_pages_requested": 0,
+        "dated_candidates": 0,
+        "date_parse_failed": 0,
+        "non_news_candidates": 0,
+        "newest_date_seen": "",
+        "oldest_date_seen": "",
+        "target_period_reached": False,
+        "stopped_reason": "",
+        "sample_candidates": [],
+    }
+
+
+def _record_date(meta, date_text, source):
+    parsed = parse_date_for_source(date_text, source)
+    if not parsed:
+        meta["date_parse_failed"] += 1
+        return None
+    date_value = parsed.date()
+    meta["dated_candidates"] += 1
+    if not meta["newest_date_seen"] or date_value.isoformat() > meta["newest_date_seen"]:
+        meta["newest_date_seen"] = date_value.isoformat()
+    if not meta["oldest_date_seen"] or date_value.isoformat() < meta["oldest_date_seen"]:
+        meta["oldest_date_seen"] = date_value.isoformat()
+    return date_value
+
+
+def _drop_reason(date_value, week_start, week_end):
+    if not date_value:
+        return "date_parse_failed"
+    if date_value > week_end:
+        return "after_period"
+    if date_value < week_start:
+        return "before_period"
+    return "kept"
+
+
+def _sample(meta, title, url, raw_date, parsed_date, drop_reason):
+    if len(meta["sample_candidates"]) >= 3:
+        return
+    meta["sample_candidates"].append(
+        {
+            "title": title,
+            "url": url,
+            "raw_date": raw_date or "",
+            "parsed_date": parsed_date.isoformat() if parsed_date else "",
+            "drop_reason": drop_reason,
+        }
+    )
+
+
+def _walk(value):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _walk(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk(child)
+
+
+def _field_value(data, names):
+    for node in _walk(data):
+        for name in names:
+            value = node.get(name)
+            if isinstance(value, dict) and isinstance(value.get("value"), str):
+                return value["value"]
+            if isinstance(value, str):
+                return value
+    return ""
+
+
+def _simcorp_date(data):
+    for node in _walk(data):
+        value = node.get("Date")
+        if isinstance(value, dict) and value.get("value"):
+            return value["value"]
+    return ""
+
+
+def _simcorp_article_urls(xml_text, week_start, week_end):
+    years = {week_start.year, week_end.year}
+    locs = re.findall(r"<loc>(.*?)</loc>", xml_text)
+    urls = []
+    for url in locs:
+        if not re.search(r"/about-us/news/\d{4}/[^/]+$", url):
+            continue
+        match = re.search(r"/about-us/news/(\d{4})/", url)
+        if match and int(match.group(1)) in years:
+            urls.append(url)
+    return urls
+
+
+def collect_simcorp_sitemap(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or "https://www.simcorp.com/sitemap.xml"
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("SimCorp sitemap start: %s", source["name"])
+    try:
+        sitemap = request_get(list_url, headers=HEADERS, timeout=25, attempts=3)
+        meta["pages_scanned"] = 1
+        urls = _simcorp_article_urls(sitemap.text, week_start, week_end)
+        meta["candidates_discovered"] = len(urls)
+        meta["candidates"] = len(urls)
+
+        max_scan = int(source.get("max_scan_candidates") or len(urls) or 50)
+        for url in urls[:max_scan]:
+            meta["candidates_scanned"] += 1
+            meta["detail_pages_requested"] += 1
+            response = request_get(url, headers=HEADERS, timeout=25, attempts=3)
+            soup = BeautifulSoup(response.text, "html.parser")
+            next_data = soup.find("script", id="__NEXT_DATA__")
+            data = json.loads(next_data.string) if next_data and next_data.string else {}
+
+            raw_date = _simcorp_date(data)
+            title = _field_value(data, {"Title", "MetadataPageTitle", "PageTitle"})
+            summary = _field_value(data, {"Description", "MetadataPageDescription", "Summary", "TeaserText"})
+            if not title and soup.title:
+                title = soup.title.get_text(" ", strip=True).replace("| SimCorp", "").strip()
+
+            title = normalize_text_encoding(title)
+            summary = normalize_text_encoding(summary, clear_garbage=True)
+            parsed_date = _record_date(meta, raw_date, source)
+            drop_reason = _drop_reason(parsed_date, week_start, week_end)
+            _sample(meta, title, url, raw_date, parsed_date, drop_reason)
+
+            item = standardize_news(source, title=title, url=url, date=raw_date, summary=summary)
+            raw_items.append(item)
+            if parsed_date and in_week(item["date"], week_start, week_end):
+                results.append(item)
+
+        meta["target_period_reached"] = meta["candidates_scanned"] == len(urls)
+        meta["stopped_reason"] = (
+            "completed_official_sitemap_year_scan"
+            if meta["target_period_reached"]
+            else "max_scan_candidates"
+        )
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("SimCorp sitemap failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "SimCorp sitemap success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
+
+
+def _clearstream_action_headers(list_url):
+    return {
+        "User-Agent": HEADERS["User-Agent"],
+        "Accept": "text/x-component",
+        "Content-Type": "text/plain;charset=UTF-8",
+        "Next-Action": CLEARSTREAM_ACTION,
+        "Origin": "https://www.clearstream.com",
+        "Referer": list_url,
+    }
+
+
+def _decode_clearstream_response(text):
+    marker = '1:{"numFound"'
+    start = text.find(marker)
+    if start < 0:
+        raise ValueError("Clearstream search response did not include result payload")
+    payload = text[start + 2 :]
+    data, _ = json.JSONDecoder().raw_decode(payload)
+    return data
+
+
+def _clearstream_page(list_url, offset):
+    body = json.dumps([CLEARSTREAM_ACTION_ID, "", [None, None], [], "date desc", offset])
+    last_error = None
+    for _ in range(3):
+        try:
+            response = requests.post(
+                list_url,
+                headers=_clearstream_action_headers(list_url),
+                data=body,
+                timeout=25,
+            )
+            response.raise_for_status()
+            return _decode_clearstream_response(response.text)
+        except Exception as exc:
+            last_error = exc
+    raise last_error
+
+
+def _is_clearstream_table_like_summary(summary):
+    text = normalize_text_encoding(summary or "").lower().replace(" ", "")
+    spaced = normalize_text_encoding(summary or "").lower()
+    if "july2026july2025" in text or "ytd2026ytd2025" in text:
+        return True
+    term_hits = sum(1 for term in CLEARSTREAM_TABLE_SUMMARY_TERMS if term in spaced)
+    numeric_tokens = re.findall(r"\b\d[\d,]*(?:\.\d+)?%?\b", summary or "")
+    return term_hits >= 3 and len(numeric_tokens) >= 8
+
+
+def _is_clearstream_prose(text):
+    clean = normalize_text_encoding(text or "", clear_garbage=True)
+    if len(clean) < 80:
+        return False
+    lowered = clean.lower()
+    if _is_clearstream_table_like_summary(clean):
+        return False
+    if lowered.startswith("clearstream news:") or "complete the subscription form" in lowered:
+        return False
+    if lowered.startswith("*") or "due to rounding" in lowered or "figures include" in lowered:
+        return False
+    if "deutsche börse group" in lowered and "whistleblowers" in lowered:
+        return False
+    alpha_count = sum(1 for char in clean if char.isalpha())
+    digit_count = sum(1 for char in clean if char.isdigit())
+    if digit_count and alpha_count / max(digit_count, 1) < 2:
+        return False
+    return "." in clean or "," in clean or ";" in clean
+
+
+def extract_clearstream_detail_summary(url):
+    try:
+        response = request_get(url, headers=HEADERS, timeout=20, attempts=2)
+    except Exception:
+        return ""
+    soup = BeautifulSoup(response.text, "html.parser")
+    for node in soup.find_all(
+        [
+            "table",
+            "thead",
+            "tbody",
+            "tfoot",
+            "tr",
+            "td",
+            "th",
+            "caption",
+            "nav",
+            "header",
+            "footer",
+        ]
+    ):
+        node.decompose()
+
+    for paragraph in soup.select("p.rt"):
+        text = paragraph.get_text(" ", strip=True)
+        if _is_clearstream_prose(text):
+            return normalize_text_encoding(text, clear_garbage=True)[:300]
+    return ""
+
+
+def _clearstream_relevance_context(content):
+    values = []
+    for field in ("productsServices", "entities", "market"):
+        for item in content.get(field) or []:
+            value = normalize_text_encoding(item.get("value", ""))
+            if value and value not in values:
+                values.append(value)
+    return " | ".join(values[:5])
+
+
+def collect_clearstream_search(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or "https://www.clearstream.com/clearstream-en/newsroom"
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("Clearstream official search start: %s", source["name"])
+    try:
+        hits_per_page = int(source.get("api_per_page") or 12)
+        max_pages = int(source.get("max_pages") or 8)
+        max_scan = int(source.get("max_scan_candidates") or 96)
+
+        for page in range(max_pages):
+            if meta["candidates_scanned"] >= max_scan:
+                meta["stopped_reason"] = "max_scan_candidates"
+                break
+            data = _clearstream_page(list_url, page * hits_per_page)
+            meta["pages_scanned"] += 1
+            if not meta["candidates_discovered"]:
+                meta["candidates_discovered"] = int(data.get("numFound") or 0)
+                meta["candidates"] = meta["candidates_discovered"]
+            rows = data.get("result") or []
+            if not rows:
+                meta["stopped_reason"] = "no_results_page"
+                break
+
+            page_has_before_target = False
+            for row in rows:
+                if meta["candidates_scanned"] >= max_scan:
+                    meta["stopped_reason"] = "max_scan_candidates"
+                    break
+                content = row.get("content") or {}
+                meta["candidates_scanned"] += 1
+
+                raw_date = (content.get("date") or "")[:10]
+                title = normalize_text_encoding(content.get("teaserTitle", ""))
+                summary = normalize_text_encoding((content.get("teaserText") or {}).get("text", ""), clear_garbage=True)
+                url = urljoin("https://www.clearstream.com/", (content.get("teaserTarget") or {}).get("url", ""))
+                content_type = content.get("type", "")
+
+                if content_type != "CSNews":
+                    meta["non_news_candidates"] += 1
+                    parsed_date = parse_date_for_source(raw_date, source)
+                    _sample(
+                        meta,
+                        title,
+                        url,
+                        raw_date,
+                        parsed_date.date() if parsed_date else None,
+                        "non_news_candidate",
+                    )
+                    continue
+
+                parsed_date = _record_date(meta, raw_date, source)
+                if parsed_date and parsed_date <= week_end:
+                    meta["target_period_reached"] = True
+                if parsed_date and parsed_date < week_start:
+                    page_has_before_target = True
+
+                meta["list_items_with_date"] += 1 if parsed_date else 0
+                drop_reason = _drop_reason(parsed_date, week_start, week_end)
+                _sample(meta, title, url, raw_date, parsed_date, drop_reason)
+
+                if drop_reason == "kept":
+                    meta["detail_pages_requested"] += 1
+                    summary = extract_clearstream_detail_summary(url)
+                    relevance_context = "" if summary else _clearstream_relevance_context(content)
+                elif _is_clearstream_table_like_summary(summary):
+                    summary = ""
+                    relevance_context = ""
+                else:
+                    relevance_context = ""
+
+                item = standardize_news(source, title=title, url=url, date=raw_date, summary=summary)
+                item["relevance_context"] = relevance_context
+                raw_items.append(item)
+                if parsed_date and in_week(item["date"], week_start, week_end):
+                    results.append(item)
+
+            if meta["stopped_reason"]:
+                break
+            if page_has_before_target:
+                meta["stopped_reason"] = "passed_target_start"
+                break
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = "max_pages" if meta["pages_scanned"] >= max_pages else "completed"
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("Clearstream official search failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "Clearstream official search success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta

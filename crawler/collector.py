@@ -7,6 +7,7 @@ from .date_utils import parse_week_start, week_file_key
 from .dedupe import dedupe_news
 from .event_cluster import cluster_same_event_items
 from .news_model import ensure_news_schema
+from .official_source_parser import collect_clearstream_search, collect_simcorp_sitemap
 from .rss_parser import collect_rss
 from .translator import TitleTranslator
 from .web_parser import collect_web
@@ -67,6 +68,7 @@ def empty_status(source):
         "detail_pages_requested": 0,
         "dated_candidates": 0,
         "date_parse_failed": 0,
+        "non_news_candidates": 0,
         "newest_date_seen": "",
         "oldest_date_seen": "",
         "target_period_reached": False,
@@ -109,12 +111,13 @@ def classify_empty_status(status, source):
         return "no_candidates"
     if status["dated_candidates"] == 0:
         return "date_parse_failed"
+    date_bounded_methods = {"rss", "wp_json", "simcorp_sitemap", "clearstream_search"}
     if status["within_period"] == 0:
         if status["date_parse_failed"] > status["dated_candidates"]:
             return "date_parse_failed"
         if source.get("method") == "web" and not status.get("target_period_reached"):
             return "parser_failed"
-        if source.get("method") in ("rss", "wp_json"):
+        if source.get("method") in date_bounded_methods and status.get("target_period_reached"):
             return "true_no_updates"
         return "all_outside_period"
     if status["after_relevance"] == 0:
@@ -122,6 +125,12 @@ def classify_empty_status(status, source):
     if status["final_items"] == 0:
         return "parser_failed"
     return "success"
+
+
+def strip_internal_fields(item):
+    clean = dict(item)
+    clean.pop("relevance_context", None)
+    return clean
 
 
 def collect_week(start_arg=None, translate=True):
@@ -169,6 +178,10 @@ def collect_week(start_arg=None, translate=True):
                 source_raw, source_filtered, meta = collect_rss(source, week_start, week_end, logger)
             elif method == "wp_json":
                 source_raw, source_filtered, meta = collect_wp_json(source, week_start, week_end, logger)
+            elif method == "simcorp_sitemap":
+                source_raw, source_filtered, meta = collect_simcorp_sitemap(source, week_start, week_end, logger)
+            elif method == "clearstream_search":
+                source_raw, source_filtered, meta = collect_clearstream_search(source, week_start, week_end, logger)
             elif method == "web":
                 source_raw, source_filtered, meta = collect_web(source, week_start, week_end, logger)
             else:
@@ -189,6 +202,7 @@ def collect_week(start_arg=None, translate=True):
             status["detail_pages_requested"] = int(meta.get("detail_pages_requested") or 0)
             status["dated_candidates"] = int(meta.get("dated_candidates") or 0)
             status["date_parse_failed"] = int(meta.get("date_parse_failed") or 0)
+            status["non_news_candidates"] = int(meta.get("non_news_candidates") or 0)
             status["newest_date_seen"] = meta.get("newest_date_seen", "")
             status["oldest_date_seen"] = meta.get("oldest_date_seen", "")
             status["target_period_reached"] = bool(meta.get("target_period_reached", method == "rss"))
@@ -218,6 +232,7 @@ def collect_week(start_arg=None, translate=True):
     logger.info("Raw saved: %s items=%s", raw_path, len(raw_items))
 
     relevant, relevance_reviewed = apply_relevance(filtered_items)
+    relevant = [strip_internal_fields(item) for item in relevant]
     logger.info("Relevance filtered: before=%s after=%s", len(filtered_items), len(relevant))
 
     deduped = dedupe_news(relevant)
