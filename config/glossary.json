@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "protected_terms": [
+    "Deutsche Börse",
+    "Deutsche Börse Group",
+    "Eurex",
+    "EEX",
+    "360T",
+    "Crypto Finance",
+    "Clearstream",
+    "SimCorp",
+    "ISS STOXX",
+    "STOXX",
+    "CFTC",
+    "SEC",
+    "ECB",
+    "HKEX",
+    "FOMC",
+    "ETF",
+    "NPRM",
+    "SEF",
+    "DLT",
+    "OTC",
+    "Repo",
+    "GC Pooling",
+    "OIS",
+    "STIR",
+    "LTIR",
+    "UMR"
+  ],
+  "term_translations": {
+    "Eurobond": "欧洲债券",
+    "dematerialized": "无纸化",
+    "Commodity Pool Operator": "商品基金运营商",
+    "Commodity Trading Advisor": "商品交易顾问",
+    "central counterparty": "中央对手方",
+    "clearing": "清算",
+    "settlement": "结算",
+    "custody": "托管",
+    "collateral": "抵押品",
+    "sovereign bond": "主权债券",
+    "derivatives": "衍生品",
+    "exchange-traded fund": "交易所交易基金",
+    "OTC Clearing": "OTC清算",
+    "Repo": "Repo",
+    "interest rate swaps": "利率互换",
+    "outstanding notional": "未清名义本金"
+  },
+  "source_aware_post_edits": {
+    "Clearstream": {
+      "清流": "Clearstream"
+    },
+    "HKEX": {
+      "希克克斯": "HKEX",
+      "希克斯": "HKEX"
+    },
+    "Eurex": {
+      "欧莱克斯": "Eurex",
+      "欧雷克斯": "Eurex",
+      "欧元交易所": "Eurex"
+    }
+  }
+}

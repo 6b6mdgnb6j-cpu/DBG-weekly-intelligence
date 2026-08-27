@@ -1,3 +1,5 @@
+import html
+
 import streamlit as st
 
 from utils.loader import list_published_reports
@@ -82,8 +84,14 @@ def group_value(item, category):
 
 def localized_title(item):
     if current_language() == "中文":
-        return item.get("title_cn") or item.get("title_en") or item.get("title_original")
+        return item.get("title_cn") or item.get("title_original") or item.get("title_en")
     return item.get("title_en") or item.get("title_original") or item.get("title_cn")
+
+
+def localized_summary(item):
+    if current_language() == "中文":
+        return item.get("summary_cn") or item.get("summary_original") or item.get("summary") or item.get("summary_en")
+    return item.get("summary_en") or item.get("summary_original") or item.get("summary") or item.get("summary_cn")
 
 
 def empty_message():
@@ -244,15 +252,16 @@ if section == "Highlights":
 
 
     for i,item in enumerate(highlights,1):
-        summary = (item.get("summary") or "").strip()
-        summary_html = f'<p class="highlight-summary">{summary}</p>' if summary else ""
+        summary = (localized_summary(item) or "").strip()
+        summary_html = f'<p class="highlight-summary">{html.escape(summary)}</p>' if summary else ""
+        title = html.escape(localized_title(item) or "")
 
         st.markdown(
             f"""
             <div class="highlight-item">
 
             <b>{i}. [{item.get('category', '')}]
-            {localized_title(item)}</b>
+            {title}</b>
 
             <br><br>
 
@@ -334,6 +343,8 @@ else:
                 continue
 
             for item in items:
+                title = html.escape(localized_title(item) or "")
+                summary = html.escape((localized_summary(item) or "").strip())
 
 
                 st.markdown(
@@ -348,12 +359,12 @@ else:
 
 
                     <h3>
-                    {localized_title(item)}
+                    {title}
                     </h3>
 
 
                     <p>
-                    {item.get('summary','')}
+                    {summary}
                     </p>
 
 

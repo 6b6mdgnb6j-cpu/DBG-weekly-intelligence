@@ -156,7 +156,16 @@
       return lang === "cn" ? (item[cnKey] || item[enKey] || "") : (item[enKey] || item[cnKey] || "");
     }
     function label(cn, en) { return lang === "cn" ? cn : en; }
-    function titleFor(item) { return lang === "cn" ? (item.title_cn || item.title_original) : (item.title_en || item.title_original); }
+    function titleFor(item) {
+      return lang === "cn"
+        ? (item.title_cn || item.title_original || item.title_en)
+        : (item.title_en || item.title_original || item.title_cn);
+    }
+    function summaryFor(item) {
+      return lang === "cn"
+        ? (item.summary_cn || item.summary_original || item.summary || item.summary_en)
+        : (item.summary_en || item.summary_original || item.summary || item.summary_cn);
+    }
     function formatDate(value) {
       if (!value) return "";
       const d = new Date(value + "T00:00:00");
@@ -170,10 +179,11 @@
     }
     function card(item, highlight=false) {
       const cls = highlight ? "highlight" : "card";
+      const summary = summaryFor(item);
       return `<article class="${cls}">
         <div class="date">${escapeHtml(formatDate(item.date))}</div>
         <h3>${escapeHtml(titleFor(item))}</h3>
-        ${item.summary ? `<p>${escapeHtml(item.summary)}</p>` : ""}
+        ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
         <div class="source">${escapeHtml(item.source)}${item.official ? " · Official" : ""}</div>
         <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${label("阅读原文", "Read original")}</a>
       </article>`;

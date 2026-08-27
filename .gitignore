@@ -3,6 +3,7 @@ __pycache__/
 **/__pycache__/
 *.pyc
 .venv/
+.venv-translation/
 venv/
 .env
 .env.*
@@ -11,4 +12,5 @@ logs/
 raw/
 output/
 cache/
+translation_experiment/
 data/news.json
