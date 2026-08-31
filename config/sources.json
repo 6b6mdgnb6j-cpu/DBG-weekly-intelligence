@@ -114,7 +114,7 @@
     "priority": 1,
     "source_type": "official",
     "official": true,
-    "max_items": 10,
+    "max_items": 25,
     "brand": "",
     "competitor_type": "",
     "enabled": true,
