@@ -1,8 +1,9 @@
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
+import feedparser
 import requests
 from bs4 import BeautifulSoup
 
@@ -38,6 +39,12 @@ NASDAQ_PRESS_HEADERS = {
     "User-Agent": HEADERS["User-Agent"],
     "Accept": "application/json,text/plain,*/*",
     "Referer": "https://www.nasdaq.com/newsroom",
+}
+
+CBOE_PRESS_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept": "application/json,text/plain,*/*",
+    "Referer": "https://ir.cboe.com/news/default.aspx",
 }
 
 
@@ -424,6 +431,172 @@ def collect_nasdaq_press(source, week_start, week_end, logger):
 
     logger.info(
         "Nasdaq official press JSON success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
+
+
+def _parse_cboe_press_date(raw_date):
+    text = (raw_date or "").strip()
+    for fmt in ("%m/%d/%Y %H:%M:%S", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(text[: len(datetime.now().strftime(fmt))], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _cboe_item(row):
+    title = normalize_text_encoding(row.get("Headline", ""))
+    url = urljoin("https://ir.cboe.com/", row.get("LinkToDetailPage") or row.get("LinkToUrl") or "")
+    raw_date = row.get("PressReleaseDate", "")
+    summary = normalize_text_encoding(row.get("ShortBody") or row.get("Subheadline") or "", clear_garbage=True)
+    return title, url, raw_date, summary
+
+
+def collect_cboe_press(source, week_start, week_end, logger):
+    list_url = (
+        source.get("crawl_url")
+        or "https://ir.cboe.com/feed/PressRelease.svc/GetPressReleaseList"
+    )
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("Cboe official Q4 press JSON start: %s", source["name"])
+    try:
+        max_scan = int(source.get("max_scan_candidates") or 120)
+        response = request_get(
+            list_url,
+            headers=CBOE_PRESS_HEADERS,
+            timeout=30,
+            attempts=2,
+            params={
+                "LanguageId": 1,
+                "bodyType": 3,
+                "pressReleaseDateFilter": 3,
+            },
+        )
+        data = response.json()
+        rows = data.get("GetPressReleaseListResult") or []
+        meta["pages_scanned"] = 1
+        meta["candidates_discovered"] = len(rows)
+        meta["candidates"] = len(rows)
+
+        for row in rows[:max_scan]:
+            title, url, raw_date, summary = _cboe_item(row)
+            meta["candidates_scanned"] += 1
+            parsed_date = _parse_cboe_press_date(raw_date)
+            if parsed_date:
+                _record_parsed_date(meta, parsed_date)
+                meta["list_items_with_date"] += 1
+                if parsed_date <= week_end:
+                    meta["target_period_reached"] = True
+            else:
+                meta["date_parse_failed"] += 1
+
+            drop_reason = _drop_reason(parsed_date, week_start, week_end)
+            _sample(meta, title, url, raw_date, parsed_date, drop_reason)
+            item = standardize_news(source, title=title, url=url, date=parsed_date.isoformat() if parsed_date else raw_date, summary=summary)
+            raw_items.append(item)
+            if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+                results.append(item)
+
+            if parsed_date and parsed_date < week_start:
+                meta["stopped_reason"] = "passed_target_start"
+                break
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = (
+                "max_scan_candidates"
+                if meta["candidates_scanned"] >= max_scan and meta["candidates_scanned"] < len(rows)
+                else "completed"
+            )
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("Cboe official Q4 press JSON failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "Cboe official Q4 press JSON success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
+
+
+def collect_msci_rss(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or "https://ir.msci.com/rss/news-releases.xml"
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("MSCI official RSS start: %s", source["name"])
+    try:
+        response = request_get(
+            list_url,
+            headers={"User-Agent": HEADERS["User-Agent"], "Accept": "application/rss+xml,text/xml,*/*"},
+            timeout=25,
+            attempts=2,
+        )
+        feed = feedparser.parse(response.text)
+        entries = list(feed.entries)
+        max_scan = int(source.get("max_scan_candidates") or len(entries) or 20)
+        meta["pages_scanned"] = 1
+        meta["candidates_discovered"] = len(entries)
+        meta["candidates"] = len(entries)
+
+        for entry in entries[:max_scan]:
+            title = normalize_text_encoding(entry.get("title", ""))
+            url = entry.get("link", "")
+            raw_date = entry.get("published") or entry.get("updated") or entry.get("created") or ""
+            summary = normalize_text_encoding(entry.get("summary", ""), clear_garbage=True)
+            meta["candidates_scanned"] += 1
+
+            parsed = parse_date_for_source(raw_date, source)
+            if parsed:
+                date_value = parsed.date()
+                _record_parsed_date(meta, date_value)
+                meta["list_items_with_date"] += 1
+                if date_value <= week_end:
+                    meta["target_period_reached"] = True
+            else:
+                date_value = None
+                meta["date_parse_failed"] += 1
+
+            drop_reason = _drop_reason(date_value, week_start, week_end)
+            _sample(meta, title, url, raw_date, date_value, drop_reason)
+            item = standardize_news(source, title=title, url=url, date=raw_date, summary=summary)
+            raw_items.append(item)
+            if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+                results.append(item)
+
+            if date_value and date_value < week_start:
+                meta["stopped_reason"] = "passed_target_start"
+                break
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = (
+                "max_scan_candidates"
+                if meta["candidates_scanned"] >= max_scan and meta["candidates_scanned"] < len(entries)
+                else "completed"
+            )
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("MSCI official RSS failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "MSCI official RSS success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
         meta["candidates_discovered"],
         meta["candidates_scanned"],
         meta["dated_candidates"],

@@ -8,8 +8,10 @@ from .dedupe import dedupe_news
 from .event_cluster import cluster_same_event_items
 from .news_model import ensure_news_schema
 from .official_source_parser import (
+    collect_cboe_press,
     collect_clearstream_search,
     collect_lseg_search,
+    collect_msci_rss,
     collect_nasdaq_press,
     collect_simcorp_sitemap,
 )
@@ -123,6 +125,8 @@ def classify_empty_status(status, source):
         "clearstream_search",
         "lseg_search",
         "nasdaq_press",
+        "cboe_press",
+        "msci_rss",
     }
     if status["within_period"] == 0:
         if status["date_parse_failed"] > status["dated_candidates"]:
@@ -198,6 +202,10 @@ def collect_week(start_arg=None, translate=True):
                 source_raw, source_filtered, meta = collect_lseg_search(source, week_start, week_end, logger)
             elif method == "nasdaq_press":
                 source_raw, source_filtered, meta = collect_nasdaq_press(source, week_start, week_end, logger)
+            elif method == "cboe_press":
+                source_raw, source_filtered, meta = collect_cboe_press(source, week_start, week_end, logger)
+            elif method == "msci_rss":
+                source_raw, source_filtered, meta = collect_msci_rss(source, week_start, week_end, logger)
             elif method == "web":
                 source_raw, source_filtered, meta = collect_web(source, week_start, week_end, logger)
             else:

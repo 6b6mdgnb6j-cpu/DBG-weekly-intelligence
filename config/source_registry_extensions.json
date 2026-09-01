@@ -64,5 +64,16 @@
     "competitor_type": "",
     "reason_added": "Coverage gap extension for direct DBG investment-management-technology coverage. The probed static page exposed only an old fraud-warning item and did not reach the target period, so the source is registered but disabled for later repair.",
     "added_from_baseline": "baseline-53-sources"
+  },
+  {
+    "source_id": "SRC-186",
+    "source_name": "MSCI",
+    "official_url": "https://www.msci.com",
+    "category": "Competitor",
+    "subcategory": "信息技术",
+    "brand": "MSCI",
+    "competitor_type": "international",
+    "reason_added": "Coverage expansion for index, benchmark, analytics, data, and investment-decision infrastructure competitor coverage. Official MSCI investor relations RSS exposes stable title, URL, summary, and publication date fields.",
+    "added_from_baseline": "baseline-61-sources"
   }
 ]
