@@ -176,6 +176,29 @@ def parse_naic_list(soup, current_url, source, week_start=None, week_end=None):
     return items
 
 
+def parse_bafin_press_list(soup, current_url, source, week_start=None, week_end=None):
+    items = []
+    seen = set()
+    for row in soup.select("table.textualData.links tbody tr"):
+        cells = row.find_all("td")
+        if len(cells) < 2:
+            continue
+        raw_date = _date_from_text(cells[0].get_text(" ", strip=True))
+        link = cells[1].find("a", href=True)
+        if not raw_date or not link:
+            continue
+        link_text = clean_text(link.get_text(" ", strip=True))
+        title = link_text
+        summary = ""
+        for separator in (" In future, ", " For ", " New ", " At ", " The ", " On "):
+            if separator in link_text:
+                title, tail = link_text.split(separator, 1)
+                summary = separator.strip() + " " + tail
+                break
+        _append_unique(items, seen, title, absolute_url(current_url, link["href"]), raw_date, summary)
+    return items
+
+
 def parse_eex_list(soup, current_url, source, week_start=None, week_end=None):
     items = []
     seen = set()

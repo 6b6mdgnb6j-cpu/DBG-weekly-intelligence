@@ -28,6 +28,18 @@ CLEARSTREAM_TABLE_SUMMARY_TERMS = (
     "volume outstanding",
 )
 
+LSEG_SEARCH_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept": "application/json,text/plain,*/*",
+    "Referer": "https://www.lseg.com/en/media-centre/press-releases",
+}
+
+NASDAQ_PRESS_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept": "application/json,text/plain,*/*",
+    "Referer": "https://www.nasdaq.com/newsroom",
+}
+
 
 def _empty_meta(source, list_url):
     return {
@@ -62,6 +74,14 @@ def _record_date(meta, date_text, source):
     if not meta["oldest_date_seen"] or date_value.isoformat() < meta["oldest_date_seen"]:
         meta["oldest_date_seen"] = date_value.isoformat()
     return date_value
+
+
+def _record_parsed_date(meta, date_value):
+    meta["dated_candidates"] += 1
+    if not meta["newest_date_seen"] or date_value.isoformat() > meta["newest_date_seen"]:
+        meta["newest_date_seen"] = date_value.isoformat()
+    if not meta["oldest_date_seen"] or date_value.isoformat() < meta["oldest_date_seen"]:
+        meta["oldest_date_seen"] = date_value.isoformat()
 
 
 def _drop_reason(date_value, week_start, week_end):
@@ -184,6 +204,226 @@ def collect_simcorp_sitemap(source, week_start, week_end, logger):
 
     logger.info(
         "SimCorp sitemap success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
+
+
+def _lseg_search_endpoint(list_url):
+    response = request_get(list_url, headers=HEADERS, timeout=25, attempts=2)
+    soup = BeautifulSoup(response.text, "html.parser")
+    search = soup.find(attrs={"data-ts-rehydratable": "Search"})
+    endpoint = search.get("data-endpoint", "") if search else ""
+    if not endpoint:
+        raise ValueError("LSEG search endpoint not found on official press release page")
+    return urljoin(list_url, endpoint)
+
+
+def _lseg_result_item(row):
+    title = normalize_text_encoding(row.get("title", ""))
+    url = row.get("path") or row.get("url") or row.get("link") or ""
+    raw_date = (row.get("publishedDate") or row.get("date") or "")[:10]
+    summary = normalize_text_encoding(row.get("description", ""), clear_garbage=True)
+    return title, url, raw_date, summary
+
+
+def collect_lseg_search(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or "https://www.lseg.com/en/media-centre/press-releases"
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("LSEG official search start: %s", source["name"])
+    try:
+        endpoint = source.get("api_url") or _lseg_search_endpoint(list_url)
+        hits_per_page = int(source.get("api_per_page") or 10)
+        max_pages = int(source.get("max_pages") or 8)
+        max_scan = int(source.get("max_scan_candidates") or max_pages * hits_per_page)
+
+        for page in range(1, max_pages + 1):
+            if meta["candidates_scanned"] >= max_scan:
+                meta["stopped_reason"] = "max_scan_candidates"
+                break
+            response = request_get(
+                endpoint,
+                headers=LSEG_SEARCH_HEADERS,
+                timeout=25,
+                attempts=2,
+                params={"page": page, "sortBy": "w_search_date|desc"},
+            )
+            data = response.json()
+            meta["pages_scanned"] += 1
+            rows = data.get("searchResults") or []
+            if not meta["candidates_discovered"]:
+                meta["candidates_discovered"] = int(data.get("totalResults") or len(rows))
+                meta["candidates"] = meta["candidates_discovered"]
+            if not rows:
+                meta["stopped_reason"] = "no_results_page"
+                break
+
+            page_has_before_target = False
+            for row in rows:
+                if meta["candidates_scanned"] >= max_scan:
+                    meta["stopped_reason"] = "max_scan_candidates"
+                    break
+                title, url, raw_date, summary = _lseg_result_item(row)
+                meta["candidates_scanned"] += 1
+                parsed = parse_date_for_source(raw_date, source)
+                if parsed:
+                    date_value = parsed.date()
+                    _record_parsed_date(meta, date_value)
+                    meta["list_items_with_date"] += 1
+                    if date_value <= week_end:
+                        meta["target_period_reached"] = True
+                    if date_value < week_start:
+                        page_has_before_target = True
+                else:
+                    date_value = None
+                    meta["date_parse_failed"] += 1
+
+                drop_reason = _drop_reason(date_value, week_start, week_end)
+                _sample(meta, title, url, raw_date, date_value, drop_reason)
+                item = standardize_news(source, title=title, url=url, date=raw_date, summary=summary)
+                raw_items.append(item)
+                if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+                    results.append(item)
+
+            if meta["stopped_reason"]:
+                break
+            if page_has_before_target:
+                meta["stopped_reason"] = "passed_target_start"
+                break
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = "max_pages" if meta["pages_scanned"] >= max_pages else "completed"
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("LSEG official search failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "LSEG official search success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
+
+
+def _nasdaq_item(row):
+    title = normalize_text_encoding(row.get("node_title", ""))
+    url = urljoin("https://www.nasdaq.com/", row.get("node_url", ""))
+    raw_date = row.get("created_formatted", "")
+    summary = normalize_text_encoding(row.get("description", ""), clear_garbage=True)
+    return title, url, raw_date, summary
+
+
+def _is_nasdaq_low_signal_notice(title):
+    text = normalize_text_encoding(title or "").lower()
+    low_signal_patterns = (
+        "resumes trading in",
+        "halts trading in",
+        "notified of anticipated delisting",
+        "regains compliance with nasdaq continued listing requirements",
+        "to join the nasdaq-100 index",
+        "to join the nasdaq biotechnology index",
+        "announces pricing of",
+        "announces closing of",
+    )
+    return any(pattern in text for pattern in low_signal_patterns)
+
+
+def collect_nasdaq_press(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or "https://www.nasdaq.com/api/reference-group/paginated/press_release/1020126"
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("Nasdaq official press JSON start: %s", source["name"])
+    try:
+        per_page = int(source.get("api_per_page") or 10)
+        max_pages = int(source.get("max_pages") or 8)
+        max_scan = int(source.get("max_scan_candidates") or max_pages * per_page)
+
+        for page in range(1, max_pages + 1):
+            if meta["candidates_scanned"] >= max_scan:
+                meta["stopped_reason"] = "max_scan_candidates"
+                break
+            response = request_get(
+                list_url,
+                headers=NASDAQ_PRESS_HEADERS,
+                timeout=25,
+                attempts=2,
+                params={"limit": per_page, "page": page},
+            )
+            data = response.json()
+            meta["pages_scanned"] += 1
+            rows = data.get("items") or []
+            pagination = data.get("pagination") or {}
+            if not meta["candidates_discovered"]:
+                meta["candidates_discovered"] = int(pagination.get("total_items") or len(rows))
+                meta["candidates"] = meta["candidates_discovered"]
+            if not rows:
+                meta["stopped_reason"] = "no_results_page"
+                break
+
+            page_has_before_target = False
+            for row in rows:
+                if meta["candidates_scanned"] >= max_scan:
+                    meta["stopped_reason"] = "max_scan_candidates"
+                    break
+                title, url, raw_date, summary = _nasdaq_item(row)
+                meta["candidates_scanned"] += 1
+                parsed = parse_date_for_source(raw_date, source)
+                if parsed:
+                    date_value = parsed.date()
+                    _record_parsed_date(meta, date_value)
+                    meta["list_items_with_date"] += 1
+                    if date_value <= week_end:
+                        meta["target_period_reached"] = True
+                    if date_value < week_start:
+                        page_has_before_target = True
+                else:
+                    date_value = None
+                    meta["date_parse_failed"] += 1
+
+                drop_reason = _drop_reason(date_value, week_start, week_end)
+                if _is_nasdaq_low_signal_notice(title):
+                    meta["non_news_candidates"] += 1
+                    _sample(meta, title, url, raw_date, date_value, "source_specific_low_signal_notice")
+                    continue
+                _sample(meta, title, url, raw_date, date_value, drop_reason)
+                item = standardize_news(source, title=title, url=url, date=raw_date, summary=summary)
+                raw_items.append(item)
+                if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+                    results.append(item)
+
+            if meta["stopped_reason"]:
+                break
+            if page_has_before_target:
+                meta["stopped_reason"] = "passed_target_start"
+                break
+            if pagination and not pagination.get("has_next"):
+                meta["stopped_reason"] = "completed"
+                break
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = "max_pages" if meta["pages_scanned"] >= max_pages else "completed"
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("Nasdaq official press JSON failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "Nasdaq official press JSON success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
         meta["candidates_discovered"],
         meta["candidates_scanned"],
         meta["dated_candidates"],

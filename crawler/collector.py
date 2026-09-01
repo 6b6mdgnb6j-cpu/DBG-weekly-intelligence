@@ -7,7 +7,12 @@ from .date_utils import parse_week_start, week_file_key
 from .dedupe import dedupe_news
 from .event_cluster import cluster_same_event_items
 from .news_model import ensure_news_schema
-from .official_source_parser import collect_clearstream_search, collect_simcorp_sitemap
+from .official_source_parser import (
+    collect_clearstream_search,
+    collect_lseg_search,
+    collect_nasdaq_press,
+    collect_simcorp_sitemap,
+)
 from .rss_parser import collect_rss
 from .translator import TitleTranslator
 from .web_parser import collect_web
@@ -111,7 +116,14 @@ def classify_empty_status(status, source):
         return "no_candidates"
     if status["dated_candidates"] == 0:
         return "date_parse_failed"
-    date_bounded_methods = {"rss", "wp_json", "simcorp_sitemap", "clearstream_search"}
+    date_bounded_methods = {
+        "rss",
+        "wp_json",
+        "simcorp_sitemap",
+        "clearstream_search",
+        "lseg_search",
+        "nasdaq_press",
+    }
     if status["within_period"] == 0:
         if status["date_parse_failed"] > status["dated_candidates"]:
             return "date_parse_failed"
@@ -182,6 +194,10 @@ def collect_week(start_arg=None, translate=True):
                 source_raw, source_filtered, meta = collect_simcorp_sitemap(source, week_start, week_end, logger)
             elif method == "clearstream_search":
                 source_raw, source_filtered, meta = collect_clearstream_search(source, week_start, week_end, logger)
+            elif method == "lseg_search":
+                source_raw, source_filtered, meta = collect_lseg_search(source, week_start, week_end, logger)
+            elif method == "nasdaq_press":
+                source_raw, source_filtered, meta = collect_nasdaq_press(source, week_start, week_end, logger)
             elif method == "web":
                 source_raw, source_filtered, meta = collect_web(source, week_start, week_end, logger)
             else:
