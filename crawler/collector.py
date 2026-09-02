@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 from .content_filter import apply_relevance, audit_rejection
+from .competitor_mapping import apply_competitor_mapping
 from .date_utils import parse_week_start, week_file_key
 from .dedupe import dedupe_news
 from .event_cluster import cluster_same_event_items
@@ -311,7 +312,8 @@ def collect_week(start_arg=None, translate=True):
         if status["status"] == "success":
             status["status"] = classify_empty_status(status, enabled_by_name.get(name, {}))
 
-    translated = TitleTranslator(enabled=translate, logger=logger).translate(clustered)
+    mapped_items = apply_competitor_mapping(clustered)
+    translated = TitleTranslator(enabled=translate, logger=logger).translate(mapped_items)
 
     weekly_payload = {
         "week_start": str(week_start),

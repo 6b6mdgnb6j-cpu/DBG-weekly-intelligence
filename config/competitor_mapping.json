@@ -1,0 +1,374 @@
+{
+  "version": 1,
+  "mapped_dbg_business_enum": [
+    "Eurex",
+    "EEX",
+    "360T",
+    "Crypto Finance",
+    "ISS STOXX / STOXX",
+    "SimCorp",
+    "Clearstream",
+    "DBG Market Data",
+    "Market Technology",
+    "Other / Cross-business"
+  ],
+  "competitor_group_aliases": {
+    "HashKey": ["HashKey"],
+    "MSCI": ["MSCI"],
+    "DTCC": ["DTCC"],
+    "Euroclear": ["Euroclear"],
+    "LSEG": ["LSEG", "伦敦证券交易所集团", "London Stock Exchange Group"],
+    "Nasdaq": ["Nasdaq", "纳斯达克公司"],
+    "Cboe": ["Cboe", "芝加哥期权交易所"],
+    "ICE": ["ICE", "洲际交易所", "Intercontinental Exchange"],
+    "SIX": ["SIX", "瑞士交易所", "SIX Swiss Exchange"],
+    "JPX": ["JPX", "Japan Exchange Group", "日本交易所集团", "Osaka Exchange", "JPXI"],
+    "HKEX": ["HKEX", "香港交易所", "Hong Kong Exchanges and Clearing"],
+    "Euronext": ["Euronext", "泛欧交易所"],
+    "SGX": ["SGX", "新加坡交易所", "Singapore Exchange"],
+    "SHFE": ["SHFE", "上海期货交易所"],
+    "B3": ["B3", "巴西证券商品期货交易所", "Brasil Bolsa Balcao"],
+    "CME": ["CME", "芝加哥商品交易所集团", "CME Group"]
+  },
+  "defaults": {
+    "HashKey": {
+      "competitor_business": "digital_assets",
+      "mapped_dbg_business": "Crypto Finance",
+      "mapping_confidence": "high",
+      "mapping_reason": "source_default: digital asset trading, custody and infrastructure competitor"
+    },
+    "MSCI": {
+      "competitor_business": "index_benchmark_analytics",
+      "mapped_dbg_business": "ISS STOXX / STOXX",
+      "mapping_confidence": "high",
+      "mapping_reason": "source_default: index, benchmark and analytics competitor"
+    },
+    "DTCC": {
+      "competitor_business": "post_trade",
+      "mapped_dbg_business": "Clearstream",
+      "mapping_confidence": "high",
+      "mapping_reason": "source_default: post-trade, settlement and market infrastructure competitor"
+    },
+    "LSEG": {
+      "competitor_business": "cross_business_or_unmapped",
+      "mapped_dbg_business": "Other / Cross-business",
+      "mapping_confidence": "low",
+      "mapping_reason": "source_default: diversified exchange, clearing, data and index group; content rule preferred"
+    },
+    "Nasdaq": {
+      "competitor_business": "cross_business_or_unmapped",
+      "mapped_dbg_business": "Other / Cross-business",
+      "mapping_confidence": "low",
+      "mapping_reason": "source_default: diversified exchange, market technology, index and data group; content rule preferred"
+    },
+    "Cboe": {
+      "competitor_business": "exchange_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: exchange and derivatives venue"
+    },
+    "ICE": {
+      "competitor_business": "cross_business_or_unmapped",
+      "mapped_dbg_business": "Other / Cross-business",
+      "mapping_confidence": "low",
+      "mapping_reason": "source_default: diversified exchange, clearing, energy and data group; content rule preferred"
+    },
+    "SIX": {
+      "competitor_business": "cross_business_or_unmapped",
+      "mapped_dbg_business": "Other / Cross-business",
+      "mapping_confidence": "low",
+      "mapping_reason": "source_default: diversified exchange, data, post-trade and payments group; content rule preferred"
+    },
+    "Euroclear": {
+      "competitor_business": "post_trade",
+      "mapped_dbg_business": "Clearstream",
+      "mapping_confidence": "high",
+      "mapping_reason": "source_default: post-trade, settlement and custody competitor"
+    },
+    "JPX": {
+      "competitor_business": "exchange_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: exchange and derivatives venue"
+    },
+    "HKEX": {
+      "competitor_business": "exchange_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: exchange trading and market-access venue"
+    },
+    "Euronext": {
+      "competitor_business": "exchange_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: exchange group"
+    },
+    "SGX": {
+      "competitor_business": "exchange_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: exchange and derivatives venue"
+    },
+    "SHFE": {
+      "competitor_business": "commodities_derivatives",
+      "mapped_dbg_business": "EEX",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: commodities futures exchange"
+    },
+    "B3": {
+      "competitor_business": "exchange_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: exchange and derivatives venue"
+    },
+    "CME": {
+      "competitor_business": "derivatives_trading_clearing",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: derivatives exchange and clearing competitor"
+    }
+  },
+  "rules": [
+    {
+      "id": "group_financial_results",
+      "priority": 10,
+      "competitor_groups": ["Cboe", "JPX", "Euronext", "LSEG", "Nasdaq", "ICE", "SIX", "CME", "B3", "HKEX", "SGX"],
+      "keywords_any": ["q1 results", "q2 results", "q3 results", "q4 results", "annual results", "financial results", "earnings", "quarterly results", "reports results"],
+      "regex_any": ["q[1-4]\\s+20\\d{2}\\s+results", "results\\s+for\\s+(the\\s+)?(first|second|third|fourth)\\s+quarter"],
+      "competitor_business": "group_financial_results",
+      "mapped_dbg_business": "Other / Cross-business",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: group-level financial results are cross-business"
+    },
+    {
+      "id": "hashkey_crypto",
+      "priority": 20,
+      "competitor_groups": ["HashKey"],
+      "keywords_any": ["crypto", "digital asset", "stablecoin", "tokenized", "onchain", "custody", "derivatives", "structured solutions"],
+      "competitor_business": "digital_assets",
+      "mapped_dbg_business": "Crypto Finance",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: digital asset infrastructure"
+    },
+    {
+      "id": "lseg_ftse_index",
+      "priority": 20,
+      "competitor_groups": ["LSEG"],
+      "keywords_any": ["ftse russell", "ftse", "index", "benchmark", "benchmarks", "etp", "etf"],
+      "competitor_business": "index_benchmark",
+      "mapped_dbg_business": "ISS STOXX / STOXX",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: LSEG FTSE Russell index/benchmark signal"
+    },
+    {
+      "id": "lseg_lch_clearing",
+      "priority": 20,
+      "competitor_groups": ["LSEG"],
+      "keywords_any": ["lch", "swapclear", "repoclear", "clearing house", "ccp"],
+      "competitor_business": "clearing_house",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: LSEG clearing-house signal"
+    },
+    {
+      "id": "lseg_refinitiv_data",
+      "priority": 20,
+      "competitor_groups": ["LSEG"],
+      "keywords_any": ["refinitiv", "market data", "analytics", "data product", "dataset", "datasets"],
+      "competitor_business": "market_data_analytics",
+      "mapped_dbg_business": "DBG Market Data",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: LSEG data and analytics signal"
+    },
+    {
+      "id": "lseg_fx",
+      "priority": 20,
+      "competitor_groups": ["LSEG"],
+      "keywords_any": ["fxall", "foreign exchange", " fx ", "currency trading"],
+      "competitor_business": "fx_trading",
+      "mapped_dbg_business": "360T",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: LSEG FX signal"
+    },
+    {
+      "id": "nasdaq_market_technology",
+      "priority": 20,
+      "competitor_groups": ["Nasdaq"],
+      "keywords_any": ["market technology", "matching engine", "exchange technology", "surveillance technology"],
+      "competitor_business": "market_technology",
+      "mapped_dbg_business": "Market Technology",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: Nasdaq market technology signal"
+    },
+    {
+      "id": "nasdaq_index_benchmark",
+      "priority": 20,
+      "competitor_groups": ["Nasdaq"],
+      "keywords_any": ["index", "benchmark", "indexes", "indices"],
+      "competitor_business": "index_benchmark",
+      "mapped_dbg_business": "ISS STOXX / STOXX",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: Nasdaq index/benchmark signal"
+    },
+    {
+      "id": "nasdaq_market_data",
+      "priority": 25,
+      "competitor_groups": ["Nasdaq"],
+      "keywords_any": ["market data", "dataset", "datasets", "data product", "short interest"],
+      "competitor_business": "market_data",
+      "mapped_dbg_business": "DBG Market Data",
+      "mapping_confidence": "medium",
+      "mapping_reason": "content_rule: Nasdaq market-wide data/statistics signal"
+    },
+    {
+      "id": "hkex_market_access_etf",
+      "priority": 24,
+      "competitor_groups": ["HKEX"],
+      "keywords_any": ["market access", "mainland insurance funds", "etf", "etfs", "exchange-traded fund"],
+      "competitor_business": "exchange_market_access",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: HKEX market-access/trading product signal"
+    },
+    {
+      "id": "nasdaq_derivatives",
+      "priority": 30,
+      "competitor_groups": ["Nasdaq"],
+      "keywords_any": ["options", "futures", "derivatives"],
+      "competitor_business": "derivatives_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: Nasdaq derivatives signal"
+    },
+    {
+      "id": "cboe_derivatives",
+      "priority": 20,
+      "competitor_groups": ["Cboe"],
+      "keywords_any": ["options", "derivatives", "futures", "vix"],
+      "competitor_business": "derivatives_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: Cboe derivatives/options signal"
+    },
+    {
+      "id": "cboe_clearing",
+      "priority": 20,
+      "competitor_groups": ["Cboe"],
+      "keywords_any": ["cboe clear europe", "ccp", "clearing"],
+      "competitor_business": "clearing",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: Cboe clearing signal"
+    },
+    {
+      "id": "cboe_market_data",
+      "priority": 25,
+      "competitor_groups": ["Cboe"],
+      "keywords_any": ["market data", "analytics", "data product", "dataset"],
+      "competitor_business": "market_data_analytics",
+      "mapped_dbg_business": "DBG Market Data",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: Cboe data and analytics signal"
+    },
+    {
+      "id": "ice_energy_commodities",
+      "priority": 20,
+      "competitor_groups": ["ICE"],
+      "keywords_any": ["energy", "power", "gas", "commodity", "commodities", "freight"],
+      "competitor_business": "energy_commodities",
+      "mapped_dbg_business": "EEX",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: ICE energy/commodities signal"
+    },
+    {
+      "id": "ice_clearing",
+      "priority": 20,
+      "competitor_groups": ["ICE"],
+      "keywords_any": ["ice clear", "clearing", "ccp"],
+      "competitor_business": "clearing",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: ICE clearing signal"
+    },
+    {
+      "id": "ice_data_services",
+      "priority": 25,
+      "competitor_groups": ["ICE"],
+      "keywords_any": ["ice data services", "market data", "analytics", "data product", "dataset"],
+      "competitor_business": "market_data_analytics",
+      "mapped_dbg_business": "DBG Market Data",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: ICE data services signal"
+    },
+    {
+      "id": "six_payments",
+      "priority": 20,
+      "competitor_groups": ["SIX"],
+      "keywords_any": ["payments", "payment", "ebill", "direct debit"],
+      "competitor_business": "payments",
+      "mapped_dbg_business": "Other / Cross-business",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: SIX payments/eBill is outside the fixed DBG competitor business lines"
+    },
+    {
+      "id": "six_post_trade",
+      "priority": 20,
+      "competitor_groups": ["SIX"],
+      "keywords_any": ["post-trade", "settlement", "custody", "csd", "central securities depository"],
+      "competitor_business": "post_trade",
+      "mapped_dbg_business": "Clearstream",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: SIX post-trade signal"
+    },
+    {
+      "id": "six_market_data",
+      "priority": 25,
+      "competitor_groups": ["SIX"],
+      "keywords_any": ["market data", "data", "analytics", "index", "benchmark"],
+      "competitor_business": "market_data",
+      "mapped_dbg_business": "DBG Market Data",
+      "mapping_confidence": "medium",
+      "mapping_reason": "content_rule: SIX market data/index signal"
+    },
+    {
+      "id": "six_trading_exchange",
+      "priority": 30,
+      "competitor_groups": ["SIX"],
+      "keywords_any": ["trading", "exchange", "listing", "listed"],
+      "competitor_business": "exchange_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "content_rule: SIX exchange/trading signal"
+    },
+    {
+      "id": "exchange_index_benchmark",
+      "priority": 25,
+      "competitor_groups": ["JPX", "HKEX", "Euronext", "SGX", "SHFE", "B3"],
+      "keywords_any": ["index", "benchmark", "indices", "indexes"],
+      "competitor_business": "index_benchmark",
+      "mapped_dbg_business": "ISS STOXX / STOXX",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: exchange index/benchmark signal"
+    },
+    {
+      "id": "exchange_market_data",
+      "priority": 25,
+      "competitor_groups": ["JPX", "HKEX", "Euronext", "SGX", "SHFE", "B3"],
+      "keywords_any": ["dataset", "datasets", "data service", "data product", "distribution service", "market data", "j-quants"],
+      "competitor_business": "market_data",
+      "mapped_dbg_business": "DBG Market Data",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: exchange data service signal"
+    },
+    {
+      "id": "exchange_derivatives_trading",
+      "priority": 30,
+      "competitor_groups": ["JPX", "HKEX", "Euronext", "SGX", "SHFE", "B3"],
+      "keywords_any": ["derivatives", "futures", "options", "exchange trading", "trading participant", "commodity futures", "commodity options"],
+      "competitor_business": "derivatives_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: exchange derivatives/trading signal"
+    }
+  ]
+}

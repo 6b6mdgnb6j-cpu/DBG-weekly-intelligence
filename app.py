@@ -2,6 +2,7 @@ import html
 
 import streamlit as st
 
+from crawler.competitor_mapping import map_competitor_item
 from utils.loader import list_published_reports
 from utils.loader import load_news_payload
 from utils.loader import report_label
@@ -45,12 +46,35 @@ FALLBACK_SECTIONS = {
         "360T",
         "Crypto Finance",
         "SimCorp",
-        "ISS STOXX",
-        "STOXX",
+        "ISS STOXX / STOXX",
         "Clearstream",
         "DBG Market Data",
-        "7 Market Technology",
+        "Market Technology",
+        "Other / Cross-business",
     ],
+}
+
+
+COMPETITOR_GROUPS = FALLBACK_SECTIONS["Competitor"]
+LEGACY_COMPETITOR_FALLBACK = {
+    "Eurex": "Eurex",
+    "EEX": "EEX",
+    "360T": "360T",
+    "Crypto Finance": "Crypto Finance",
+    "SimCorp": "SimCorp",
+    "ISS STOXX": "ISS STOXX / STOXX",
+    "STOXX": "ISS STOXX / STOXX",
+    "Clearstream": "Clearstream",
+    "DBG Market Data": "DBG Market Data",
+    "7 Market Technology": "Market Technology",
+    "Market Technology": "Market Technology",
+    "HashKey": "Crypto Finance",
+    "LSEG": "Other / Cross-business",
+    "Nasdaq": "Other / Cross-business",
+    "SIX": "Other / Cross-business",
+    "Cboe": "Eurex",
+    "DTCC": "Clearstream",
+    "MSCI": "ISS STOXX / STOXX",
 }
 
 
@@ -70,16 +94,43 @@ def title_for_section(section_key):
 
 
 def groups_for_category(payload, category):
+    if category == "Competitor":
+        return COMPETITOR_GROUPS
     for section in payload.get("sections", []):
         if section.get("key") == category and section.get("groups"):
             return section.get("groups", [])
     return FALLBACK_SECTIONS.get(category, [])
 
 
+def competitor_group_key(item):
+    mapped = item.get("mapped_dbg_business", "")
+    if mapped in COMPETITOR_GROUPS:
+        return mapped
+    for value in (item.get("brand", ""), item.get("source", "")):
+        if value in LEGACY_COMPETITOR_FALLBACK:
+            return LEGACY_COMPETITOR_FALLBACK[value]
+    try:
+        mapped_item = map_competitor_item(item)
+        mapped = mapped_item.get("mapped_dbg_business", "")
+        if mapped in COMPETITOR_GROUPS:
+            return mapped
+    except Exception:
+        pass
+    return "Other / Cross-business"
+
+
 def group_value(item, category):
     if category == "Competitor":
-        return item.get("brand") or item.get("subcategory", "")
+        return competitor_group_key(item)
     return item.get("subcategory", "")
+
+
+def competitor_label(item):
+    group = item.get("competitor_group") or item.get("source") or item.get("brand") or ""
+    business = item.get("competitor_business") or ""
+    if business and business not in {"source_default", "cross_business_or_unmapped"}:
+        return f"{group} · {business}"
+    return group
 
 
 def localized_title(item):
@@ -345,6 +396,8 @@ else:
             for item in items:
                 title = html.escape(localized_title(item) or "")
                 summary = html.escape((localized_summary(item) or "").strip())
+                comp_label = html.escape(competitor_label(item)) if target == "Competitor" else ""
+                comp_label_html = f'<div class="competitor-label">{comp_label}</div>' if comp_label else ""
 
 
                 st.markdown(
@@ -362,6 +415,7 @@ else:
                     {title}
                     </h3>
 
+                    {comp_label_html}
 
                     <p>
                     {summary}

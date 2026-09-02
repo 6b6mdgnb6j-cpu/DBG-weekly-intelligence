@@ -2,6 +2,7 @@ import html
 import json
 from pathlib import Path
 
+from crawler.competitor_mapping import apply_competitor_mapping
 from crawler.date_utils import parse_week_start, week_file_key
 from crawler.highlight_ranker import select_highlights
 
@@ -30,11 +31,11 @@ BRAND_ORDER = [
     "360T",
     "Crypto Finance",
     "SimCorp",
-    "ISS STOXX",
-    "STOXX",
+    "ISS STOXX / STOXX",
     "Clearstream",
     "DBG Market Data",
-    "7 Market Technology",
+    "Market Technology",
+    "Other / Cross-business",
 ]
 
 
@@ -50,10 +51,6 @@ def build_group_config(items):
         category_items = [item for item in items if item.get("category") == category]
         if category == "Competitor":
             groups = BRAND_ORDER[:]
-            for item in category_items:
-                brand = item.get("brand")
-                if brand and brand not in groups:
-                    groups.append(brand)
         else:
             groups = SUBCATEGORY_ORDER.get(category, [])[:]
             for item in category_items:
@@ -73,7 +70,7 @@ def build_group_config(items):
 def render_report(start_arg=None):
     week_start, _ = parse_week_start(start_arg)
     payload, weekly_data_path = load_weekly_data(week_start)
-    items = payload.get("items", [])
+    items = apply_competitor_mapping(payload.get("items", []))
 
     with open(TEMPLATE_FILE, encoding="utf-8") as f:
         template = f.read()

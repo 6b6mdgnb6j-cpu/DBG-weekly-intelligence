@@ -185,6 +185,18 @@ font-size:14px;
 
 }
 
+.competitor-label {
+
+color:#12304A;
+
+font-size:13px;
+
+font-weight:700;
+
+margin:6px 0 8px 0;
+
+}
+
 
 
 a {

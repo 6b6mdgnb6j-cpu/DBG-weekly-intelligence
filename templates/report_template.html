@@ -151,6 +151,38 @@
     let lang = "cn";
     const groupState = {};
     const sectionState = { "highlights-section": true };
+    const competitorGroups = [
+      "Eurex",
+      "EEX",
+      "360T",
+      "Crypto Finance",
+      "ISS STOXX / STOXX",
+      "SimCorp",
+      "Clearstream",
+      "DBG Market Data",
+      "Market Technology",
+      "Other / Cross-business",
+    ];
+    const legacyCompetitorFallback = {
+      "Eurex": "Eurex",
+      "EEX": "EEX",
+      "360T": "360T",
+      "Crypto Finance": "Crypto Finance",
+      "SimCorp": "SimCorp",
+      "ISS STOXX": "ISS STOXX / STOXX",
+      "STOXX": "ISS STOXX / STOXX",
+      "Clearstream": "Clearstream",
+      "DBG Market Data": "DBG Market Data",
+      "7 Market Technology": "Market Technology",
+      "Market Technology": "Market Technology",
+      "HashKey": "Crypto Finance",
+      "LSEG": "Other / Cross-business",
+      "Nasdaq": "Other / Cross-business",
+      "SIX": "Other / Cross-business",
+      "Cboe": "Eurex",
+      "DTCC": "Clearstream",
+      "MSCI": "ISS STOXX / STOXX",
+    };
 
     function text(item, cnKey, enKey) {
       return lang === "cn" ? (item[cnKey] || item[enKey] || "") : (item[enKey] || item[cnKey] || "");
@@ -177,19 +209,35 @@
     function escapeHtml(value) {
       return String(value || "").replace(/[&<>"']/g, s => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[s]));
     }
+    function competitorGroupKey(item) {
+      if (competitorGroups.includes(item.mapped_dbg_business)) return item.mapped_dbg_business;
+      if (legacyCompetitorFallback[item.brand]) return legacyCompetitorFallback[item.brand];
+      if (legacyCompetitorFallback[item.source]) return legacyCompetitorFallback[item.source];
+      return "Other / Cross-business";
+    }
+    function competitorLabel(item) {
+      const group = item.competitor_group || item.source || item.brand || "";
+      const business = item.competitor_business || "";
+      if (business && !["source_default", "cross_business_or_unmapped"].includes(business)) {
+        return `${group} · ${business}`;
+      }
+      return group;
+    }
     function card(item, highlight=false) {
       const cls = highlight ? "highlight" : "card";
       const summary = summaryFor(item);
+      const compLabel = item.category === "Competitor" ? competitorLabel(item) : "";
       return `<article class="${cls}">
         <div class="date">${escapeHtml(formatDate(item.date))}</div>
         <h3>${escapeHtml(titleFor(item))}</h3>
+        ${compLabel ? `<div class="source">${escapeHtml(compLabel)}</div>` : ""}
         ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
         <div class="source">${escapeHtml(item.source)}${item.official ? " · Official" : ""}</div>
         <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${label("阅读原文", "Read original")}</a>
       </article>`;
     }
     function matchesGroup(item, section, group) {
-      if (section.key === "Competitor") return item.brand === group;
+      if (section.key === "Competitor") return competitorGroupKey(item) === group;
       return item.subcategory === group;
     }
     function renderHighlights() {
