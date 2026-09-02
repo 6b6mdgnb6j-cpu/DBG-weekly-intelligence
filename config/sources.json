@@ -3234,7 +3234,7 @@
     "url": "https://www.theice.com",
     "category": "Competitor",
     "subcategory": "交易与清算",
-    "method": "web",
+    "method": "ice_q4",
     "priority": 1,
     "source_type": "competitor_official",
     "official": true,
@@ -3248,7 +3248,8 @@
     "max_candidates": 8,
     "registry_source": "周报信息来源清单_副本.docx",
     "registry_raw": "150.洲际交易所(ICE)—https://www.theice.com",
-    "crawl_url": "https://ir.theice.com/press/press-releases/default.aspx"
+    "crawl_url": "https://ir.theice.com/feed/PressRelease.svc/GetPressReleaseList",
+    "max_scan_candidates": 120
   },
   {
     "id": "SRC-151",

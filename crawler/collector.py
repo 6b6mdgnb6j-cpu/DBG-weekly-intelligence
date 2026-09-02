@@ -11,6 +11,7 @@ from .news_model import ensure_news_schema
 from .official_source_parser import (
     collect_cboe_press,
     collect_clearstream_search,
+    collect_ice_q4,
     collect_lseg_search,
     collect_msci_rss,
     collect_nasdaq_press,
@@ -127,6 +128,7 @@ def classify_empty_status(status, source):
         "lseg_search",
         "nasdaq_press",
         "cboe_press",
+        "ice_q4",
         "msci_rss",
     }
     if status["within_period"] == 0:
@@ -205,6 +207,8 @@ def collect_week(start_arg=None, translate=True):
                 source_raw, source_filtered, meta = collect_nasdaq_press(source, week_start, week_end, logger)
             elif method == "cboe_press":
                 source_raw, source_filtered, meta = collect_cboe_press(source, week_start, week_end, logger)
+            elif method == "ice_q4":
+                source_raw, source_filtered, meta = collect_ice_q4(source, week_start, week_end, logger)
             elif method == "msci_rss":
                 source_raw, source_filtered, meta = collect_msci_rss(source, week_start, week_end, logger)
             elif method == "web":
