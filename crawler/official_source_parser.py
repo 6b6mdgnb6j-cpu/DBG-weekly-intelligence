@@ -61,6 +61,22 @@ ASIC_MEDIA_HEADERS = {
     "Referer": "https://www.asic.gov.au/newsroom/media-releases",
 }
 
+MAS_SEARCH_URL = "https://www.mas.gov.sg/api/v1/search"
+MAS_SEARCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json,text/plain,*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.mas.gov.sg/news",
+}
+MAS_NEWS_CONTENT_TYPES = {
+    "Media Releases",
+    "Enforcement Actions Media Releases",
+    "Monetary Policy Statements",
+}
+
 
 def _empty_meta(source, list_url):
     return {
@@ -187,6 +203,122 @@ def _asic_media_release_item(row):
     raw_date = row.get("publishedDate") or ""
     summary = normalize_text_encoding(row.get("metaDescription") or "", clear_garbage=True)
     return title, url, raw_date, summary
+
+
+def _first_value(value):
+    if isinstance(value, list):
+        return value[0] if value else ""
+    return value or ""
+
+
+def _mas_news_item(row):
+    title = normalize_text_encoding(
+        row.get("document_title_string_s") or _first_value(row.get("document_title_t"))
+    )
+    url = urljoin("https://www.mas.gov.sg", row.get("page_url_s") or "")
+    raw_date = row.get("mas_date_tdt") or ""
+    summary = normalize_text_encoding(_first_value(row.get("document_shortsummary_t")), clear_garbage=True)
+    content_type = row.get("mas_contenttype_s") or ""
+    return title, url, raw_date, summary, content_type
+
+
+def collect_mas_search(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or MAS_SEARCH_URL
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("MAS official search API start: %s", source["name"])
+    try:
+        rows_per_page = int(source.get("api_per_page") or 50)
+        max_pages = int(source.get("max_pages") or 8)
+        max_scan = int(source.get("max_scan_candidates") or rows_per_page * max_pages)
+        allowed_types = set(source.get("allowed_content_types") or MAS_NEWS_CONTENT_TYPES)
+
+        for page in range(max_pages):
+            if meta["candidates_scanned"] >= max_scan:
+                meta["stopped_reason"] = "max_scan_candidates"
+                break
+            response = request_get(
+                list_url,
+                headers=MAS_SEARCH_HEADERS,
+                timeout=30,
+                attempts=2,
+                params={"rows": rows_per_page, "start": page * rows_per_page},
+            )
+            data = response.json()
+            meta["pages_scanned"] += 1
+            search_response = data.get("response") or {}
+            docs = search_response.get("docs") or []
+            if not meta["candidates_discovered"]:
+                meta["candidates_discovered"] = int(search_response.get("numFound") or len(docs))
+                meta["candidates"] = meta["candidates_discovered"]
+            if not docs:
+                meta["stopped_reason"] = "no_results_page"
+                break
+
+            page_has_before_target = False
+            for row in docs:
+                if meta["candidates_scanned"] >= max_scan:
+                    meta["stopped_reason"] = "max_scan_candidates"
+                    break
+                meta["candidates_scanned"] += 1
+                title, url, raw_date, summary, content_type = _mas_news_item(row)
+                if content_type not in allowed_types:
+                    meta["non_news_candidates"] += 1
+                    continue
+
+                parsed_date = _parse_iso_date(raw_date)
+                if parsed_date:
+                    _record_parsed_date(meta, parsed_date)
+                    meta["list_items_with_date"] += 1
+                    if parsed_date <= week_end:
+                        meta["target_period_reached"] = True
+                    if parsed_date < week_start:
+                        page_has_before_target = True
+                else:
+                    meta["date_parse_failed"] += 1
+
+                drop_reason = _drop_reason(parsed_date, week_start, week_end)
+                _sample(meta, title, url, raw_date, parsed_date, drop_reason)
+                item = standardize_news(
+                    source,
+                    title=title,
+                    url=url,
+                    date=parsed_date.isoformat() if parsed_date else raw_date,
+                    summary=summary,
+                )
+                raw_items.append(item)
+                if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+                    results.append(item)
+
+            if meta["stopped_reason"]:
+                break
+            if page_has_before_target:
+                meta["stopped_reason"] = "passed_target_start"
+                break
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = (
+                "max_scan_candidates"
+                if meta["candidates_scanned"] >= max_scan and meta["candidates_scanned"] < meta["candidates_discovered"]
+                else "completed"
+            )
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("MAS official search API failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "MAS official search API success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
 
 
 def collect_asic_media_releases(source, week_start, week_end, logger):

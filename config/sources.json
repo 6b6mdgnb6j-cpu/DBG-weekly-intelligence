@@ -1101,7 +1101,7 @@
     "url": "https://www.mas.gov.sg",
     "category": "Macro",
     "subcategory": "亚太",
-    "method": "web",
+    "method": "mas_search",
     "priority": 1,
     "source_type": "official",
     "official": true,
@@ -1113,9 +1113,17 @@
     "technical_class": "static_web",
     "technical_status": "working",
     "max_candidates": 8,
+    "max_scan_candidates": 400,
+    "api_per_page": 50,
+    "max_pages": 8,
+    "allowed_content_types": [
+      "Media Releases",
+      "Enforcement Actions Media Releases",
+      "Monetary Policy Statements"
+    ],
     "registry_source": "周报信息来源清单_副本.docx",
     "registry_raw": "51.新加坡金融管理局(MAS)—https://www.mas.gov.sg",
-    "crawl_url": "https://www.mas.gov.sg/news"
+    "crawl_url": "https://www.mas.gov.sg/api/v1/search"
   },
   {
     "id": "SRC-052",
