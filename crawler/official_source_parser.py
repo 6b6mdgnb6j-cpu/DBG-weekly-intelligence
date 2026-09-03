@@ -77,6 +77,18 @@ MAS_NEWS_CONTENT_TYPES = {
     "Monetary Policy Statements",
 }
 
+PCAOB_SEARCH_URL = "https://PCAOB.searchapi-na.hawksearch.com/api/v2/search/"
+PCAOB_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept": "application/json,text/plain,*/*",
+    "Content-Type": "application/json",
+    "Origin": "https://pcaobus.org",
+    "Referer": "https://pcaobus.org/news-events/news-releases",
+}
+PCAOB_CLIENT_GUID = "e962e95324cb46ef8955c0b09a3904b9"
+PCAOB_INDEX_NAME = "pcaob.20260515.140735.all-data-types"
+PCAOB_NEWS_RELEASE_PATH = "/news-events/news-releases"
+
 
 def _empty_meta(source, list_url):
     return {
@@ -312,6 +324,132 @@ def collect_mas_search(source, week_start, week_end, logger):
 
     logger.info(
         "MAS official search API success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
+
+
+def _pcaob_summary(pagecontent):
+    text = normalize_text_encoding(_first_value(pagecontent), clear_garbage=True)
+    if not text:
+        return ""
+    text = text.split("***** About the PCAOB", 1)[0].strip()
+    return text[:700].rsplit(" ", 1)[0].strip() if len(text) > 700 else text
+
+
+def _pcaob_item(row):
+    document = row.get("Document") or {}
+    title = normalize_text_encoding(_first_value(document.get("title")))
+    url = urljoin("https://pcaobus.org", _first_value(document.get("pageurl")))
+    raw_date = (
+        _first_value(document.get("displayarticledate"))
+        or _first_value(document.get("filter_date"))
+        or _first_value(document.get("publicationdate"))
+    )
+    summary = _pcaob_summary(document.get("pagecontent"))
+    content_type = _first_value(document.get("contenttypename"))
+    content_label = _first_value(document.get("contenttypelabel"))
+    return title, url, raw_date, summary, content_type, content_label
+
+
+def collect_pcaob_hawksearch(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or PCAOB_SEARCH_URL
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("PCAOB official HawkSearch start: %s", source["name"])
+    try:
+        per_page = int(source.get("api_per_page") or 24)
+        max_pages = int(source.get("max_pages") or 4)
+        max_scan = int(source.get("max_scan_candidates") or per_page * max_pages)
+        custom_url = source.get("custom_url") or PCAOB_NEWS_RELEASE_PATH
+        payload_base = {
+            "ClientGuid": source.get("client_guid") or PCAOB_CLIENT_GUID,
+            "IndexName": source.get("index_name") or PCAOB_INDEX_NAME,
+            "Keyword": "",
+            "MaxPerPage": per_page,
+            "CustomUrl": custom_url,
+        }
+
+        for page in range(1, max_pages + 1):
+            if meta["candidates_scanned"] >= max_scan:
+                meta["stopped_reason"] = "max_scan_candidates"
+                break
+            payload = dict(payload_base)
+            payload["PageNo"] = page
+            response = requests.post(list_url, headers=PCAOB_HEADERS, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            meta["pages_scanned"] += 1
+            pagination = data.get("Pagination") or {}
+            rows = data.get("Results") or []
+            if not meta["candidates_discovered"]:
+                meta["candidates_discovered"] = int(pagination.get("NofResults") or len(rows))
+                meta["candidates"] = meta["candidates_discovered"]
+            if not rows:
+                meta["stopped_reason"] = "no_results_page"
+                break
+
+            page_has_before_target = False
+            for row in rows:
+                if meta["candidates_scanned"] >= max_scan:
+                    meta["stopped_reason"] = "max_scan_candidates"
+                    break
+                meta["candidates_scanned"] += 1
+                title, url, raw_date, summary, content_type, content_label = _pcaob_item(row)
+                if content_type != "NewsRelease":
+                    meta["non_news_candidates"] += 1
+                    continue
+
+                parsed_date = _parse_iso_date(raw_date)
+                if parsed_date:
+                    _record_parsed_date(meta, parsed_date)
+                    meta["list_items_with_date"] += 1
+                    if parsed_date <= week_end:
+                        meta["target_period_reached"] = True
+                    if parsed_date < week_start:
+                        page_has_before_target = True
+                else:
+                    meta["date_parse_failed"] += 1
+
+                drop_reason = _drop_reason(parsed_date, week_start, week_end)
+                _sample(meta, title, url, raw_date, parsed_date, drop_reason)
+                item = standardize_news(
+                    source,
+                    title=title,
+                    url=url,
+                    date=parsed_date.isoformat() if parsed_date else raw_date,
+                    summary=summary,
+                )
+                raw_items.append(item)
+                if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+                    results.append(item)
+
+            if meta["stopped_reason"]:
+                break
+            if page_has_before_target:
+                meta["stopped_reason"] = "passed_target_start"
+                break
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = (
+                "max_scan_candidates"
+                if meta["candidates_scanned"] >= max_scan and meta["candidates_scanned"] < meta["candidates_discovered"]
+                else "completed"
+            )
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("PCAOB official HawkSearch failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "PCAOB official HawkSearch success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
         meta["candidates_discovered"],
         meta["candidates_scanned"],
         meta["dated_candidates"],

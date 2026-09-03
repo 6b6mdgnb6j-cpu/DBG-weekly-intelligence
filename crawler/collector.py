@@ -17,6 +17,7 @@ from .official_source_parser import (
     collect_mas_search,
     collect_msci_rss,
     collect_nasdaq_press,
+    collect_pcaob_hawksearch,
     collect_simcorp_sitemap,
 )
 from .rss_parser import collect_rss
@@ -134,6 +135,7 @@ def classify_empty_status(status, source):
         "msci_rss",
         "asic_media_releases",
         "mas_search",
+        "pcaob_hawksearch",
     }
     if status["within_period"] == 0:
         if status["date_parse_failed"] > status["dated_candidates"]:
@@ -219,6 +221,8 @@ def collect_week(start_arg=None, translate=True):
                 source_raw, source_filtered, meta = collect_asic_media_releases(source, week_start, week_end, logger)
             elif method == "mas_search":
                 source_raw, source_filtered, meta = collect_mas_search(source, week_start, week_end, logger)
+            elif method == "pcaob_hawksearch":
+                source_raw, source_filtered, meta = collect_pcaob_hawksearch(source, week_start, week_end, logger)
             elif method == "web":
                 source_raw, source_filtered, meta = collect_web(source, week_start, week_end, logger)
             else:

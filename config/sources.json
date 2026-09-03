@@ -397,7 +397,7 @@
     "url": "https://pcaobus.org",
     "category": "Macro",
     "subcategory": "美国",
-    "method": "web",
+    "method": "pcaob_hawksearch",
     "priority": 1,
     "source_type": "official",
     "official": true,
@@ -409,9 +409,13 @@
     "technical_class": "static_web",
     "technical_status": "working",
     "max_candidates": 8,
+    "max_scan_candidates": 96,
+    "api_per_page": 24,
+    "max_pages": 4,
+    "custom_url": "/news-events/news-releases",
     "registry_source": "周报信息来源清单_副本.docx",
     "registry_raw": "19.公众公司会计监督委员会(PCAOB)—https://pcaobus.org",
-    "crawl_url": "https://pcaobus.org/news-events/news-releases"
+    "crawl_url": "https://PCAOB.searchapi-na.hawksearch.com/api/v2/search/"
   },
   {
     "id": "SRC-020",
