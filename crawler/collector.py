@@ -9,6 +9,7 @@ from .dedupe import dedupe_news
 from .event_cluster import cluster_same_event_items
 from .news_model import ensure_news_schema
 from .official_source_parser import (
+    collect_asic_media_releases,
     collect_cboe_press,
     collect_clearstream_search,
     collect_ice_q4,
@@ -130,6 +131,7 @@ def classify_empty_status(status, source):
         "cboe_press",
         "ice_q4",
         "msci_rss",
+        "asic_media_releases",
     }
     if status["within_period"] == 0:
         if status["date_parse_failed"] > status["dated_candidates"]:
@@ -211,6 +213,8 @@ def collect_week(start_arg=None, translate=True):
                 source_raw, source_filtered, meta = collect_ice_q4(source, week_start, week_end, logger)
             elif method == "msci_rss":
                 source_raw, source_filtered, meta = collect_msci_rss(source, week_start, week_end, logger)
+            elif method == "asic_media_releases":
+                source_raw, source_filtered, meta = collect_asic_media_releases(source, week_start, week_end, logger)
             elif method == "web":
                 source_raw, source_filtered, meta = collect_web(source, week_start, week_end, logger)
             else:

@@ -834,7 +834,7 @@
     "url": "https://www.asic.gov.au",
     "category": "Macro",
     "subcategory": "亚太",
-    "method": "web",
+    "method": "asic_media_releases",
     "priority": 1,
     "source_type": "official",
     "official": true,
@@ -846,9 +846,10 @@
     "technical_class": "static_web",
     "technical_status": "working",
     "max_candidates": 8,
+    "max_scan_candidates": 300,
     "registry_source": "周报信息来源清单_副本.docx",
     "registry_raw": "39.澳大利亚证券和投资委员会(ASIC)—https://www.asic.gov.au",
-    "crawl_url": "https://asic.gov.au/about-asic/news-centre/find-a-media-release/"
+    "crawl_url": "https://download.asic.gov.au/asic-nga/data/newsroom/newsroom-all.json"
   },
   {
     "id": "SRC-040",

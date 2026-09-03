@@ -54,6 +54,13 @@ ICE_PRESS_HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
 }
 
+ASIC_MEDIA_RELEASES_URL = "https://download.asic.gov.au/asic-nga/data/newsroom/newsroom-all.json"
+ASIC_MEDIA_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept": "application/json,text/plain,*/*",
+    "Referer": "https://www.asic.gov.au/newsroom/media-releases",
+}
+
 
 def _empty_meta(source, list_url):
     return {
@@ -122,6 +129,16 @@ def _sample(meta, title, url, raw_date, parsed_date, drop_reason):
     )
 
 
+def _parse_iso_date(raw_date):
+    text = (raw_date or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
 def _walk(value):
     if isinstance(value, dict):
         yield value
@@ -162,6 +179,95 @@ def _simcorp_article_urls(xml_text, week_start, week_end):
         if match and int(match.group(1)) in years:
             urls.append(url)
     return urls
+
+
+def _asic_media_release_item(row):
+    title = normalize_text_encoding(row.get("name", ""))
+    url = urljoin("https://www.asic.gov.au", row.get("url") or "")
+    raw_date = row.get("publishedDate") or ""
+    summary = normalize_text_encoding(row.get("metaDescription") or "", clear_garbage=True)
+    return title, url, raw_date, summary
+
+
+def collect_asic_media_releases(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or ASIC_MEDIA_RELEASES_URL
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+
+    logger.info("ASIC official media releases JSON start: %s", source["name"])
+    try:
+        response = request_get(list_url, headers=ASIC_MEDIA_HEADERS, timeout=30, attempts=2)
+        rows = response.json()
+        if not isinstance(rows, list):
+            raise ValueError("ASIC newsroom JSON did not return a list")
+
+        media_rows = [
+            row
+            for row in rows
+            if isinstance(row, dict) and (row.get("metaType") or "").strip().lower() == "media release"
+        ]
+        media_rows.sort(
+            key=lambda row: _parse_iso_date(row.get("publishedDate") or "") or datetime.min.date(),
+            reverse=True,
+        )
+
+        max_scan = int(source.get("max_scan_candidates") or 300)
+        meta["pages_scanned"] = 1
+        meta["candidates_discovered"] = len(media_rows)
+        meta["candidates"] = len(media_rows)
+        meta["non_news_candidates"] = max(0, len(rows) - len(media_rows))
+
+        for row in media_rows[:max_scan]:
+            title, url, raw_date, summary = _asic_media_release_item(row)
+            meta["candidates_scanned"] += 1
+            parsed_date = _parse_iso_date(raw_date)
+            if parsed_date:
+                _record_parsed_date(meta, parsed_date)
+                meta["list_items_with_date"] += 1
+                if parsed_date <= week_end:
+                    meta["target_period_reached"] = True
+            else:
+                meta["date_parse_failed"] += 1
+
+            drop_reason = _drop_reason(parsed_date, week_start, week_end)
+            _sample(meta, title, url, raw_date, parsed_date, drop_reason)
+            item = standardize_news(
+                source,
+                title=title,
+                url=url,
+                date=parsed_date.isoformat() if parsed_date else raw_date,
+                summary=summary,
+            )
+            raw_items.append(item)
+            if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+                results.append(item)
+
+            if parsed_date and parsed_date < week_start:
+                meta["stopped_reason"] = "passed_target_start"
+                break
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = (
+                "max_scan_candidates"
+                if meta["candidates_scanned"] >= max_scan and meta["candidates_scanned"] < len(media_rows)
+                else "completed"
+            )
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("ASIC official media releases JSON failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "ASIC official media releases JSON success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
 
 
 def collect_simcorp_sitemap(source, week_start, week_end, logger):
