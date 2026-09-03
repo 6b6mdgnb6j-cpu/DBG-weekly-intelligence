@@ -1,6 +1,8 @@
 import re
 
 
+# Constants / term lists
+
 POSITIVE_TERMS = {
     "macro": [
         "monetary policy", "interest rate", "interest rates", "inflation",
@@ -256,6 +258,8 @@ REJECTION_CATEGORY_TERMS = {
 }
 
 
+# Lexical matching helpers
+
 def normalize_text(*values):
     text = " ".join(value or "" for value in values).lower()
     return re.sub(r"\s+", " ", text)
@@ -263,6 +267,14 @@ def normalize_text(*values):
 
 def contains_term(text, term):
     return re.search(rf"\b{re.escape(term)}\b", text) is not None
+
+
+def contains_any_phrase(text, terms):
+    return any(term in text for term in terms)
+
+
+def contains_all_phrases(text, terms):
+    return all(term in text for term in terms)
 
 
 def contains_individual_enforcement_term(text, term):
@@ -314,16 +326,47 @@ def is_fraud_prevention_technology_context(text):
     return any(term in text for term in prevention_context)
 
 
+def is_individual_enforcement(text):
+    matched = any(
+        contains_individual_enforcement_term(text, term)
+        for term in INDIVIDUAL_ENFORCEMENT_TERMS
+    )
+    if matched and is_fraud_prevention_technology_context(text):
+        matched = any(
+            contains_individual_enforcement_term(text, term)
+            for term in INDIVIDUAL_ENFORCEMENT_TERMS
+            if term != "fraud"
+        )
+    return matched
+
+
+# Text builders
+
+def build_relevance_text(item):
+    return normalize_text(
+        item.get("title_original"),
+        item.get("title_cn"),
+        item.get("title_en"),
+        item.get("summary"),
+        item.get("relevance_context"),
+        item.get("source"),
+        item.get("subcategory"),
+        item.get("brand"),
+    )
+
+
+# Global signal helpers
+
 def has_material_development_signal(text):
-    return any(term in text for term in MATERIAL_DEVELOPMENT_TERMS)
+    return contains_any_phrase(text, MATERIAL_DEVELOPMENT_TERMS)
 
 
 def has_routine_operational_signal(text):
-    return any(term in text for term in ROUTINE_OPERATIONAL_TERMS)
+    return contains_any_phrase(text, ROUTINE_OPERATIONAL_TERMS)
 
 
 def routine_operational_is_overridden(text):
-    return any(term in text for term in ROUTINE_OPERATIONAL_OVERRIDE_TERMS)
+    return contains_any_phrase(text, ROUTINE_OPERATIONAL_OVERRIDE_TERMS)
 
 
 def is_recurring_market_commentary(item, text):
@@ -331,8 +374,10 @@ def is_recurring_market_commentary(item, text):
     brand = (item.get("brand") or "").lower()
     if "crypto finance" not in source and "crypto finance" not in brand:
         return False
-    return any(term in text for term in RECURRING_COMMENTARY_TERMS)
+    return contains_any_phrase(text, RECURRING_COMMENTARY_TERMS)
 
+
+# Source-specific signal helpers
 
 def is_ice_commodity_market_signal(item, text):
     source = (item.get("source") or "").lower()
@@ -341,7 +386,7 @@ def is_ice_commodity_market_signal(item, text):
         return False
     commodity_terms = ("sugar", "commodity", "commodities", "energy", "power", "gas", "oil")
     market_terms = ("open interest", "hedging", "futures", "options", "liquidity", "volume")
-    return any(term in text for term in commodity_terms) and any(term in text for term in market_terms)
+    return contains_any_phrase(text, commodity_terms) and contains_any_phrase(text, market_terms)
 
 
 def is_bafin_ai_market_surveillance_signal(item, text):
@@ -350,7 +395,7 @@ def is_bafin_ai_market_surveillance_signal(item, text):
         return False
     has_surveillance = "market surveillance" in text
     has_ai = contains_term(text, "ai") or "artificial intelligence" in text
-    has_powers = any(term in text for term in ("new powers", "granted new powers", "supervisory powers"))
+    has_powers = contains_any_phrase(text, ("new powers", "granted new powers", "supervisory powers"))
     return has_surveillance and has_ai and has_powers
 
 
@@ -360,8 +405,8 @@ def is_clearstream_dlt_settlement_signal(item, text):
     if "明讯银行" not in source and "clearstream" not in original:
         return False
     has_central_bank = "ecb" in text or "central bank" in text
-    has_dlt = any(term in text for term in ("dlt", "distributed ledger", "tokenised settlement", "tokenized settlement"))
-    has_infra = any(term in text for term in ("settlement", "infrastructure", "solution", "launch", "test"))
+    has_dlt = contains_any_phrase(text, ("dlt", "distributed ledger", "tokenised settlement", "tokenized settlement"))
+    has_infra = contains_any_phrase(text, ("settlement", "infrastructure", "solution", "launch", "test"))
     return has_central_bank and has_dlt and has_infra
 
 
@@ -371,9 +416,9 @@ def is_lch_ois_clearing_signal(item, text):
     if "伦敦证券交易所集团" not in source and "lseg" not in original and "lch" not in original:
         return False
     has_lch = "lch" in text
-    has_clearing = any(term in text for term in ("clears", "cleared", "clearing"))
+    has_clearing = contains_any_phrase(text, ("clears", "cleared", "clearing"))
     has_ois = "ois" in text or "overnight index swap" in text or "overnight index swaps" in text
-    has_new = any(term in text for term in ("first", "launch", "new currency", "new index"))
+    has_new = contains_any_phrase(text, ("first", "launch", "new currency", "new index"))
     return has_lch and has_clearing and has_ois and has_new
 
 
@@ -381,7 +426,7 @@ def is_regulatory_final_rule_signal(item, text):
     if (item.get("category") or "").lower() != "macro":
         return False
     source = item.get("source") or ""
-    source_context = source in REGULATORY_SOURCES or any(term in text for term in ("regulator", "agency", "agencies"))
+    source_context = source in REGULATORY_SOURCES or contains_any_phrase(text, ("regulator", "agency", "agencies"))
     if not source_context:
         return False
     if "final settlement" in text or "final results" in text or "final dividend" in text:
@@ -400,9 +445,9 @@ def is_competitor_interim_results_signal(item, text):
         "first-half results",
         "first half results",
     )
-    if not any(term in text for term in result_terms):
+    if not contains_any_phrase(text, result_terms):
         return False
-    return any(term in text for term in ("results", "financial", "earnings", "h1", "half-year", "half year"))
+    return contains_any_phrase(text, ("results", "financial", "earnings", "h1", "half-year", "half year"))
 
 
 def is_nasdaq_routine_short_interest(item, text):
@@ -410,20 +455,22 @@ def is_nasdaq_routine_short_interest(item, text):
     original = normalize_text(item.get("title_original"), item.get("summary_original"), item.get("summary"))
     if "纳斯达克公司" not in source and "nasdaq" not in original:
         return False
-    routine_pattern = any(
-        term in text
-        for term in (
+    routine_pattern = contains_any_phrase(
+        text,
+        (
             "mid-month open short interest positions",
             "end-of-month open short interest positions",
             "open short interest positions in nasdaq stocks",
-        )
+        ),
     )
-    material_override = any(
-        term in text
-        for term in ("methodology change", "regulatory change", "market structure", "exceptional", "rule")
+    material_override = contains_any_phrase(
+        text,
+        ("methodology change", "regulatory change", "market structure", "exceptional", "rule"),
     )
     return routine_pattern and not material_override
 
+
+# Scoring
 
 def score_item(item):
     category = (item.get("category") or "").lower()
@@ -433,16 +480,7 @@ def score_item(item):
     elif category == "competitor":
         bucket = "competitor"
 
-    text = normalize_text(
-        item.get("title_original"),
-        item.get("title_cn"),
-        item.get("title_en"),
-        item.get("summary"),
-        item.get("relevance_context"),
-        item.get("source"),
-        item.get("subcategory"),
-        item.get("brand"),
-    )
+    text = build_relevance_text(item)
 
     score = 0
     reasons = []
@@ -467,7 +505,7 @@ def score_item(item):
             if term in text:
                 score += 6
                 reasons.append(f"hard_signal:{term}")
-    elif any(term in text for term in HIGH_VALUE_BUSINESS_TERMS):
+    elif contains_any_phrase(text, HIGH_VALUE_BUSINESS_TERMS):
         score += 4
         reasons.append("hard_signal:business_development")
 
@@ -512,29 +550,21 @@ def score_item(item):
         score -= 8
         reasons.append("downrank:nasdaq_routine_short_interest")
 
-    individual_enforcement = any(
-        contains_individual_enforcement_term(text, term) for term in INDIVIDUAL_ENFORCEMENT_TERMS
-    )
-    if individual_enforcement and is_fraud_prevention_technology_context(text):
-        individual_enforcement = any(
-            contains_individual_enforcement_term(text, term)
-            for term in INDIVIDUAL_ENFORCEMENT_TERMS
-            if term != "fraud"
-        )
-    market_wide = any(term in text for term in MARKET_WIDE_TERMS)
+    individual_enforcement = is_individual_enforcement(text)
+    market_wide = contains_any_phrase(text, MARKET_WIDE_TERMS)
     if individual_enforcement and not market_wide:
         score -= 6
         reasons.append("downrank:individual_enforcement")
 
-    if any(term in text for term in NON_FINANCIAL_POLICY_TERMS):
+    if contains_any_phrase(text, NON_FINANCIAL_POLICY_TERMS):
         score -= 8
         reasons.append("downrank:non_financial_policy")
 
-    personnel_change = any(
-        term in text
-        for term in ("appoints", "appointment", "appointed", "elects", "elected", "management board", "board member")
+    personnel_change = contains_any_phrase(
+        text,
+        ("appoints", "appointment", "appointed", "elects", "elected", "management board", "board member"),
     )
-    top_leadership = any(term in text for term in ("chair", "chairman", "president", "chief executive", "ceo"))
+    top_leadership = contains_any_phrase(text, ("chair", "chairman", "president", "chief executive", "ceo"))
     if personnel_change and not top_leadership:
         score -= 6
         reasons.append("downrank:routine_personnel")
@@ -551,6 +581,8 @@ def score_item(item):
     reason = ", ".join(reasons[:8]) if reasons else "no strong finance signal"
     return score, reason
 
+
+# Diagnostics / rejection audit
 
 def split_relevance_signals(reason):
     signals = [part.strip() for part in (reason or "").split(",") if part.strip()]
@@ -581,7 +613,7 @@ def rejection_category(item):
         return "false candidate"
 
     for category, terms in REJECTION_CATEGORY_TERMS.items():
-        if any(term in text for term in terms):
+        if contains_any_phrase(text, terms):
             return category
 
     positive, _ = split_relevance_signals(item.get("relevance_reason", ""))

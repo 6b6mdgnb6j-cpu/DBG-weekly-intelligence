@@ -2,18 +2,20 @@ from .content_filter import (
     HIGH_VALUE_BUSINESS_TERMS,
     HIGH_VALUE_MACRO_TERMS,
     HIGH_IMPORTANCE_TERMS,
-    INDIVIDUAL_ENFORCEMENT_TERMS,
     MARKET_WIDE_TERMS,
     NEGATIVE_TERMS,
-    contains_individual_enforcement_term,
+    contains_any_phrase,
     contains_term,
     has_material_development_signal,
     has_routine_operational_signal,
+    is_individual_enforcement,
     is_recurring_market_commentary,
     normalize_text,
     routine_operational_is_overridden,
 )
 
+
+# Constants
 
 SOURCE_IMPORTANCE = {
     "European Central Bank": 3,
@@ -116,8 +118,16 @@ MONETARY_POLICY_HIGHLIGHT_TERMS = [
 ]
 
 
+# Text builder
+
+def build_highlight_text(item):
+    return normalize_text(item.get("title_original"), item.get("summary"))
+
+
+# Scoring
+
 def highlight_score(item):
-    text = normalize_text(item.get("title_original"), item.get("summary"))
+    text = build_highlight_text(item)
     if any(contains_term(text, term) for term in NEGATIVE_TERMS):
         return 0
     if has_routine_operational_signal(text) and not routine_operational_is_overridden(text):
@@ -129,32 +139,34 @@ def highlight_score(item):
         score += 2
     if int(item.get("priority") or 99) == 1:
         score += 2
-    if any(term in text for term in HIGH_IMPORTANCE_TERMS):
+    if contains_any_phrase(text, HIGH_IMPORTANCE_TERMS):
         score += 3
-    if any(term in text for term in MARKET_WIDE_TERMS):
+    if contains_any_phrase(text, MARKET_WIDE_TERMS):
         score += 3
-    if any(term in text for term in HIGH_VALUE_MACRO_TERMS):
+    if contains_any_phrase(text, HIGH_VALUE_MACRO_TERMS):
         score += 7
-    if any(term in text for term in HIGH_VALUE_BUSINESS_TERMS):
+    if contains_any_phrase(text, HIGH_VALUE_BUSINESS_TERMS):
         score += 5
-    if any(term in text for term in TIER_1_HIGHLIGHT_TERMS):
+    if contains_any_phrase(text, TIER_1_HIGHLIGHT_TERMS):
         score += 10
-    elif any(term in text for term in TIER_2_HIGHLIGHT_TERMS):
+    elif contains_any_phrase(text, TIER_2_HIGHLIGHT_TERMS):
         score += 6
-    elif any(term in text for term in LOW_VALUE_HIGHLIGHT_TERMS):
+    elif contains_any_phrase(text, LOW_VALUE_HIGHLIGHT_TERMS):
         score -= 4
-    if any(term in text for term in MONETARY_POLICY_HIGHLIGHT_TERMS):
+    if contains_any_phrase(text, MONETARY_POLICY_HIGHLIGHT_TERMS):
         score += 8
     if is_recurring_market_commentary(item, text) and not has_material_development_signal(text):
         score -= 8
-    if any(contains_individual_enforcement_term(text, term) for term in INDIVIDUAL_ENFORCEMENT_TERMS):
+    if is_individual_enforcement(text):
         score -= 5
-        if any(term in text for term in MARKET_WIDE_TERMS):
+        if contains_any_phrase(text, MARKET_WIDE_TERMS):
             score += 2
-    if any(term in text for term in LOW_VALUE_HIGHLIGHT_TERMS):
+    if contains_any_phrase(text, LOW_VALUE_HIGHLIGHT_TERMS):
         score -= 8
     return score
 
+
+# Selection/balancing
 
 def select_highlights(items, min_score=8, max_items=5):
     candidates = []
