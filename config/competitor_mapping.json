@@ -130,6 +130,47 @@
   },
   "rules": [
     {
+      "id": "ice_fixed_income_marketplace",
+      "priority": 8,
+      "competitor_groups": ["ICE"],
+      "keywords_any": ["marketaxess", "fixed income marketplace", "fixed income trading", "credit marketplace", "bond trading"],
+      "competitor_business": "fixed_income_trading_infrastructure",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: ICE fixed-income trading and marketplace infrastructure signal"
+    },
+    {
+      "id": "ice_data_identifiers",
+      "priority": 8,
+      "competitor_groups": ["ICE"],
+      "keywords_any": ["ice ids", "identifiers", "reference data", "fixed income data", "licensed users", "ai platforms"],
+      "competitor_business": "market_data_analytics",
+      "mapped_dbg_business": "DBG Market Data",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: ICE data, identifiers and analytics signal"
+    },
+    {
+      "id": "ice_financial_results",
+      "priority": 9,
+      "competitor_groups": ["ICE"],
+      "keywords_any": ["reports first quarter", "reports second quarter", "reports third quarter", "reports fourth quarter"],
+      "regex_any": ["reports\\s+(first|second|third|fourth)\\s+quarter\\s+20\\d{2}"],
+      "competitor_business": "group_financial_results",
+      "mapped_dbg_business": "Other / Cross-business",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: ICE group financial results are cross-business"
+    },
+    {
+      "id": "ice_commodity_derivatives",
+      "priority": 18,
+      "competitor_groups": ["ICE"],
+      "keywords_any": ["global sugar markets", "sugar markets", "record open interest", "hedging demand"],
+      "competitor_business": "commodity_derivatives",
+      "mapped_dbg_business": "EEX",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: ICE commodity derivatives market signal"
+    },
+    {
       "id": "group_financial_results",
       "priority": 10,
       "competitor_groups": ["Cboe", "JPX", "Euronext", "LSEG", "Nasdaq", "ICE", "SIX", "CME", "B3", "HKEX", "SGX"],

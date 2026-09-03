@@ -566,6 +566,8 @@ def _is_ice_low_signal_notice(title):
         "consolidated short interest",
         "approves third quarter dividend",
         "approves quarterly dividend",
+        "opens headquarters",
+        "headquarters at",
     )
     return any(pattern in text for pattern in low_signal_patterns)
 

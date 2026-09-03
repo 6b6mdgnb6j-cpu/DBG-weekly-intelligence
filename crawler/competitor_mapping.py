@@ -48,18 +48,21 @@ def _matches_pattern(text, pattern):
 
 
 def _identify_competitor_group(item, config):
-    text = _display_text(item)
-    for group, aliases in (config.get("competitor_group_aliases") or {}).items():
-        for alias in aliases:
-            if _contains_keyword(text, alias):
-                return group
-
     brand = item.get("brand", "")
     source = item.get("source", "")
     for value in (brand, source):
         value_norm = _norm(value)
-        for group in (config.get("competitor_group_aliases") or {}):
+        for group, aliases in (config.get("competitor_group_aliases") or {}).items():
             if value_norm == _norm(group):
+                return group
+            for alias in aliases:
+                if value_norm == _norm(alias):
+                    return group
+
+    text = _display_text(item)
+    for group, aliases in (config.get("competitor_group_aliases") or {}).items():
+        for alias in aliases:
+            if _contains_keyword(text, alias):
                 return group
 
     return brand or source or "Unknown"

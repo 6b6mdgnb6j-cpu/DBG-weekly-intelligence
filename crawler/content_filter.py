@@ -246,6 +246,14 @@ def contains_term(text, term):
     return re.search(rf"\b{re.escape(term)}\b", text) is not None
 
 
+def contains_individual_enforcement_term(text, term):
+    if term == "fine":
+        return re.search(r"(?<![\w-])fine(?![\w-])", text) is not None
+    if term == "fines":
+        return re.search(r"(?<![\w-])fines(?![\w-])", text) is not None
+    return contains_term(text, term)
+
+
 def has_material_development_signal(text):
     return any(term in text for term in MATERIAL_DEVELOPMENT_TERMS)
 
@@ -264,6 +272,16 @@ def is_recurring_market_commentary(item, text):
     if "crypto finance" not in source and "crypto finance" not in brand:
         return False
     return any(term in text for term in RECURRING_COMMENTARY_TERMS)
+
+
+def is_ice_commodity_market_signal(item, text):
+    source = (item.get("source") or "").lower()
+    original = normalize_text(item.get("title_original"), item.get("summary_original"), item.get("summary"))
+    if "洲际交易所" not in source and "intercontinental exchange" not in original and " ice " not in f" {original} ":
+        return False
+    commodity_terms = ("sugar", "commodity", "commodities", "energy", "power", "gas", "oil")
+    market_terms = ("open interest", "hedging", "futures", "options", "liquidity", "volume")
+    return any(term in text for term in commodity_terms) and any(term in text for term in market_terms)
 
 
 def score_item(item):
@@ -325,7 +343,13 @@ def score_item(item):
         score -= 4
         reasons.append("downrank:recurring_market_commentary")
 
-    individual_enforcement = any(term in text for term in INDIVIDUAL_ENFORCEMENT_TERMS)
+    if bucket == "competitor" and is_ice_commodity_market_signal(item, text):
+        score += 6
+        reasons.append("source_signal:ice_commodity_market")
+
+    individual_enforcement = any(
+        contains_individual_enforcement_term(text, term) for term in INDIVIDUAL_ENFORCEMENT_TERMS
+    )
     market_wide = any(term in text for term in MARKET_WIDE_TERMS)
     if individual_enforcement and not market_wide:
         score -= 6
