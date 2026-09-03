@@ -5,6 +5,7 @@ from .content_filter import (
     INDIVIDUAL_ENFORCEMENT_TERMS,
     MARKET_WIDE_TERMS,
     NEGATIVE_TERMS,
+    contains_individual_enforcement_term,
     contains_term,
     has_material_development_signal,
     has_routine_operational_signal,
@@ -99,6 +100,11 @@ LOW_VALUE_HIGHLIGHT_TERMS = [
     "speech",
     "forum",
     "research institute",
+    "training program",
+    "seminar",
+    "educational program",
+    "investor sentiment",
+    "mortgage performance",
 ]
 
 
@@ -141,10 +147,12 @@ def highlight_score(item):
         score += 8
     if is_recurring_market_commentary(item, text) and not has_material_development_signal(text):
         score -= 8
-    if any(term in text for term in INDIVIDUAL_ENFORCEMENT_TERMS):
+    if any(contains_individual_enforcement_term(text, term) for term in INDIVIDUAL_ENFORCEMENT_TERMS):
         score -= 5
         if any(term in text for term in MARKET_WIDE_TERMS):
             score += 2
+    if any(term in text for term in LOW_VALUE_HIGHLIGHT_TERMS):
+        score -= 8
     return score
 
 

@@ -111,6 +111,25 @@ HIGH_VALUE_BUSINESS_TERMS = [
 ]
 
 
+REGULATORY_SOURCES = [
+    "德国联邦金融监管局",
+    "商品期货交易委员会",
+    "证券交易委员会",
+    "联邦存款保险公司",
+    "货币监理署",
+    "联邦储备系统",
+    "金融行为监管局",
+    "欧洲中央银行",
+    "欧洲保险和职业养老金管理局",
+    "加拿大安大略省证券委员会",
+    "加拿大金融机构监管署",
+    "澳大利亚证券和投资委员会",
+    "澳大利亚审慎监管局",
+    "韩国金融监督委员会",
+    "香港金融管理局",
+]
+
+
 MATERIAL_DEVELOPMENT_TERMS = [
     "launch", "launches", "introduction of", "new product", "new futures",
     "new options", "new market", "new data product", "data products",
@@ -251,7 +270,48 @@ def contains_individual_enforcement_term(text, term):
         return re.search(r"(?<![\w-])fine(?![\w-])", text) is not None
     if term == "fines":
         return re.search(r"(?<![\w-])fines(?![\w-])", text) is not None
+    if term == "fraud":
+        return contains_fraud_family(text)
     return contains_term(text, term)
+
+
+def contains_fraud_family(text):
+    return re.search(r"(?<!\w)fraud(?:s|ulent|sters?)?(?!\w)", text) is not None
+
+
+def is_fraud_prevention_technology_context(text):
+    if not contains_fraud_family(text):
+        return False
+    enforcement_context = (
+        "alert",
+        "warning",
+        "warns",
+        "warned",
+        "scam",
+        "fraudulent website",
+        "fraudulent document",
+        "fraudsters impersonat",
+        "charged with fraud",
+        "securities fraud",
+        "enforcement",
+        "false filings",
+        "lure retail investors",
+    )
+    if any(term in text for term in enforcement_context):
+        return False
+    prevention_context = (
+        "fraud prevention",
+        "fraud detection",
+        "anti-fraud technology",
+        "technology platform",
+        "software",
+        "product launch",
+        "partnership",
+        "cyber",
+        "unique intelligence",
+        "proactive fraud prevention",
+    )
+    return any(term in text for term in prevention_context)
 
 
 def has_material_development_signal(text):
@@ -282,6 +342,87 @@ def is_ice_commodity_market_signal(item, text):
     commodity_terms = ("sugar", "commodity", "commodities", "energy", "power", "gas", "oil")
     market_terms = ("open interest", "hedging", "futures", "options", "liquidity", "volume")
     return any(term in text for term in commodity_terms) and any(term in text for term in market_terms)
+
+
+def is_bafin_ai_market_surveillance_signal(item, text):
+    source = (item.get("source") or "").lower()
+    if "德国联邦金融监管局" not in source and "bafin" not in text:
+        return False
+    has_surveillance = "market surveillance" in text
+    has_ai = contains_term(text, "ai") or "artificial intelligence" in text
+    has_powers = any(term in text for term in ("new powers", "granted new powers", "supervisory powers"))
+    return has_surveillance and has_ai and has_powers
+
+
+def is_clearstream_dlt_settlement_signal(item, text):
+    source = (item.get("source") or "").lower()
+    original = normalize_text(item.get("title_original"), item.get("summary_original"), item.get("summary"))
+    if "明讯银行" not in source and "clearstream" not in original:
+        return False
+    has_central_bank = "ecb" in text or "central bank" in text
+    has_dlt = any(term in text for term in ("dlt", "distributed ledger", "tokenised settlement", "tokenized settlement"))
+    has_infra = any(term in text for term in ("settlement", "infrastructure", "solution", "launch", "test"))
+    return has_central_bank and has_dlt and has_infra
+
+
+def is_lch_ois_clearing_signal(item, text):
+    source = (item.get("source") or "").lower()
+    original = normalize_text(item.get("title_original"), item.get("summary_original"), item.get("summary"))
+    if "伦敦证券交易所集团" not in source and "lseg" not in original and "lch" not in original:
+        return False
+    has_lch = "lch" in text
+    has_clearing = any(term in text for term in ("clears", "cleared", "clearing"))
+    has_ois = "ois" in text or "overnight index swap" in text or "overnight index swaps" in text
+    has_new = any(term in text for term in ("first", "launch", "new currency", "new index"))
+    return has_lch and has_clearing and has_ois and has_new
+
+
+def is_regulatory_final_rule_signal(item, text):
+    if (item.get("category") or "").lower() != "macro":
+        return False
+    source = item.get("source") or ""
+    source_context = source in REGULATORY_SOURCES or any(term in text for term in ("regulator", "agency", "agencies"))
+    if not source_context:
+        return False
+    if "final settlement" in text or "final results" in text or "final dividend" in text:
+        return False
+    return "final rule" in text or "interim final rule" in text
+
+
+def is_competitor_interim_results_signal(item, text):
+    if (item.get("category") or "").lower() not in {"competitor", "dbg"}:
+        return False
+    result_terms = (
+        "interim results",
+        "half-year results",
+        "half year results",
+        "h1 results",
+        "first-half results",
+        "first half results",
+    )
+    if not any(term in text for term in result_terms):
+        return False
+    return any(term in text for term in ("results", "financial", "earnings", "h1", "half-year", "half year"))
+
+
+def is_nasdaq_routine_short_interest(item, text):
+    source = (item.get("source") or "").lower()
+    original = normalize_text(item.get("title_original"), item.get("summary_original"), item.get("summary"))
+    if "纳斯达克公司" not in source and "nasdaq" not in original:
+        return False
+    routine_pattern = any(
+        term in text
+        for term in (
+            "mid-month open short interest positions",
+            "end-of-month open short interest positions",
+            "open short interest positions in nasdaq stocks",
+        )
+    )
+    material_override = any(
+        term in text
+        for term in ("methodology change", "regulatory change", "market structure", "exceptional", "rule")
+    )
+    return routine_pattern and not material_override
 
 
 def score_item(item):
@@ -347,9 +488,39 @@ def score_item(item):
         score += 6
         reasons.append("source_signal:ice_commodity_market")
 
+    if is_bafin_ai_market_surveillance_signal(item, text):
+        score += 6
+        reasons.append("source_signal:bafin_ai_market_surveillance")
+
+    if is_clearstream_dlt_settlement_signal(item, text):
+        score += 8
+        reasons.append("source_signal:clearstream_dlt_settlement")
+
+    if is_lch_ois_clearing_signal(item, text):
+        score += 8
+        reasons.append("source_signal:lch_ois_clearing")
+
+    if is_regulatory_final_rule_signal(item, text):
+        score += 8
+        reasons.append("hard_signal:regulatory_final_rule")
+
+    if is_competitor_interim_results_signal(item, text):
+        score += 6
+        reasons.append("hard_signal:interim_results")
+
+    if is_nasdaq_routine_short_interest(item, text):
+        score -= 8
+        reasons.append("downrank:nasdaq_routine_short_interest")
+
     individual_enforcement = any(
         contains_individual_enforcement_term(text, term) for term in INDIVIDUAL_ENFORCEMENT_TERMS
     )
+    if individual_enforcement and is_fraud_prevention_technology_context(text):
+        individual_enforcement = any(
+            contains_individual_enforcement_term(text, term)
+            for term in INDIVIDUAL_ENFORCEMENT_TERMS
+            if term != "fraud"
+        )
     market_wide = any(term in text for term in MARKET_WIDE_TERMS)
     if individual_enforcement and not market_wide:
         score -= 6
