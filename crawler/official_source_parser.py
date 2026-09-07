@@ -100,6 +100,33 @@ IOSCO_DATE_RE = re.compile(
     re.IGNORECASE,
 )
 
+SP_DJI_ARCHIVE_URL = "https://press.spglobal.com/index.php"
+SP_DJI_CATEGORY = "784"
+SP_DJI_HEADERS = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+SP_DJI_DATE_FORMATS = ("%b %d, %Y", "%B %d, %Y")
+SP_DJI_ROUTINE_FILTERS = (
+    (
+        "routine_constituent_change",
+        re.compile(
+            r"\bset to join\b.*\b(?:s&p|dow jones)\b|"
+            r"\bto join\b.*\b(?:s&p 500|s&p 100|s&p midcap 400|s&p smallcap 600|dow jones)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "routine_case_shiller_monthly_release",
+        re.compile(r"\bcase-shiller index reports annual gain\b", re.IGNORECASE),
+    ),
+    (
+        "routine_dividend_statistics_release",
+        re.compile(r"\breports u\.s\. common indicated dividend payments\b", re.IGNORECASE),
+    ),
+)
+
 
 def _empty_meta(source, list_url):
     return {
@@ -267,6 +294,57 @@ def parse_iosco_public_report_entry(entry, current_url=IOSCO_BASE_URL):
         "summary": "",
         "content_type": "public_report",
     }
+
+
+def parse_sp_dji_date(raw_date):
+    text = normalize_text_encoding(raw_date or "").strip()
+    for fmt in SP_DJI_DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def sp_dji_source_filter(title):
+    text = normalize_text_encoding(title or "")
+    for reason, pattern in SP_DJI_ROUTINE_FILTERS:
+        if pattern.search(text):
+            return False, reason
+    return True, "kept"
+
+
+def parse_sp_dji_archive_entry(entry, current_url=SP_DJI_ARCHIVE_URL):
+    title_link = entry.select_one(".wd_title a[href]")
+    date_el = entry.select_one(".wd_date")
+    if not title_link or not date_el:
+        return None
+    title = normalize_text_encoding(title_link.get_text(" ", strip=True))
+    url = urljoin(current_url, title_link.get("href", ""))
+    raw_date = normalize_text_encoding(date_el.get_text(" ", strip=True))
+    return {
+        "title": title,
+        "url": url,
+        "raw_date": raw_date,
+        "date": parse_sp_dji_date(raw_date),
+        "summary": "",
+        "content_type": "press_release",
+    }
+
+
+def _sp_dji_summary_from_detail(html_text):
+    soup = BeautifulSoup(html_text, "html.parser")
+    body = soup.select_one(".wd_news_body") or soup.select_one(".wd_body")
+    if not body:
+        return ""
+    text = normalize_text_encoding(body.get_text(" ", strip=True), clear_garbage=True)
+    if not text:
+        return ""
+    text = re.split(r"\bAbout S&P Dow Jones Indices\b", text, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    text = re.split(r"\bMedia Contact\b|\bInvestor Relations\b|\bSOURCE S&P", text, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    if len(text) > 700:
+        text = text[:700].rsplit(" ", 1)[0].strip()
+    return text
 
 
 def _walk(value):
@@ -696,6 +774,125 @@ def collect_iosco_official(source, week_start, week_end, logger):
 
     logger.info(
         "IOSCO official HTML success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
+
+
+def _sp_dji_archive_url(year, limit=100):
+    return f"{SP_DJI_ARCHIVE_URL}?s=2429&category={SP_DJI_CATEGORY}&year={year}&l={limit}"
+
+
+def _sp_dji_years(week_start, week_end):
+    return list(range(week_start.year, week_end.year + 1))
+
+
+def collect_sp_dji_press_archive(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or _sp_dji_archive_url(week_start.year)
+    meta = _empty_meta(source, list_url)
+    meta["before_source_filter"] = 0
+    meta["after_source_filter"] = 0
+    raw_items = []
+    results = []
+    seen_urls = set()
+
+    logger.info("S&P DJI official press archive start: %s", source["name"])
+    try:
+        limit = int(source.get("api_per_page") or 100)
+        max_scan = int(source.get("max_scan_candidates") or 120)
+
+        for year in _sp_dji_years(week_start, week_end):
+            if meta["candidates_scanned"] >= max_scan:
+                meta["stopped_reason"] = "max_scan_candidates"
+                break
+            page_url = _sp_dji_archive_url(year, limit=limit)
+            response = request_get(page_url, headers=SP_DJI_HEADERS, timeout=25, attempts=2)
+            soup = BeautifulSoup(response.text, "html.parser")
+            meta["pages_scanned"] += 1
+            candidates = []
+            for entry in soup.select("li.wd_item"):
+                candidate = parse_sp_dji_archive_entry(entry, page_url)
+                if candidate:
+                    candidates.append(candidate)
+
+            meta["candidates_discovered"] += len(candidates)
+            meta["candidates"] = meta["candidates_discovered"]
+            if not candidates:
+                continue
+
+            for candidate in candidates:
+                if meta["candidates_scanned"] >= max_scan:
+                    meta["stopped_reason"] = "max_scan_candidates"
+                    break
+                if candidate["url"] in seen_urls:
+                    continue
+                seen_urls.add(candidate["url"])
+                meta["candidates_scanned"] += 1
+                meta["before_source_filter"] += 1
+
+                title = candidate.get("title", "")
+                url = candidate.get("url", "")
+                raw_date = candidate.get("raw_date", "")
+                parsed_date = candidate.get("date")
+                if parsed_date:
+                    _record_parsed_date(meta, parsed_date)
+                    meta["list_items_with_date"] += 1
+                    if parsed_date <= week_end:
+                        meta["target_period_reached"] = True
+                else:
+                    meta["date_parse_failed"] += 1
+
+                source_kept, source_reason = sp_dji_source_filter(title)
+                if not source_kept:
+                    meta["non_news_candidates"] += 1
+
+                drop_reason = _drop_reason(parsed_date, week_start, week_end)
+                sample_reason = drop_reason if source_kept else source_reason
+                _sample(meta, title, url, raw_date, parsed_date, sample_reason)
+
+                if not source_kept:
+                    continue
+
+                meta["after_source_filter"] += 1
+                summary = ""
+                if drop_reason == "kept":
+                    try:
+                        meta["detail_pages_requested"] += 1
+                        detail = request_get(url, headers=SP_DJI_HEADERS, timeout=25, attempts=2)
+                        summary = _sp_dji_summary_from_detail(detail.text)
+                    except Exception as detail_exc:
+                        logger.warning("S&P DJI detail summary failed: %s reason=%s", url, detail_exc)
+
+                item = standardize_news(
+                    source,
+                    title=title,
+                    url=url,
+                    date=parsed_date.isoformat() if parsed_date else raw_date,
+                    summary=summary,
+                )
+                item["source_filter_reason"] = source_reason
+                raw_items.append(item)
+                if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+                    results.append(item)
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = (
+                "max_scan_candidates"
+                if meta["candidates_scanned"] >= max_scan and meta["candidates_scanned"] < meta["candidates_discovered"]
+                else "completed_year_archive"
+            )
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("S&P DJI official press archive failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "S&P DJI official press archive success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
         meta["candidates_discovered"],
         meta["candidates_scanned"],
         meta["dated_candidates"],

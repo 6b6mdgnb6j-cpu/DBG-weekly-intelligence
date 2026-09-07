@@ -15,6 +15,7 @@
   "competitor_group_aliases": {
     "HashKey": ["HashKey"],
     "MSCI": ["MSCI"],
+    "S&P Dow Jones Indices": ["S&P Dow Jones Indices", "S&P DJI", "SPDJI"],
     "DTCC": ["DTCC"],
     "Euroclear": ["Euroclear"],
     "LSEG": ["LSEG", "伦敦证券交易所集团", "London Stock Exchange Group"],
@@ -42,6 +43,12 @@
       "mapped_dbg_business": "ISS STOXX / STOXX",
       "mapping_confidence": "high",
       "mapping_reason": "source_default: index, benchmark and analytics competitor"
+    },
+    "S&P Dow Jones Indices": {
+      "competitor_business": "index_benchmark_analytics",
+      "mapped_dbg_business": "ISS STOXX / STOXX",
+      "mapping_confidence": "high",
+      "mapping_reason": "source_default: index and benchmark competitor"
     },
     "DTCC": {
       "competitor_business": "post_trade",

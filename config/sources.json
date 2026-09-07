@@ -4047,5 +4047,30 @@
     "registry_raw": "MSCI official investor relations news releases RSS",
     "added_from_baseline": "baseline-61-sources",
     "crawl_url": "https://ir.msci.com/rss/news-releases.xml"
+  },
+  {
+    "id": "SRC-187",
+    "name": "S&P Dow Jones Indices",
+    "url": "https://press.spglobal.com/index.php?s=2429&category=784",
+    "category": "Competitor",
+    "subcategory": "信息技术",
+    "method": "sp_dji_press_archive",
+    "priority": 1,
+    "source_type": "competitor_official",
+    "official": true,
+    "max_items": 10,
+    "brand": "S&P Dow Jones Indices",
+    "competitor_type": "international",
+    "enabled": true,
+    "status": "active",
+    "technical_class": "official_press_archive",
+    "technical_status": "working",
+    "max_candidates": 20,
+    "max_scan_candidates": 120,
+    "api_per_page": 100,
+    "registry_source": "source coverage expansion",
+    "registry_raw": "S&P Global official press archive category 784: S&P Dow Jones Indices",
+    "added_from_baseline": "baseline-64-sources",
+    "crawl_url": "https://press.spglobal.com/index.php?s=2429&category=784&year=2026&l=100"
   }
 ]

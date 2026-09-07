@@ -19,6 +19,7 @@ from .official_source_parser import (
     collect_msci_rss,
     collect_nasdaq_press,
     collect_pcaob_hawksearch,
+    collect_sp_dji_press_archive,
     collect_simcorp_sitemap,
 )
 from .rss_parser import collect_rss
@@ -82,6 +83,8 @@ def empty_status(source):
         "dated_candidates": 0,
         "date_parse_failed": 0,
         "non_news_candidates": 0,
+        "before_source_filter": 0,
+        "after_source_filter": 0,
         "newest_date_seen": "",
         "oldest_date_seen": "",
         "target_period_reached": False,
@@ -137,6 +140,7 @@ def classify_empty_status(status, source):
         "asic_media_releases",
         "mas_search",
         "pcaob_hawksearch",
+        "sp_dji_press_archive",
     }
     if status["within_period"] == 0:
         if status["date_parse_failed"] > status["dated_candidates"]:
@@ -226,6 +230,8 @@ def collect_week(start_arg=None, translate=True):
                 source_raw, source_filtered, meta = collect_mas_search(source, week_start, week_end, logger)
             elif method == "pcaob_hawksearch":
                 source_raw, source_filtered, meta = collect_pcaob_hawksearch(source, week_start, week_end, logger)
+            elif method == "sp_dji_press_archive":
+                source_raw, source_filtered, meta = collect_sp_dji_press_archive(source, week_start, week_end, logger)
             elif method == "web":
                 source_raw, source_filtered, meta = collect_web(source, week_start, week_end, logger)
             else:
@@ -247,6 +253,8 @@ def collect_week(start_arg=None, translate=True):
             status["dated_candidates"] = int(meta.get("dated_candidates") or 0)
             status["date_parse_failed"] = int(meta.get("date_parse_failed") or 0)
             status["non_news_candidates"] = int(meta.get("non_news_candidates") or 0)
+            status["before_source_filter"] = int(meta.get("before_source_filter") or 0)
+            status["after_source_filter"] = int(meta.get("after_source_filter") or 0)
             status["newest_date_seen"] = meta.get("newest_date_seen", "")
             status["oldest_date_seen"] = meta.get("oldest_date_seen", "")
             status["target_period_reached"] = bool(meta.get("target_period_reached", method == "rss"))
