@@ -89,6 +89,17 @@ PCAOB_CLIENT_GUID = "e962e95324cb46ef8955c0b09a3904b9"
 PCAOB_INDEX_NAME = "pcaob.20260515.140735.all-data-types"
 PCAOB_NEWS_RELEASE_PATH = "/news-events/news-releases"
 
+IOSCO_BASE_URL = "https://www.iosco.org"
+IOSCO_MEDIA_URL = f"{IOSCO_BASE_URL}/media_room/?subsection=media_releases"
+IOSCO_PUBLIC_REPORTS_URL = f"{IOSCO_BASE_URL}/publications/?subsection=public_reports"
+IOSCO_DATE_RE = re.compile(
+    r"\b\d{1,2}\s+"
+    r"(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|"
+    r"Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)"
+    r"\s+20\d{2}\b",
+    re.IGNORECASE,
+)
+
 
 def _empty_meta(source, list_url):
     return {
@@ -165,6 +176,97 @@ def _parse_iso_date(raw_date):
         return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
     except ValueError:
         return None
+
+
+def _parse_iosco_display_date(raw_date):
+    text = normalize_text_encoding(raw_date or "")
+    for fmt in ("%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _iosco_direct_list_items(soup):
+    right_page = soup.find(id="rightPage") or soup.select_one(".rightPage")
+    container = right_page or soup
+    direct = container.select(":scope > ol > li")
+    if direct:
+        return direct
+    first_list = container.find("ol")
+    return first_list.find_all("li", recursive=False) if first_list else []
+
+
+def _strip_iosco_title_prefix(title):
+    return re.sub(r"^(?:FR|OR|CR)[/\d -]*\s*", "", title).strip(" ,-")
+
+
+def _strip_iosco_submission_text(title):
+    return re.split(
+        r"\b(?:Comments on the report|Responses to the survey)\s+should be submitted by\b",
+        title,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip(" ,-")
+
+
+def parse_iosco_media_release_entry(entry, current_url=IOSCO_BASE_URL):
+    link = entry.find("a", href=re.compile(r"/news/pdf/IOSCONEWS", re.IGNORECASE))
+    if not link:
+        return None
+    block_text = normalize_text_encoding(entry.get_text(" ", strip=True))
+    match = IOSCO_DATE_RE.search(block_text)
+    if not match:
+        return None
+    raw_date = match.group(0)
+    title = normalize_text_encoding(block_text[: match.start()]).strip(" ,-")
+    title = re.sub(r"\s*-\s*View Release.*$", "", title).strip(" ,-")
+    if not title:
+        title = normalize_text_encoding(link.get_text(" ", strip=True)).strip(" ,-")
+    return {
+        "title": title,
+        "url": urljoin(current_url, link.get("href", "")),
+        "raw_date": raw_date,
+        "date": _parse_iosco_display_date(raw_date),
+        "summary": "",
+        "content_type": "media_release",
+    }
+
+
+def parse_iosco_public_report_entry(entry, current_url=IOSCO_BASE_URL):
+    link = entry.find("a", href=re.compile(r"/library/pubdocs/pdf/IOSCOPD", re.IGNORECASE))
+    if not link:
+        return None
+    href = link.get("href", "")
+    lower_href = href.lower()
+    if any(token in lower_href for token in ("addendum", "cover-note", "comments")):
+        return None
+
+    block_text = normalize_text_encoding(entry.get_text(" ", strip=True))
+    if "View Report" not in block_text:
+        return None
+    report_text = block_text.split("- View Report", 1)[0]
+    date_matches = list(IOSCO_DATE_RE.finditer(report_text))
+    if not date_matches:
+        return None
+
+    # IOSCO consultation reports can include a comment deadline before the
+    # publication date. The publication date is the last display date before
+    # the View Report link in the main report entry.
+    publication_match = date_matches[-1]
+    raw_date = publication_match.group(0)
+    title = report_text[: publication_match.start()].strip(" ,-")
+    title = _strip_iosco_submission_text(title)
+    title = _strip_iosco_title_prefix(title)
+    return {
+        "title": normalize_text_encoding(title),
+        "url": urljoin(current_url, href),
+        "raw_date": raw_date,
+        "date": _parse_iosco_display_date(raw_date),
+        "summary": "",
+        "content_type": "public_report",
+    }
 
 
 def _walk(value):
@@ -450,6 +552,150 @@ def collect_pcaob_hawksearch(source, week_start, week_end, logger):
 
     logger.info(
         "PCAOB official HawkSearch success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
+        meta["candidates_discovered"],
+        meta["candidates_scanned"],
+        meta["dated_candidates"],
+        len(results),
+        meta["stopped_reason"],
+    )
+    return raw_items, results, meta
+
+
+def _iosco_media_page_url(page):
+    return (
+        f"{IOSCO_BASE_URL}/media_room/?newsID=&year=&subsection=media%5Freleases"
+        f"&showAll=false&keywordsTitle=false&keywordsContent=false&keywords=&page={page}"
+    )
+
+
+def _iosco_public_reports_url(year):
+    return (
+        f"{IOSCO_BASE_URL}/publications/?subsection=public_reports&year={year}"
+        "&keywordsAuthor=false&keywordsTitle=false&keywordsContent=false"
+        "&pdrtid=&publicDocID=&pdcid=&keywords=&page=1"
+    )
+
+
+def _iosco_target_years(week_start, week_end):
+    return list(range(week_start.year, week_end.year + 1))
+
+
+def _iosco_add_candidate(meta, raw_items, results, source, candidate, week_start, week_end):
+    meta["candidates_scanned"] += 1
+    parsed_date = candidate.get("date")
+    raw_date = candidate.get("raw_date", "")
+    title = candidate.get("title", "")
+    url = candidate.get("url", "")
+    if parsed_date:
+        _record_parsed_date(meta, parsed_date)
+        meta["list_items_with_date"] += 1
+        if parsed_date <= week_end:
+            meta["target_period_reached"] = True
+    else:
+        meta["date_parse_failed"] += 1
+
+    drop_reason = _drop_reason(parsed_date, week_start, week_end)
+    _sample(meta, title, url, raw_date, parsed_date, drop_reason)
+    item = standardize_news(
+        source,
+        title=title,
+        url=url,
+        date=parsed_date.isoformat() if parsed_date else raw_date,
+        summary=candidate.get("summary", ""),
+    )
+    raw_items.append(item)
+    if drop_reason == "kept" and in_week(item["date"], week_start, week_end):
+        results.append(item)
+    return parsed_date
+
+
+def collect_iosco_official(source, week_start, week_end, logger):
+    list_url = source.get("crawl_url") or IOSCO_MEDIA_URL
+    meta = _empty_meta(source, list_url)
+    raw_items = []
+    results = []
+    seen_urls = set()
+
+    logger.info("IOSCO official HTML start: %s", source["name"])
+    try:
+        max_pages = int(source.get("max_pages") or 6)
+        max_scan = int(source.get("max_scan_candidates") or 160)
+
+        for page in range(1, max_pages + 1):
+            if meta["candidates_scanned"] >= max_scan:
+                meta["stopped_reason"] = "max_scan_candidates"
+                break
+            page_url = _iosco_media_page_url(page)
+            response = request_get(page_url, headers=HEADERS, timeout=25, attempts=2)
+            soup = BeautifulSoup(response.text, "html.parser")
+            meta["pages_scanned"] += 1
+            entries = _iosco_direct_list_items(soup)
+            candidates = []
+            for entry in entries:
+                candidate = parse_iosco_media_release_entry(entry, page_url)
+                if candidate:
+                    candidates.append(candidate)
+            meta["candidates_discovered"] += len(candidates)
+            meta["candidates"] = meta["candidates_discovered"]
+            if not candidates:
+                break
+
+            page_has_before_target = False
+            for candidate in candidates:
+                if meta["candidates_scanned"] >= max_scan:
+                    meta["stopped_reason"] = "max_scan_candidates"
+                    break
+                if candidate["url"] in seen_urls:
+                    continue
+                seen_urls.add(candidate["url"])
+                parsed_date = _iosco_add_candidate(meta, raw_items, results, source, candidate, week_start, week_end)
+                if parsed_date and parsed_date < week_start:
+                    page_has_before_target = True
+
+            if meta["stopped_reason"]:
+                break
+            if page_has_before_target:
+                break
+
+        for year in _iosco_target_years(week_start, week_end):
+            if meta["candidates_scanned"] >= max_scan:
+                meta["stopped_reason"] = "max_scan_candidates"
+                break
+            page_url = _iosco_public_reports_url(year)
+            response = request_get(page_url, headers=HEADERS, timeout=25, attempts=2)
+            soup = BeautifulSoup(response.text, "html.parser")
+            meta["pages_scanned"] += 1
+            candidates = []
+            for entry in _iosco_direct_list_items(soup):
+                candidate = parse_iosco_public_report_entry(entry, page_url)
+                if candidate:
+                    candidates.append(candidate)
+            meta["candidates_discovered"] += len(candidates)
+            meta["candidates"] = meta["candidates_discovered"]
+
+            for candidate in candidates:
+                if meta["candidates_scanned"] >= max_scan:
+                    meta["stopped_reason"] = "max_scan_candidates"
+                    break
+                if candidate["url"] in seen_urls:
+                    continue
+                seen_urls.add(candidate["url"])
+                _iosco_add_candidate(meta, raw_items, results, source, candidate, week_start, week_end)
+
+        if not meta["stopped_reason"]:
+            meta["stopped_reason"] = (
+                "max_scan_candidates"
+                if meta["candidates_scanned"] >= max_scan
+                else "completed_official_surfaces"
+            )
+
+    except Exception as exc:
+        meta["error"] = str(exc)
+        meta["stopped_reason"] = "error"
+        logger.exception("IOSCO official HTML failed: %s reason=%s", source["name"], exc)
+
+    logger.info(
+        "IOSCO official HTML success: discovered=%s scanned=%s dated=%s within=%s stopped=%s",
         meta["candidates_discovered"],
         meta["candidates_scanned"],
         meta["dated_candidates"],
