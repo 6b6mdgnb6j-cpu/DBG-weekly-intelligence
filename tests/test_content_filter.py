@@ -128,6 +128,33 @@ class ContentFilterRegressionTests(unittest.TestCase):
         cases = [
             (
                 make_item(
+                    "Treasury requests comment on proposed regulation for financial institutions",
+                    "The proposed regulation would update compliance obligations for banks and securities markets.",
+                    source="美国财政部",
+                    priority=2,
+                ),
+                "hard_signal:proposed regulation",
+            ),
+            (
+                make_item(
+                    "Tax-Exempt Municipal Bond Market Regulation",
+                    "The proposal addresses tax-exempt bonds and municipal securities disclosure in capital markets.",
+                    source="美国财政部",
+                    priority=2,
+                ),
+                "capital market",
+            ),
+            (
+                make_item(
+                    "School District Bonds Disclosure Rule for Municipal Securities Markets",
+                    "The rule concerns school district bonds traded in municipal securities markets.",
+                    source="美国财政部",
+                    priority=2,
+                ),
+                "securities",
+            ),
+            (
+                make_item(
                     "Market surveillance of AI: BaFin granted new powers",
                     "BaFin receives new supervisory powers for market surveillance of artificial intelligence.",
                     source="德国联邦金融监管局",
@@ -216,6 +243,24 @@ class ContentFilterRegressionTests(unittest.TestCase):
         cases = [
             (
                 make_item(
+                    "Treasury, IRS Move to End Tax-Exempt Status for Discriminatory Practices in Private Schools",
+                    "The Treasury and IRS issued proposed regulations to end federal tax-exempt status for schools that engage in racial discrimination.",
+                    source="美国财政部",
+                    priority=2,
+                ),
+                "downrank:non_financial_policy",
+            ),
+            (
+                make_item(
+                    "Treasury proposes regulations for charitable organizations in education",
+                    "The proposed regulation updates tax administration for nonprofit schools and charitable organizations.",
+                    source="美国财政部",
+                    priority=2,
+                ),
+                "downrank:non_financial_policy",
+            ),
+            (
+                make_item(
                     "Nasdaq Announces Mid-Month Open Short Interest Positions in Nasdaq Stocks",
                     "Open short interest positions in Nasdaq stocks as of settlement date.",
                     source="纳斯达克公司",
@@ -284,6 +329,8 @@ class ContentFilterRegressionTests(unittest.TestCase):
                 score, reason = relevance(item)
                 if expected_reason:
                     self.assertIn(expected_reason, reason)
+                    if expected_reason == "downrank:non_financial_policy":
+                        self.assertLess(score, MIN_SCORE)
                 else:
                     self.assertLess(score, MIN_SCORE)
 

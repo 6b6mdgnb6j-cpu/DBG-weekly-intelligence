@@ -224,6 +224,31 @@ NON_FINANCIAL_POLICY_TERMS = [
 ]
 
 
+NON_FINANCIAL_POLICY_CONTEXT_TERMS = [
+    "education", "school", "schools", "racial discrimination",
+    "discriminatory practices", "tax-exempt status", "tax exempt status",
+    "nonprofit", "non-profit", "charity", "charitable organization",
+    "charitable organizations", "social policy", "individual taxpayer",
+    "individual taxpayers",
+]
+
+
+FINANCIAL_POLICY_CONTEXT_TERMS = [
+    "securities", "capital market", "capital markets", "stock market",
+    "stock markets", "equity market", "equity markets", "bond", "bonds",
+    "municipal bond", "municipal bonds", "municipal securities",
+    "tax-exempt bond", "tax-exempt bonds", "tax exempt bond",
+    "tax exempt bonds", "treasury securities", "debt market",
+    "debt markets", "financial institution", "financial institutions",
+    "bank", "banks", "banking", "derivatives", "swap", "swaps",
+    "futures", "clearing", "ccp", "settlement", "custody",
+    "collateral", "payment", "payments", "financial stability",
+    "systemic risk", "market structure", "broker", "dealer",
+    "broker-dealer", "investment fund", "investment funds",
+    "asset management", "exchange", "exchanges", "cross-border finance",
+]
+
+
 FALSE_CANDIDATE_TITLES = {
     "media",
     "news",
@@ -470,6 +495,12 @@ def is_nasdaq_routine_short_interest(item, text):
     return routine_pattern and not material_override
 
 
+def is_non_financial_policy_context(text):
+    if not contains_any_phrase(text, NON_FINANCIAL_POLICY_CONTEXT_TERMS):
+        return False
+    return not contains_any_phrase(text, FINANCIAL_POLICY_CONTEXT_TERMS)
+
+
 # Scoring
 
 def score_item(item):
@@ -556,7 +587,7 @@ def score_item(item):
         score -= 6
         reasons.append("downrank:individual_enforcement")
 
-    if contains_any_phrase(text, NON_FINANCIAL_POLICY_TERMS):
+    if contains_any_phrase(text, NON_FINANCIAL_POLICY_TERMS) or is_non_financial_policy_context(text):
         score -= 8
         reasons.append("downrank:non_financial_policy")
 
