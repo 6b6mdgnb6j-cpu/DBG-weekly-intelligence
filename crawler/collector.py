@@ -94,6 +94,10 @@ def empty_status(source):
         "final_items": 0,
         "sample_candidates": [],
         "relevance_rejected_samples": [],
+        "request_attempts_total": 0,
+        "retried_requests": 0,
+        "last_network_error": "",
+        "last_status_code": "",
         "error": "",
     }
 
@@ -262,6 +266,10 @@ def collect_week(start_arg=None, translate=True):
             status["within_period"] = len(source_filtered)
             status["sample_candidates"] = meta.get("sample_candidates", [])[:3]
             status["list_url"] = meta.get("list_url", status["list_url"])
+            status["request_attempts_total"] = int(meta.get("request_attempts_total") or 0)
+            status["retried_requests"] = int(meta.get("retried_requests") or 0)
+            status["last_network_error"] = meta.get("last_network_error", "")
+            status["last_status_code"] = meta.get("last_status_code", "")
             status["error"] = meta.get("error", "")
 
             source_statuses.append(status)

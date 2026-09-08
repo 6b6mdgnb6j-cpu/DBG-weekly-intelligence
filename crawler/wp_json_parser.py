@@ -1,9 +1,9 @@
 import html
 from datetime import timedelta
 
-import requests
 from bs4 import BeautifulSoup
 
+from .adapters.common import request_get
 from .date_utils import in_week
 from .news_model import standardize_news
 
@@ -35,6 +35,7 @@ def collect_wp_json(source, week_start, week_end, logger):
     newest_date_seen = ""
     oldest_date_seen = ""
     pages_scanned = 0
+    network_meta = {}
 
     logger.info("WP JSON start: %s", source["name"])
 
@@ -48,8 +49,7 @@ def collect_wp_json(source, week_start, week_end, logger):
     }
 
     try:
-        response = requests.get(list_url, headers=HEADERS, params=params, timeout=20)
-        response.raise_for_status()
+        response = request_get(list_url, headers=HEADERS, params=params, timeout=20, attempts=3, meta=network_meta)
         pages_scanned = 1
         entries = response.json()
         if not isinstance(entries, list):
@@ -124,4 +124,8 @@ def collect_wp_json(source, week_start, week_end, logger):
         "target_period_reached": not error,
         "stopped_reason": "date_bounded_official_api" if not error else "",
         "sample_candidates": sample_candidates,
+        "request_attempts_total": int(network_meta.get("request_attempts_total") or 0),
+        "retried_requests": int(network_meta.get("retried_requests") or 0),
+        "last_network_error": network_meta.get("last_network_error", ""),
+        "last_status_code": network_meta.get("last_status_code", ""),
     }

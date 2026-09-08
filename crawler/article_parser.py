@@ -1,9 +1,9 @@
 import re
 from urllib.parse import urlparse
 
-import requests
 from bs4 import BeautifulSoup
 
+from .adapters.common import request_get
 from .date_utils import in_week
 from .news_model import standardize_news
 
@@ -141,8 +141,7 @@ def parse_article(url, source, week_start, week_end, logger, list_title="", list
         if is_pdf_url(url):
             return build_pdf_article(url, source, week_start, week_end, list_title, list_date)
 
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
+        response = request_get(url, headers=HEADERS, timeout=15, attempts=3)
 
         if is_pdf_response(url, response):
             return build_pdf_article(url, source, week_start, week_end, list_title, list_date)

@@ -1,6 +1,6 @@
 import feedparser
-import requests
 
+from .adapters.common import request_get
 from .date_utils import in_week
 from .news_model import standardize_news
 
@@ -17,13 +17,13 @@ def collect_rss(source, week_start, week_end, logger):
     sample_candidates = []
     dated_candidates = 0
     date_parse_failed = 0
+    network_meta = {}
 
     logger.info("RSS start: %s", source["name"])
 
     try:
         list_url = source.get("crawl_url") or source["url"]
-        response = requests.get(list_url, headers=HEADERS, timeout=20)
-        response.raise_for_status()
+        response = request_get(list_url, headers=HEADERS, timeout=20, attempts=3, meta=network_meta)
         feed = feedparser.parse(response.text)
         entries = list(feed.entries)
         logger.info("RSS candidate count for %s: %s", source["name"], len(entries))
@@ -91,4 +91,8 @@ def collect_rss(source, week_start, week_end, logger):
         "dated_candidates": dated_candidates,
         "date_parse_failed": date_parse_failed,
         "sample_candidates": sample_candidates,
+        "request_attempts_total": int(network_meta.get("request_attempts_total") or 0),
+        "retried_requests": int(network_meta.get("retried_requests") or 0),
+        "last_network_error": network_meta.get("last_network_error", ""),
+        "last_status_code": network_meta.get("last_status_code", ""),
     }

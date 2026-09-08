@@ -1,24 +1,33 @@
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
+from crawler.http_client import HEADERS, get, post
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+def request_get(url, timeout=20, attempts=2, headers=None, params=None, meta=None, **kwargs):
+    return get(
+        url,
+        headers=headers or HEADERS,
+        timeout=timeout,
+        attempts=attempts,
+        params=params,
+        meta=meta,
+        **kwargs,
+    )
 
 
-def request_get(url, timeout=20, attempts=2, headers=None, params=None):
-    last_error = None
-    for _ in range(attempts):
-        try:
-            response = requests.get(url, headers=headers or HEADERS, timeout=timeout, params=params)
-            response.raise_for_status()
-            if (response.encoding or "").lower() in ("iso-8859-1", "windows-1252"):
-                response.encoding = response.apparent_encoding
-            return response
-        except Exception as exc:
-            last_error = exc
-    raise last_error
+def request_post(url, timeout=20, attempts=1, headers=None, params=None, meta=None, retry_post=False, **kwargs):
+    return post(
+        url,
+        headers=headers or HEADERS,
+        timeout=timeout,
+        attempts=attempts,
+        params=params,
+        meta=meta,
+        retry_post=retry_post,
+        **kwargs,
+    )
 
 
 def fetch_soup(url, timeout=20):

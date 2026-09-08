@@ -4,10 +4,9 @@ from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
 import feedparser
-import requests
 from bs4 import BeautifulSoup
 
-from .adapters.common import request_get
+from .adapters.common import request_get, request_post
 from .date_utils import in_week, parse_date_for_source
 from .news_model import normalize_text_encoding, standardize_news
 
@@ -146,6 +145,10 @@ def _empty_meta(source, list_url):
         "target_period_reached": False,
         "stopped_reason": "",
         "sample_candidates": [],
+        "request_attempts_total": 0,
+        "retried_requests": 0,
+        "last_network_error": "",
+        "last_status_code": "",
     }
 
 
@@ -437,6 +440,7 @@ def collect_mas_search(source, week_start, week_end, logger):
                 timeout=30,
                 attempts=2,
                 params={"rows": rows_per_page, "start": page * rows_per_page},
+                meta=meta,
             )
             data = response.json()
             meta["pages_scanned"] += 1
@@ -562,8 +566,15 @@ def collect_pcaob_hawksearch(source, week_start, week_end, logger):
                 break
             payload = dict(payload_base)
             payload["PageNo"] = page
-            response = requests.post(list_url, headers=PCAOB_HEADERS, json=payload, timeout=30)
-            response.raise_for_status()
+            response = request_post(
+                list_url,
+                headers=PCAOB_HEADERS,
+                json=payload,
+                timeout=30,
+                attempts=3,
+                retry_post=True,
+                meta=meta,
+            )
             data = response.json()
             meta["pages_scanned"] += 1
             pagination = data.get("Pagination") or {}
@@ -704,7 +715,7 @@ def collect_iosco_official(source, week_start, week_end, logger):
                 meta["stopped_reason"] = "max_scan_candidates"
                 break
             page_url = _iosco_media_page_url(page)
-            response = request_get(page_url, headers=HEADERS, timeout=25, attempts=2)
+            response = request_get(page_url, headers=HEADERS, timeout=25, attempts=2, meta=meta)
             soup = BeautifulSoup(response.text, "html.parser")
             meta["pages_scanned"] += 1
             entries = _iosco_direct_list_items(soup)
@@ -740,7 +751,7 @@ def collect_iosco_official(source, week_start, week_end, logger):
                 meta["stopped_reason"] = "max_scan_candidates"
                 break
             page_url = _iosco_public_reports_url(year)
-            response = request_get(page_url, headers=HEADERS, timeout=25, attempts=2)
+            response = request_get(page_url, headers=HEADERS, timeout=25, attempts=2, meta=meta)
             soup = BeautifulSoup(response.text, "html.parser")
             meta["pages_scanned"] += 1
             candidates = []
@@ -810,7 +821,7 @@ def collect_sp_dji_press_archive(source, week_start, week_end, logger):
                 meta["stopped_reason"] = "max_scan_candidates"
                 break
             page_url = _sp_dji_archive_url(year, limit=limit)
-            response = request_get(page_url, headers=SP_DJI_HEADERS, timeout=25, attempts=2)
+            response = request_get(page_url, headers=SP_DJI_HEADERS, timeout=25, attempts=2, meta=meta)
             soup = BeautifulSoup(response.text, "html.parser")
             meta["pages_scanned"] += 1
             candidates = []
@@ -862,7 +873,7 @@ def collect_sp_dji_press_archive(source, week_start, week_end, logger):
                 if drop_reason == "kept":
                     try:
                         meta["detail_pages_requested"] += 1
-                        detail = request_get(url, headers=SP_DJI_HEADERS, timeout=25, attempts=2)
+                        detail = request_get(url, headers=SP_DJI_HEADERS, timeout=25, attempts=2, meta=meta)
                         summary = _sp_dji_summary_from_detail(detail.text)
                     except Exception as detail_exc:
                         logger.warning("S&P DJI detail summary failed: %s reason=%s", url, detail_exc)
@@ -910,7 +921,7 @@ def collect_asic_media_releases(source, week_start, week_end, logger):
 
     logger.info("ASIC official media releases JSON start: %s", source["name"])
     try:
-        response = request_get(list_url, headers=ASIC_MEDIA_HEADERS, timeout=30, attempts=2)
+        response = request_get(list_url, headers=ASIC_MEDIA_HEADERS, timeout=30, attempts=2, meta=meta)
         rows = response.json()
         if not isinstance(rows, list):
             raise ValueError("ASIC newsroom JSON did not return a list")
@@ -1569,22 +1580,18 @@ def _decode_clearstream_response(text):
     return data
 
 
-def _clearstream_page(list_url, offset):
+def _clearstream_page(list_url, offset, meta=None):
     body = json.dumps([CLEARSTREAM_ACTION_ID, "", [None, None], [], "date desc", offset])
-    last_error = None
-    for _ in range(3):
-        try:
-            response = requests.post(
-                list_url,
-                headers=_clearstream_action_headers(list_url),
-                data=body,
-                timeout=25,
-            )
-            response.raise_for_status()
-            return _decode_clearstream_response(response.text)
-        except Exception as exc:
-            last_error = exc
-    raise last_error
+    response = request_post(
+        list_url,
+        headers=_clearstream_action_headers(list_url),
+        data=body,
+        timeout=25,
+        attempts=3,
+        retry_post=True,
+        meta=meta,
+    )
+    return _decode_clearstream_response(response.text)
 
 
 def _is_clearstream_table_like_summary(summary):
@@ -1673,7 +1680,7 @@ def collect_clearstream_search(source, week_start, week_end, logger):
             if meta["candidates_scanned"] >= max_scan:
                 meta["stopped_reason"] = "max_scan_candidates"
                 break
-            data = _clearstream_page(list_url, page * hits_per_page)
+            data = _clearstream_page(list_url, page * hits_per_page, meta=meta)
             meta["pages_scanned"] += 1
             if not meta["candidates_discovered"]:
                 meta["candidates_discovered"] = int(data.get("numFound") or 0)
