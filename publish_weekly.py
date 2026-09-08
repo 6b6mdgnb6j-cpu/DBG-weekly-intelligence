@@ -1,7 +1,8 @@
 import argparse
 import json
-import shutil
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 from crawler.highlight_ranker import select_highlights
@@ -22,6 +23,14 @@ class PublishBlockedError(Exception):
     def __init__(self, message, exit_code):
         super().__init__(message)
         self.exit_code = exit_code
+
+
+class PublishFailedError(Exception):
+    def __init__(self, message, stage, exit_code=5, rollback_status=None):
+        super().__init__(message)
+        self.stage = stage
+        self.exit_code = exit_code
+        self.rollback_status = rollback_status
 
 
 def load_json(path):
@@ -60,6 +69,83 @@ def build_published_payload(payload):
     if missing:
         raise ValueError(f"Published payload is missing required fields: {', '.join(missing)}")
     return published
+
+
+def serialize_published_payload(payload):
+    return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def validate_published_payload(payload, expected):
+    if not isinstance(payload, dict):
+        raise ValueError("Published temp JSON must contain a JSON object.")
+    missing = [field for field in PUBLISHED_REQUIRED_FIELDS if field not in payload]
+    if missing:
+        raise ValueError(f"Published temp JSON is missing required fields: {', '.join(missing)}")
+    if payload.get("week_start") != expected.get("week_start"):
+        raise ValueError("Published temp JSON week_start mismatch.")
+    if payload.get("week_end") != expected.get("week_end"):
+        raise ValueError("Published temp JSON week_end mismatch.")
+    if not isinstance(payload.get("items"), list):
+        raise ValueError("Published temp JSON field 'items' must be a list.")
+    if len(payload["items"]) != len(expected.get("items", [])):
+        raise ValueError("Published temp JSON item count mismatch.")
+    if payload.get("item_count", len(payload["items"])) != expected.get("item_count", len(expected.get("items", []))):
+        raise ValueError("Published temp JSON item_count mismatch.")
+
+
+def validate_published_bytes(data, expected):
+    try:
+        payload = json.loads(data.decode("utf-8"))
+    except Exception as exc:
+        raise ValueError(f"Published temp JSON is invalid: {exc}") from exc
+    validate_published_payload(payload, expected)
+
+
+def atomic_write_json_bytes(target_path, data, expected_payload, stage):
+    target_path = Path(target_path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=target_path.parent,
+            prefix=f".{target_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            temp_file.write(data)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+
+        with temp_path.open("rb") as f:
+            validate_published_bytes(f.read(), expected_payload)
+        os.replace(temp_path, target_path)
+    except PublishFailedError:
+        raise
+    except Exception as exc:
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        raise PublishFailedError(str(exc), stage=stage, exit_code=5) from exc
+
+
+def read_existing_bytes(path):
+    path = Path(path)
+    if not path.exists():
+        return None
+    return path.read_bytes()
+
+
+def restore_published_path(path, old_data, old_expected_payload, stage):
+    path = Path(path)
+    if old_data is None:
+        if path.exists():
+            path.unlink()
+        return
+    atomic_write_json_bytes(path, old_data, old_expected_payload, stage)
 
 
 def default_qa_report_path(payload):
@@ -127,9 +213,30 @@ def publish_weekly(source_path, approve_warning=False, dry_run=False, qa_report_
     if dry_run:
         return archive_path, latest_path, qa_report_path, qa_report, False
 
-    archive_dir.mkdir(parents=True, exist_ok=True)
-    archive_path.write_text(json.dumps(published, ensure_ascii=False, indent=2), encoding="utf-8")
-    shutil.copyfile(archive_path, latest_path)
+    serialized = serialize_published_payload(published)
+    validate_published_bytes(serialized, published)
+
+    old_archive = read_existing_bytes(archive_path)
+    old_archive_payload = json.loads(old_archive.decode("utf-8")) if old_archive is not None else None
+
+    archive_written = False
+    try:
+        atomic_write_json_bytes(archive_path, serialized, published, "archive_replace")
+        archive_written = True
+        atomic_write_json_bytes(latest_path, serialized, published, "latest_replace")
+    except PublishFailedError as exc:
+        if archive_written:
+            try:
+                restore_published_path(archive_path, old_archive, old_archive_payload, "rollback_archive")
+                exc.rollback_status = "successful"
+            except Exception as rollback_exc:
+                raise PublishFailedError(
+                    f"{exc}; rollback failed: {rollback_exc}",
+                    stage=exc.stage,
+                    exit_code=6,
+                    rollback_status="failed",
+                ) from rollback_exc
+        raise
     return archive_path, latest_path, qa_report_path, qa_report, True
 
 
@@ -165,6 +272,17 @@ def main(argv=None):
         if "WARNING" in str(exc):
             print("To publish after review: --approve-warning")
         return exc.exit_code
+    except PublishFailedError as exc:
+        print("PUBLISH FAILED")
+        print(f"Stage: {exc.stage}")
+        print(f"Reason: {exc}")
+        if exc.rollback_status == "successful":
+            print("Rollback: successful")
+            print("Published state restored.")
+        elif exc.rollback_status == "failed":
+            print("PARTIAL PUBLISH RISK")
+            print("Rollback failed")
+        return exc.exit_code
     except Exception as exc:
         print("PUBLISH ERROR")
         print(str(exc))
@@ -179,7 +297,7 @@ def main(argv=None):
         return 0
 
     print("Publishing...")
-    print(f"Archive: {archive_path}")
+    print(f"Archive: updated ({archive_path})")
     print("Latest: updated")
     print("PUBLISH SUCCESS")
     return 0

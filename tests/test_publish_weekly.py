@@ -1,7 +1,10 @@
+import contextlib
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import publish_weekly
 from qa_gate import file_sha256
@@ -63,6 +66,23 @@ def published_paths(root):
     return published_dir, archive_path, latest_path
 
 
+def write_published_state(archive, latest, archive_payload=None, latest_payload=None):
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    archive.write_text(
+        json.dumps(archive_payload or weekly_payload(week_start="2019-12-25", week_end="2019-12-31"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    latest.write_text(
+        json.dumps(latest_payload or weekly_payload(week_start="2019-12-25", week_end="2019-12-31"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def temp_publish_files(published_dir):
+    return list(Path(published_dir).glob("**/*.tmp"))
+
+
 class PublishWeeklyGuardTests(unittest.TestCase):
     def test_pass_allows_publish(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,6 +100,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             self.assertEqual(report["status"], "PASS")
             self.assertTrue(archive.exists())
             self.assertTrue(latest.exists())
+            self.assertEqual(archive.read_bytes(), latest.read_bytes())
 
     def test_warning_blocks_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -187,6 +208,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             latest_payload = json.loads(latest.read_text(encoding="utf-8"))
             self.assertEqual(archive_payload["week_start"], "2020-01-01")
             self.assertEqual(latest_payload["week_start"], "2020-01-01")
+            self.assertEqual(archive.read_bytes(), latest.read_bytes())
 
     def test_dry_run_allows_without_writing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -203,12 +225,231 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             self.assertEqual(report["status"], "PASS")
             self.assertFalse(archive.exists())
             self.assertFalse(latest.exists())
+            self.assertFalse(temp_publish_files(published_dir))
 
     def test_cli_missing_qa_blocks_without_publishing(self):
         with tempfile.TemporaryDirectory() as tmp:
             weekly = write_weekly(tmp)
             code = publish_weekly.main([str(weekly), "--qa-report", str(Path(tmp) / "missing.json")])
             self.assertEqual(code, 4)
+
+    def test_archive_temp_write_failure_leaves_existing_files_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_published_state(archive, latest)
+            old_archive = archive.read_bytes()
+            old_latest = latest.read_bytes()
+
+            def fail_archive(target, data, expected_payload, stage):
+                if stage == "archive_replace":
+                    raise publish_weekly.PublishFailedError("archive temp write failed", stage)
+                return publish_weekly.atomic_write_json_bytes(target, data, expected_payload, stage)
+
+            with patch.object(publish_weekly, "atomic_write_json_bytes", side_effect=fail_archive):
+                with self.assertRaises(publish_weekly.PublishFailedError) as ctx:
+                    publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertEqual(ctx.exception.stage, "archive_replace")
+            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertEqual(latest.read_bytes(), old_latest)
+            self.assertFalse(temp_publish_files(published_dir))
+
+    def test_archive_replace_failure_leaves_existing_files_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_published_state(archive, latest)
+            old_archive = archive.read_bytes()
+            old_latest = latest.read_bytes()
+            original_replace = publish_weekly.os.replace
+
+            def fail_archive_replace(src, dst):
+                if Path(dst) == archive:
+                    raise OSError("archive replace failed")
+                return original_replace(src, dst)
+
+            with patch.object(publish_weekly.os, "replace", side_effect=fail_archive_replace):
+                with self.assertRaises(publish_weekly.PublishFailedError) as ctx:
+                    publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertEqual(ctx.exception.stage, "archive_replace")
+            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertEqual(latest.read_bytes(), old_latest)
+            self.assertFalse(temp_publish_files(published_dir))
+
+    def test_latest_temp_write_failure_rolls_back_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_published_state(archive, latest)
+            old_archive = archive.read_bytes()
+            old_latest = latest.read_bytes()
+            real_writer = publish_weekly.atomic_write_json_bytes
+
+            def fail_latest(target, data, expected_payload, stage):
+                if stage == "latest_replace":
+                    raise publish_weekly.PublishFailedError("latest temp write failed", stage)
+                return real_writer(target, data, expected_payload, stage)
+
+            with patch.object(publish_weekly, "atomic_write_json_bytes", side_effect=fail_latest):
+                with self.assertRaises(publish_weekly.PublishFailedError) as ctx:
+                    publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertEqual(ctx.exception.stage, "latest_replace")
+            self.assertEqual(ctx.exception.rollback_status, "successful")
+            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertEqual(latest.read_bytes(), old_latest)
+            self.assertFalse(temp_publish_files(published_dir))
+
+    def test_latest_replace_failure_rolls_back_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_published_state(archive, latest)
+            old_archive = archive.read_bytes()
+            old_latest = latest.read_bytes()
+            original_replace = publish_weekly.os.replace
+
+            def fail_latest_replace(src, dst):
+                if Path(dst) == latest:
+                    raise OSError("latest replace failed")
+                return original_replace(src, dst)
+
+            with patch.object(publish_weekly.os, "replace", side_effect=fail_latest_replace):
+                with self.assertRaises(publish_weekly.PublishFailedError) as ctx:
+                    publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertEqual(ctx.exception.stage, "latest_replace")
+            self.assertEqual(ctx.exception.rollback_status, "successful")
+            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertEqual(latest.read_bytes(), old_latest)
+            self.assertFalse(temp_publish_files(published_dir))
+
+    def test_rollback_failure_reports_partial_publish_risk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_published_state(archive, latest)
+            real_writer = publish_weekly.atomic_write_json_bytes
+
+            def fail_latest_and_rollback(target, data, expected_payload, stage):
+                if stage in {"latest_replace", "rollback_archive"}:
+                    raise publish_weekly.PublishFailedError(f"{stage} failed", stage)
+                return real_writer(target, data, expected_payload, stage)
+
+            with patch.object(publish_weekly, "atomic_write_json_bytes", side_effect=fail_latest_and_rollback):
+                with self.assertRaises(publish_weekly.PublishFailedError) as ctx:
+                    publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertEqual(ctx.exception.exit_code, 6)
+            self.assertEqual(ctx.exception.rollback_status, "failed")
+            self.assertTrue(archive.exists())
+            self.assertTrue(latest.exists())
+
+    def test_cli_rollback_failure_reports_partial_publish_risk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+
+            def fail_publish(*args, **kwargs):
+                raise publish_weekly.PublishFailedError(
+                    "latest failed; rollback failed",
+                    stage="latest_replace",
+                    exit_code=6,
+                    rollback_status="failed",
+                )
+
+            output = io.StringIO()
+            with patch.object(publish_weekly, "publish_weekly", side_effect=fail_publish):
+                with contextlib.redirect_stdout(output):
+                    code = publish_weekly.main([str(weekly), "--qa-report", str(qa)])
+
+            self.assertEqual(code, 6)
+            self.assertIn("PUBLISH FAILED", output.getvalue())
+            self.assertIn("PARTIAL PUBLISH RISK", output.getvalue())
+            self.assertIn("Rollback failed", output.getvalue())
+
+    def test_invalid_temp_json_never_replaces_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "published" / "latest.json"
+            target.parent.mkdir(parents=True)
+            target.write_text('{"old": true}', encoding="utf-8")
+            old_latest = target.read_bytes()
+
+            with self.assertRaises(publish_weekly.PublishFailedError):
+                publish_weekly.atomic_write_json_bytes(target, b"{bad json", weekly_payload(), "latest_replace")
+
+            self.assertEqual(target.read_bytes(), old_latest)
+            self.assertFalse(temp_publish_files(target.parent))
+
+    def test_qa_guard_failure_creates_no_publish_temp_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            published_dir, _, _ = published_paths(tmp)
+
+            with self.assertRaises(publish_weekly.PublishBlockedError):
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=Path(tmp) / "missing.json",
+                    published_dir=published_dir,
+                )
+
+            self.assertFalse(published_dir.exists())
+
+    def test_existing_archive_overwrite_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_published_state(archive, latest)
+
+            publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            archive_payload = json.loads(archive.read_text(encoding="utf-8"))
+            self.assertEqual(archive_payload["week_start"], "2020-01-01")
+            self.assertEqual(archive.read_bytes(), latest.read_bytes())
+
+    def test_new_archive_creation_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+
+            publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertTrue(archive.exists())
+            self.assertTrue(latest.exists())
+            self.assertEqual(archive.read_bytes(), latest.read_bytes())
+
+    def test_interrupted_write_cannot_half_overwrite_existing_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "published" / "archive" / "weekly_20200101.json"
+            target.parent.mkdir(parents=True)
+            target.write_text(json.dumps({"old": True}), encoding="utf-8")
+            old_archive = target.read_bytes()
+            original_fsync = publish_weekly.os.fsync
+
+            def fail_fsync(fd):
+                raise OSError("interrupted write")
+
+            with patch.object(publish_weekly.os, "fsync", side_effect=fail_fsync):
+                with self.assertRaises(publish_weekly.PublishFailedError):
+                    publish_weekly.atomic_write_json_bytes(
+                        target,
+                        publish_weekly.serialize_published_payload(weekly_payload()),
+                        weekly_payload(),
+                        "archive_replace",
+                    )
+
+            self.assertEqual(target.read_bytes(), old_archive)
+            self.assertFalse(temp_publish_files(target.parent))
+            self.assertIsNotNone(original_fsync)
 
 
 if __name__ == "__main__":
