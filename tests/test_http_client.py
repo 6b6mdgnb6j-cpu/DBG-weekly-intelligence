@@ -7,6 +7,7 @@ import requests
 
 from crawler import http_client
 from crawler.rss_parser import collect_rss
+from crawler.web_parser import collect_web
 
 
 class FakeResponse:
@@ -50,9 +51,95 @@ class HttpClientRetryTests(unittest.TestCase):
         self.assert_attempts(response, 2)
         self.assertEqual(len(calls), 2)
         self.assertEqual(response.network_retry_reasons, ["status:502"])
+        self.assertEqual(meta["requests_total"], 1)
         self.assertEqual(meta["request_attempts_total"], 2)
         self.assertEqual(meta["retried_requests"], 1)
+        self.assertEqual(meta["last_retry_error"], "status:502")
         self.assertEqual(meta["last_status_code"], 200)
+        self.assertNotIn("last_request_error", meta)
+
+    def test_two_successful_gets_record_request_count_without_retries(self):
+        meta = {}
+        with patch.object(http_client.SESSION, "request", return_value=FakeResponse(200)):
+            first = http_client.request("GET", "https://example.test/one", meta=meta)
+            second = http_client.request("GET", "https://example.test/two", meta=meta)
+        self.assertEqual(first.network_attempts, 1)
+        self.assertEqual(second.network_attempts, 1)
+        self.assertEqual(meta["requests_total"], 2)
+        self.assertEqual(meta["request_attempts_total"], 2)
+        self.assertEqual(meta.get("retried_requests", 0), 0)
+
+    def test_two_logical_requests_with_one_timeout_retry(self):
+        meta = {}
+        outcomes = [FakeResponse(200), requests.exceptions.ReadTimeout("read timed out"), FakeResponse(200)]
+
+        def fake_request(method, url, **request_kwargs):
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        with patch.object(http_client.SESSION, "request", side_effect=fake_request), patch(
+            "crawler.http_client.time.sleep"
+        ):
+            http_client.request("GET", "https://example.test/one", meta=meta)
+            http_client.request("GET", "https://example.test/two", meta=meta)
+        self.assertEqual(meta["requests_total"], 2)
+        self.assertEqual(meta["request_attempts_total"], 3)
+        self.assertEqual(meta["retried_requests"], 1)
+        self.assertEqual(meta["last_retry_error"], "timeout")
+
+    def test_final_502_failure_records_bounded_attempts(self):
+        meta = {}
+        with patch.object(http_client.SESSION, "request", return_value=FakeResponse(502)), patch(
+            "crawler.http_client.time.sleep"
+        ):
+            with self.assertRaises(requests.exceptions.HTTPError) as ctx:
+                http_client.request("GET", "https://example.test", attempts=2, meta=meta)
+        self.assertEqual(ctx.exception.network_attempts, 2)
+        self.assertTrue(ctx.exception.network_retried)
+        self.assertEqual(meta["requests_total"], 1)
+        self.assertEqual(meta["request_attempts_total"], 2)
+        self.assertEqual(meta["retried_requests"], 1)
+        self.assertEqual(meta["last_retry_error"], "status:502")
+        self.assertEqual(meta["last_request_error"], "http_502")
+        self.assertNotIn("last_network_error", meta)
+
+    def test_429_then_success_records_retry_without_final_error(self):
+        meta = {}
+        response, _, _ = self.request_with(
+            [FakeResponse(429, headers={"Retry-After": "1"}), FakeResponse(200)],
+            meta=meta,
+        )
+        self.assertEqual(response.network_final_error_type, "")
+        self.assertEqual(meta["requests_total"], 1)
+        self.assertEqual(meta["request_attempts_total"], 2)
+        self.assertEqual(meta["retried_requests"], 1)
+        self.assertEqual(meta["last_retry_error"], "status:429")
+        self.assertNotIn("last_request_error", meta)
+
+    def test_connection_error_then_success_records_retry_without_final_error(self):
+        meta = {}
+        response, _, _ = self.request_with(
+            [requests.exceptions.ConnectionError("connection reset by peer"), FakeResponse(200)],
+            meta=meta,
+        )
+        self.assertEqual(response.network_final_error_type, "")
+        self.assertEqual(meta["requests_total"], 1)
+        self.assertEqual(meta["request_attempts_total"], 2)
+        self.assertEqual(meta["retried_requests"], 1)
+        self.assertEqual(meta["last_retry_error"], "connection_error")
+        self.assertNotIn("last_request_error", meta)
+
+    def test_403_records_single_request_without_retry(self):
+        meta = {}
+        with patch.object(http_client.SESSION, "request", return_value=FakeResponse(403)):
+            with self.assertRaises(requests.exceptions.HTTPError):
+                http_client.request("GET", "https://example.test", meta=meta)
+        self.assertEqual(meta["requests_total"], 1)
+        self.assertEqual(meta["request_attempts_total"], 1)
+        self.assertEqual(meta.get("retried_requests", 0), 0)
+        self.assertEqual(meta["last_request_error"], "http_403")
 
     def test_503_twice_then_200_is_bounded(self):
         response, calls, _ = self.request_with(
@@ -174,9 +261,58 @@ class HttpClientRetryTests(unittest.TestCase):
         self.assertEqual(len(raw), 1)
         self.assertEqual(len(filtered), 1)
         self.assertEqual(meta["error"], "")
+        self.assertEqual(meta["requests_total"], 1)
         self.assertEqual(meta["request_attempts_total"], 2)
         self.assertEqual(meta["retried_requests"], 1)
         self.assertEqual(meta["last_status_code"], 200)
+
+    def test_generic_web_pipeline_aggregates_detail_retry_metadata(self):
+        source = {
+            "name": "Mock Web",
+            "url": "https://example.test/news",
+            "method": "web",
+            "max_pages": 1,
+            "max_items": 5,
+        }
+        list_html = """
+        <html><body>
+          <article>
+            <a href="/news/2026/market-infrastructure-rule-update">
+              Market infrastructure rule update 2026-09-01
+            </a>
+          </article>
+        </body></html>
+        """
+        detail_html = """
+        <html>
+          <head><meta name="description" content="Relevant market infrastructure news."></head>
+          <body><h1>Market infrastructure rule update</h1><time>2026-09-01</time></body>
+        </html>
+        """
+        with patch.object(
+            http_client.SESSION,
+            "request",
+            side_effect=[
+                FakeResponse(200, text=list_html),
+                FakeResponse(502),
+                FakeResponse(200, text=detail_html),
+            ],
+        ), patch("crawler.http_client.time.sleep"):
+            raw, filtered, meta = collect_web(
+                source,
+                date(2026, 8, 31),
+                date(2026, 9, 6),
+                logging.getLogger("test"),
+            )
+
+        self.assertEqual(len(raw), 1)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(meta["requests_total"], 2)
+        self.assertEqual(meta["request_attempts_total"], 3)
+        self.assertEqual(meta["retried_requests"], 1)
+        self.assertEqual(meta["last_retry_error"], "status:502")
+        self.assertEqual(meta["last_status_code"], 200)
+        self.assertEqual(meta["error"], "")
 
 
 if __name__ == "__main__":

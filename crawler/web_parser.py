@@ -1,7 +1,6 @@
 import re
 from urllib.parse import parse_qs, urljoin, urlparse
 
-import requests
 from bs4 import BeautifulSoup
 
 from .adapters import get_adapter
@@ -330,6 +329,7 @@ def collect_web(source, week_start, week_end, logger):
     oldest_date_seen = None
     target_period_reached = False
     stopped_reason = ""
+    network_meta = {}
 
     logger.info("WEB start: %s", source["name"])
 
@@ -350,6 +350,7 @@ def collect_web(source, week_start, week_end, logger):
                 timeout=20,
                 attempts=2,
                 headers=source.get("request_headers"),
+                meta=network_meta,
             )
             pages_scanned += 1
 
@@ -424,6 +425,7 @@ def collect_web(source, week_start, week_end, logger):
                     logger,
                     list_title=title,
                     list_date=raw_date,
+                    network_meta=network_meta,
                 )
                 detail_pages_requested += 1
                 if raw_item:
@@ -500,4 +502,12 @@ def collect_web(source, week_start, week_end, logger):
         "target_period_reached": target_period_reached,
         "stopped_reason": stopped_reason,
         "sample_candidates": sample_candidates,
+        "requests_total": int(network_meta.get("requests_total") or 0),
+        "request_attempts_total": int(network_meta.get("request_attempts_total") or 0),
+        "retried_requests": int(network_meta.get("retried_requests") or 0),
+        "last_retry_error": network_meta.get("last_retry_error", ""),
+        "last_request_error": network_meta.get("last_request_error", ""),
+        "last_network_error": network_meta.get("last_request_error", "") if error else "",
+        "final_network_error": network_meta.get("last_request_error", "") if error else "",
+        "last_status_code": network_meta.get("last_status_code", ""),
     }

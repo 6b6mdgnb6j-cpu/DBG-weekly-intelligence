@@ -91,15 +91,19 @@ def _record_meta(meta, outcome):
     if meta is None or outcome is None:
         return
     attempts = int(getattr(outcome, "network_attempts", 1) or 1)
+    meta["requests_total"] = int(meta.get("requests_total") or 0) + 1
     meta["request_attempts_total"] = int(meta.get("request_attempts_total") or 0) + attempts
     if getattr(outcome, "network_retried", False):
         meta["retried_requests"] = int(meta.get("retried_requests") or 0) + 1
+        retry_reasons = getattr(outcome, "network_retry_reasons", []) or []
+        if retry_reasons:
+            meta["last_retry_error"] = retry_reasons[-1]
     status_code = getattr(outcome, "network_final_status_code", None)
     if status_code:
         meta["last_status_code"] = int(status_code)
     error_type = getattr(outcome, "network_final_error_type", "")
     if error_type:
-        meta["last_network_error"] = error_type
+        meta["last_request_error"] = error_type
 
 
 def _finish_response(response, metadata, meta):

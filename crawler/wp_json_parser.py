@@ -124,8 +124,12 @@ def collect_wp_json(source, week_start, week_end, logger):
         "target_period_reached": not error,
         "stopped_reason": "date_bounded_official_api" if not error else "",
         "sample_candidates": sample_candidates,
+        "requests_total": int(network_meta.get("requests_total") or 0),
         "request_attempts_total": int(network_meta.get("request_attempts_total") or 0),
         "retried_requests": int(network_meta.get("retried_requests") or 0),
-        "last_network_error": network_meta.get("last_network_error", ""),
+        "last_retry_error": network_meta.get("last_retry_error", ""),
+        "last_request_error": network_meta.get("last_request_error", ""),
+        "last_network_error": network_meta.get("last_request_error", "") if error else "",
+        "final_network_error": network_meta.get("last_request_error", "") if error else "",
         "last_status_code": network_meta.get("last_status_code", ""),
     }

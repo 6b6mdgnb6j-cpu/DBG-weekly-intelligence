@@ -91,8 +91,12 @@ def collect_rss(source, week_start, week_end, logger):
         "dated_candidates": dated_candidates,
         "date_parse_failed": date_parse_failed,
         "sample_candidates": sample_candidates,
+        "requests_total": int(network_meta.get("requests_total") or 0),
         "request_attempts_total": int(network_meta.get("request_attempts_total") or 0),
         "retried_requests": int(network_meta.get("retried_requests") or 0),
-        "last_network_error": network_meta.get("last_network_error", ""),
+        "last_retry_error": network_meta.get("last_retry_error", ""),
+        "last_request_error": network_meta.get("last_request_error", ""),
+        "last_network_error": network_meta.get("last_request_error", "") if error else "",
+        "final_network_error": network_meta.get("last_request_error", "") if error else "",
         "last_status_code": network_meta.get("last_status_code", ""),
     }

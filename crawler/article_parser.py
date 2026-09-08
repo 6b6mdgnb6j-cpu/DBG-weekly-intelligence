@@ -136,12 +136,12 @@ def build_pdf_article(url, source, week_start, week_end, list_title="", list_dat
     return item, item, diagnostic
 
 
-def parse_article(url, source, week_start, week_end, logger, list_title="", list_date=""):
+def parse_article(url, source, week_start, week_end, logger, list_title="", list_date="", network_meta=None):
     try:
         if is_pdf_url(url):
             return build_pdf_article(url, source, week_start, week_end, list_title, list_date)
 
-        response = request_get(url, headers=HEADERS, timeout=15, attempts=3)
+        response = request_get(url, headers=HEADERS, timeout=15, attempts=3, meta=network_meta)
 
         if is_pdf_response(url, response):
             return build_pdf_article(url, source, week_start, week_end, list_title, list_date)

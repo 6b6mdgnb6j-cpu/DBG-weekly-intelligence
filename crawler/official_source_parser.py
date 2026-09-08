@@ -145,9 +145,13 @@ def _empty_meta(source, list_url):
         "target_period_reached": False,
         "stopped_reason": "",
         "sample_candidates": [],
+        "requests_total": 0,
         "request_attempts_total": 0,
         "retried_requests": 0,
+        "last_retry_error": "",
+        "last_request_error": "",
         "last_network_error": "",
+        "final_network_error": "",
         "last_status_code": "",
     }
 
