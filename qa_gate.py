@@ -32,6 +32,10 @@ FAILURE_LIKE = {
 }
 
 
+class QAExecutionError(Exception):
+    pass
+
+
 def load_json(path):
     with Path(path).open(encoding="utf-8") as f:
         return json.load(f)
@@ -567,10 +571,75 @@ def write_reports(report):
     return json_path, md_path
 
 
+def qa_exit_code(status, fail_on_warning=False):
+    if status == FAIL:
+        return 2
+    if status == WARNING and fail_on_warning:
+        return 1
+    return 0
+
+
 def artifact_paths(start):
     week_start, _ = parse_week_start(start)
     key = week_file_key(week_start)
     return OUTPUT_DIR / f"weekly_data_{key}.json", OUTPUT_DIR / f"source_status_{key}.json"
+
+
+def run_qa(
+    start=None,
+    weekly_data_path=None,
+    source_status_path=None,
+    policy_path=POLICY_FILE,
+    sources_path=SOURCE_FILE,
+    fail_on_warning=False,
+    write_report_files=True,
+    expected_week_start=None,
+):
+    if weekly_data_path and source_status_path:
+        weekly_path = Path(weekly_data_path)
+        status_path = Path(source_status_path)
+    elif start:
+        weekly_path, status_path = artifact_paths(start)
+    else:
+        raise QAExecutionError("Provide start or both weekly_data_path and source_status_path.")
+
+    if not weekly_path.exists():
+        raise QAExecutionError(f"Weekly data artifact not found: {weekly_path}")
+    if not status_path.exists():
+        raise QAExecutionError(f"Source status artifact not found: {status_path}")
+
+    weekly_payload = load_json(weekly_path)
+    source_statuses = load_json(status_path)
+    policy = load_policy(policy_path)
+    sources = load_sources(sources_path)
+
+    if expected_week_start is not None:
+        expected_start = parse_item_date(expected_week_start)
+        payload_start = parse_item_date(weekly_payload.get("week_start"))
+        if not expected_start:
+            raise QAExecutionError(f"Expected week_start is not parseable: {expected_week_start}")
+        if payload_start != expected_start:
+            raise QAExecutionError(
+                f"Weekly data week_start mismatch: expected {expected_start}, got {weekly_payload.get('week_start')}"
+            )
+
+    report = evaluate_qa(weekly_payload, source_statuses, policy, sources)
+    json_path = None
+    md_path = None
+    if write_report_files:
+        json_path, md_path = write_reports(report)
+
+    return {
+        "status": report["status"],
+        "exit_code": qa_exit_code(report["status"], fail_on_warning=fail_on_warning),
+        "report": report,
+        "json_path": json_path,
+        "md_path": md_path,
+        "blocking_count": sum(1 for check in report["checks"] if check["result"] == FAIL),
+        "warning_count": sum(1 for check in report["checks"] if check["result"] == WARNING),
+        "known_gap_count": len(report["known_gaps"]),
+        "publish_recommendation": report["publish_recommendation"],
+    }
 
 
 def parse_args(argv=None):
@@ -586,21 +655,20 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    if args.weekly_data and args.source_status:
-        weekly_path = Path(args.weekly_data)
-        status_path = Path(args.source_status)
-    elif args.start:
-        weekly_path, status_path = artifact_paths(args.start)
-    else:
-        raise SystemExit("Provide --start or both --weekly-data and --source-status.")
+    try:
+        result = run_qa(
+            start=args.start,
+            weekly_data_path=args.weekly_data,
+            source_status_path=args.source_status,
+            policy_path=args.policy,
+            sources_path=args.sources,
+            fail_on_warning=args.fail_on_warning,
+        )
+    except QAExecutionError as exc:
+        print(f"QA EXECUTION ERROR: {exc}", file=sys.stderr)
+        return 3
 
-    weekly_payload = load_json(weekly_path)
-    source_statuses = load_json(status_path)
-    policy = load_policy(args.policy)
-    sources = load_sources(args.sources)
-    report = evaluate_qa(weekly_payload, source_statuses, policy, sources)
-    json_path, md_path = write_reports(report)
-
+    report = result["report"]
     failed = [check for check in report["checks"] if check["result"] == FAIL]
     warnings = [check for check in report["checks"] if check["result"] == WARNING]
     print(f"QA STATUS: {report['status']}")
@@ -613,14 +681,10 @@ def main(argv=None):
     print("None" if not warnings else "\n".join(f"- {check['id']}: {check['message']}" for check in warnings[:10]))
     print("Known gaps:")
     print("None" if not report["known_gaps"] else "\n".join(f"- {gap['source']}: {gap['status']}" for gap in report["known_gaps"][:10]))
-    print(f"Report: {json_path}")
-    print(f"Markdown: {md_path}")
+    print(f"Report: {result['json_path']}")
+    print(f"Markdown: {result['md_path']}")
 
-    if report["status"] == FAIL:
-        return 2
-    if report["status"] == WARNING and args.fail_on_warning:
-        return 1
-    return 0
+    return result["exit_code"]
 
 
 if __name__ == "__main__":
