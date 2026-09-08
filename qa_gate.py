@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -47,6 +48,14 @@ def load_policy(path=POLICY_FILE):
 
 def load_sources(path=SOURCE_FILE):
     return load_json(path)
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def source_indexes(sources):
@@ -624,6 +633,12 @@ def run_qa(
             )
 
     report = evaluate_qa(weekly_payload, source_statuses, policy, sources)
+    report["input_artifacts"] = {
+        "weekly_data": str(weekly_path),
+        "weekly_data_sha256": file_sha256(weekly_path),
+        "source_status": str(status_path),
+        "source_status_sha256": file_sha256(status_path),
+    }
     json_path = None
     md_path = None
     if write_report_files:

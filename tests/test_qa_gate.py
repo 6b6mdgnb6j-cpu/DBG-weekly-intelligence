@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from qa_gate import FAIL, INFO, PASS, WARNING, evaluate_qa, load_policy, load_sources
+from qa_gate import FAIL, INFO, PASS, WARNING, evaluate_qa, file_sha256, load_policy, load_sources, run_qa
 
 
 def item(index, **overrides):
@@ -222,6 +222,32 @@ class QAPolicyTests(unittest.TestCase):
             path = Path(tmp) / "qa_policy.json"
             path.write_text(json.dumps(base_policy()), encoding="utf-8")
             self.assertIn("sources", load_policy(path))
+
+    def test_run_qa_report_includes_artifact_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            weekly_path = root / "weekly.json"
+            status_path = root / "source_status.json"
+            policy_path = root / "qa_policy.json"
+            sources_path = root / "sources.json"
+            weekly_path.write_text(json.dumps(payload()), encoding="utf-8")
+            status_path.write_text(json.dumps([source_status("HEALTHY")]), encoding="utf-8")
+            policy_path.write_text(json.dumps(base_policy()), encoding="utf-8")
+            sources_path.write_text("[]", encoding="utf-8")
+
+            result = run_qa(
+                weekly_data_path=weekly_path,
+                source_status_path=status_path,
+                policy_path=policy_path,
+                sources_path=sources_path,
+                write_report_files=False,
+            )
+
+            artifacts = result["report"]["input_artifacts"]
+            self.assertEqual(artifacts["weekly_data"], str(weekly_path))
+            self.assertEqual(artifacts["weekly_data_sha256"], file_sha256(weekly_path))
+            self.assertEqual(artifacts["source_status"], str(status_path))
+            self.assertEqual(artifacts["source_status_sha256"], file_sha256(status_path))
 
 
 if __name__ == "__main__":
