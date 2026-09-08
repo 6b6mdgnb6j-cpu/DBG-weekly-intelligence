@@ -1,0 +1,267 @@
+name: DBG Weekly Report - Phase 1
+
+on:
+  schedule:
+    # Monday 08:00 Asia/Shanghai / Monday 00:00 UTC.
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      week_start:
+        description: Optional target week Monday in YYYY-MM-DD format. Leave empty for previous natural week.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-report-phase1
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Generate weekly review artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      TZ: Asia/Shanghai
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-crawler.txt
+
+      - name: Install crawler dependencies
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+          python3 -m pip install -r requirements-crawler.txt
+
+      - name: Resolve reporting week
+        id: week
+        env:
+          RAW_WEEK_START: ${{ github.event.inputs.week_start || '' }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+
+          raw = os.environ.get("RAW_WEEK_START", "").strip()
+          if raw:
+              if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+                  raise SystemExit("week_start must use YYYY-MM-DD format")
+              try:
+                  start = datetime.strptime(raw, "%Y-%m-%d").date()
+              except ValueError as exc:
+                  raise SystemExit(f"week_start is not a valid date: {exc}") from exc
+              if start.weekday() != 0:
+                  raise SystemExit("week_start must be Monday")
+          else:
+              today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+              this_monday = today - timedelta(days=today.weekday())
+              start = this_monday - timedelta(days=7)
+
+          end = start + timedelta(days=6)
+          compact = start.strftime("%Y%m%d")
+          output_path = os.environ["GITHUB_OUTPUT"]
+          with open(output_path, "a", encoding="utf-8") as f:
+              f.write(f"week_start={start.isoformat()}\n")
+              f.write(f"week_end={end.isoformat()}\n")
+              f.write(f"compact_week_start={compact}\n")
+          print(f"Resolved week: {start.isoformat()} to {end.isoformat()}")
+          PY
+
+      - name: Run permanent tests
+        id: tests
+        run: |
+          set +e
+          python3 -m unittest discover tests
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Compile Python files
+        id: compile
+        if: steps.tests.outputs.exit_code == '0'
+        run: |
+          set +e
+          python3 -m compileall crawler tests ./*.py
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Run weekly generation and QA
+        id: weekly
+        if: steps.tests.outputs.exit_code == '0' && steps.compile.outputs.exit_code == '0'
+        run: |
+          set +e
+          python3 run_weekly.py --start "${{ steps.week.outputs.week_start }}" --no-translate
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Check published directory unchanged
+        id: published_safety
+        if: always()
+        run: |
+          set +e
+          git diff --exit-code -- published/
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -ne 0 ]; then
+            echo "SAFETY VIOLATION: Phase 1 must not modify published/"
+          fi
+          exit 0
+
+      - name: Upload review artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report-review-${{ steps.week.outputs.week_start }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            output/weekly_data_${{ steps.week.outputs.compact_week_start }}.json
+            output/source_status_${{ steps.week.outputs.compact_week_start }}.json
+            output/weekly_report_${{ steps.week.outputs.compact_week_start }}.html
+            output/qa_report_${{ steps.week.outputs.compact_week_start }}.json
+            output/qa_report_${{ steps.week.outputs.compact_week_start }}.md
+
+      - name: Upload debug artifacts
+        if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-report-debug-${{ steps.week.outputs.week_start }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            raw/**/*${{ steps.week.outputs.compact_week_start }}*
+            logs/**/*${{ steps.week.outputs.compact_week_start }}*
+            output/*${{ steps.week.outputs.compact_week_start }}*
+
+      - name: Write job summary
+        if: always()
+        env:
+          WEEK_START: ${{ steps.week.outputs.week_start }}
+          WEEK_END: ${{ steps.week.outputs.week_end }}
+          COMPACT_WEEK_START: ${{ steps.week.outputs.compact_week_start }}
+          TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
+          COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
+          WEEKLY_EXIT_CODE: ${{ steps.weekly.outputs.exit_code }}
+          PUBLISHED_SAFETY_EXIT_CODE: ${{ steps.published_safety.outputs.exit_code }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          def value(name, default="unavailable"):
+              return os.environ.get(name) or default
+
+          week_start = value("WEEK_START")
+          week_end = value("WEEK_END")
+          compact = value("COMPACT_WEEK_START", "")
+          qa_path = Path("output") / f"qa_report_{compact}.json"
+          weekly_path = Path("output") / f"weekly_data_{compact}.json"
+          qa = None
+          weekly = None
+          qa_error = ""
+
+          if qa_path.exists():
+              try:
+                  qa = json.loads(qa_path.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  qa_error = str(exc)
+          if weekly_path.exists():
+              try:
+                  weekly = json.loads(weekly_path.read_text(encoding="utf-8"))
+              except Exception:
+                  weekly = None
+
+          tests_code = value("TEST_EXIT_CODE")
+          compile_code = value("COMPILE_EXIT_CODE")
+          weekly_code = value("WEEKLY_EXIT_CODE")
+          safety_code = value("PUBLISHED_SAFETY_EXIT_CODE")
+          generation = "SUCCESS" if weekly_code in {"0", "unavailable"} and weekly_path.exists() else "FAILED"
+          if tests_code not in {"0", "unavailable"}:
+              generation = "NOT RUN - PRE-RUN TESTS FAILED"
+          elif compile_code not in {"0", "unavailable"}:
+              generation = "NOT RUN - COMPILE FAILED"
+
+          qa_status = qa.get("status", "unavailable") if qa else "unavailable"
+          final_items = qa.get("summary", {}).get("final_items", "unavailable") if qa else (
+              weekly.get("item_count", len(weekly.get("items", []))) if weekly else "unavailable"
+          )
+          highlights = qa.get("summary", {}).get("highlights", "unavailable") if qa else (
+              len(weekly.get("highlights", [])) if weekly else "unavailable"
+          )
+          warnings = sum(1 for check in qa.get("checks", []) if check.get("result") == "WARNING") if qa else "unavailable"
+          known_gaps = len(qa.get("known_gaps", [])) if qa else "unavailable"
+
+          lines = [
+              "# DBG Weekly Report - Phase 1",
+              "",
+              f"- Week: {week_start} -> {week_end}",
+              f"- Generation: {generation}",
+              f"- QA: {qa_status}",
+              f"- Final items: {final_items}",
+              f"- Highlights: {highlights}",
+              f"- Warnings: {warnings}",
+              f"- Known gaps: {known_gaps}",
+              f"- Review artifact: weekly-report-review-{week_start}",
+              "- Publish: NOT PERFORMED",
+              "",
+              "## Exit Codes",
+              "",
+              f"- Tests: {tests_code}",
+              f"- Compile: {compile_code}",
+              f"- Weekly generation / QA: {weekly_code}",
+              f"- Published safety check: {safety_code}",
+          ]
+          if qa_status == "WARNING":
+              lines.extend(["", "QA STATUS: WARNING", "Manual review required."])
+          if qa_status == "FAIL":
+              lines.extend(["", "QA STATUS: FAIL", "Do not publish."])
+          if qa_error:
+              lines.extend(["", "## QA Report Parse Error", "", qa_error])
+          if safety_code not in {"0", "unavailable"}:
+              lines.extend(["", "SAFETY VIOLATION: Phase 1 must not modify published/"])
+
+          summary_path = os.environ["GITHUB_STEP_SUMMARY"]
+          with open(summary_path, "a", encoding="utf-8") as f:
+              f.write("\n".join(str(line) for line in lines) + "\n")
+          print("\n".join(str(line) for line in lines))
+          PY
+
+      - name: Enforce workflow result
+        if: always()
+        env:
+          TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
+          COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
+          WEEKLY_EXIT_CODE: ${{ steps.weekly.outputs.exit_code }}
+          PUBLISHED_SAFETY_EXIT_CODE: ${{ steps.published_safety.outputs.exit_code }}
+        run: |
+          if [ "${TEST_EXIT_CODE:-1}" != "0" ]; then
+            echo "PRE-RUN TESTS FAILED"
+            exit "${TEST_EXIT_CODE:-1}"
+          fi
+          if [ "${COMPILE_EXIT_CODE:-1}" != "0" ]; then
+            echo "COMPILE FAILED"
+            exit "${COMPILE_EXIT_CODE:-1}"
+          fi
+          if [ "${PUBLISHED_SAFETY_EXIT_CODE:-1}" != "0" ]; then
+            echo "SAFETY VIOLATION: Phase 1 must not modify published/"
+            exit "${PUBLISHED_SAFETY_EXIT_CODE:-1}"
+          fi
+          if [ "${WEEKLY_EXIT_CODE:-1}" != "0" ]; then
+            echo "WEEKLY GENERATION OR QA FAILED"
+            exit "${WEEKLY_EXIT_CODE:-1}"
+          fi
+          echo "Phase 1 completed. PUBLISH NOT PERFORMED."
