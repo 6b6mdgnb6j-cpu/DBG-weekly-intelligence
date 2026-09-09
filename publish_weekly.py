@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 
 from crawler.highlight_ranker import select_highlights
@@ -143,6 +144,47 @@ def read_existing_bytes(path):
     return path.read_bytes()
 
 
+def parse_payload_week(payload):
+    try:
+        return date.fromisoformat(str(payload.get("week_start", ""))[:10])
+    except ValueError as exc:
+        raise PublishBlockedError("published payload week_start is malformed", 4) from exc
+
+
+def read_existing_payload(path):
+    data = read_existing_bytes(path)
+    if data is None:
+        return None, None
+    try:
+        payload = json.loads(data.decode("utf-8"))
+    except Exception as exc:
+        raise PublishBlockedError(f"existing published payload is malformed: {exc}", 4) from exc
+    if not isinstance(payload, dict):
+        raise PublishBlockedError("existing published payload is malformed: root must be an object", 4)
+    return data, payload
+
+
+def ensure_publish_idempotency(archive_path, latest_path, serialized, published):
+    old_archive, old_archive_payload = read_existing_payload(archive_path)
+    old_latest, old_latest_payload = read_existing_payload(latest_path)
+    target_week = parse_payload_week(published)
+
+    if old_latest_payload is not None:
+        latest_week = parse_payload_week(old_latest_payload)
+        if target_week < latest_week:
+            raise PublishBlockedError("artifact week is older than published latest; refusing to roll back latest", 4)
+        if target_week == latest_week and old_latest != serialized:
+            raise PublishBlockedError("published latest for this week differs from artifact; refusing overwrite", 4)
+
+    if old_archive is not None:
+        if old_archive != serialized:
+            raise PublishBlockedError("published archive for this week differs from artifact; refusing overwrite", 4)
+        if old_latest == serialized:
+            return "noop_identical", old_archive, old_archive_payload
+
+    return "publish", old_archive, old_archive_payload
+
+
 def restore_published_path(path, old_data, old_expected_payload, stage):
     path = Path(path)
     if old_data is None:
@@ -222,8 +264,9 @@ def publish_weekly(source_path, approve_warning=False, dry_run=False, qa_report_
     serialized = serialize_published_payload(published)
     validate_published_bytes(serialized, published)
 
-    old_archive = read_existing_bytes(archive_path)
-    old_archive_payload = json.loads(old_archive.decode("utf-8")) if old_archive is not None else None
+    plan, old_archive, old_archive_payload = ensure_publish_idempotency(archive_path, latest_path, serialized, published)
+    if plan == "noop_identical":
+        return archive_path, latest_path, qa_report_path, qa_report, False
 
     archive_written = False
     try:
@@ -300,6 +343,11 @@ def main(argv=None):
         print("Publish would be allowed.")
         print(f"Archive: {archive_path}")
         print(f"Latest: {latest_path}")
+        return 0
+
+    if not wrote:
+        print("NO-OP IDENTICAL")
+        print("Published archive/latest already match reviewed artifact.")
         return 0
 
     print("Publishing...")

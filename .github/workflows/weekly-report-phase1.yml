@@ -1,9 +1,6 @@
 name: DBG Weekly Report - Phase 1
 
 on:
-  schedule:
-    # Monday 08:00 Asia/Shanghai / Monday 00:00 UTC.
-    - cron: '0 0 * * 1'
   workflow_dispatch:
     inputs:
       week_start:

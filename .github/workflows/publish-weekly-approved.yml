@@ -1,0 +1,273 @@
+name: DBG Weekly Report - Approved Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Production generation workflow run ID.
+        required: true
+        type: string
+      week_start:
+        description: Target week Monday in YYYY-MM-DD format.
+        required: true
+        type: string
+      approve_warning:
+        description: Explicitly approve publishing a QA WARNING artifact.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: weekly-report-approved-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish manually approved weekly report
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Validate manual inputs
+        id: inputs
+        env:
+          SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
+          WEEK_START: ${{ github.event.inputs.week_start }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from datetime import datetime, timedelta
+
+          run_id = os.environ["SOURCE_RUN_ID"].strip()
+          week_start = os.environ["WEEK_START"].strip()
+          if not re.fullmatch(r"\d+", run_id):
+              raise SystemExit("source_run_id must contain digits only")
+          if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", week_start):
+              raise SystemExit("week_start must use YYYY-MM-DD format")
+          start = datetime.strptime(week_start, "%Y-%m-%d").date()
+          if start.weekday() != 0:
+              raise SystemExit("week_start must be Monday")
+          end = start + timedelta(days=6)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"source_run_id={run_id}\n")
+              f.write(f"week_start={start.isoformat()}\n")
+              f.write(f"week_end={end.isoformat()}\n")
+              f.write(f"compact_week_start={start:%Y%m%d}\n")
+          PY
+
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-crawler.txt
+
+      - name: Install publish dependencies
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+          python3 -m pip install -r requirements-crawler.txt
+
+      - name: Validate source generation run
+        id: source_run
+        env:
+          SOURCE_RUN_ID: ${{ steps.inputs.outputs.source_run_id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -e
+          gh run view "$SOURCE_RUN_ID" \
+            --repo "$REPOSITORY" \
+            --json workflowName,headBranch,conclusion,headSha \
+            > source_run.json
+          python3 - <<'PY'
+          import json
+          import os
+          from automation_pipeline import validate_source_run_metadata
+
+          raw = json.loads(open("source_run.json", encoding="utf-8").read())
+          run = {
+              "repository": os.environ["REPOSITORY"],
+              "workflow_name": raw.get("workflowName"),
+              "branch": raw.get("headBranch"),
+              "conclusion": raw.get("conclusion"),
+              "head_sha": raw.get("headSha"),
+          }
+          validate_source_run_metadata(run, os.environ["REPOSITORY"])
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"generation_sha={run['head_sha']}\n")
+          PY
+
+      - name: Validate current main is not stale
+        id: main_sha
+        env:
+          GENERATION_SHA: ${{ steps.source_run.outputs.generation_sha }}
+        run: |
+          git fetch origin main
+          current_sha="$(git rev-parse origin/main)"
+          echo "current_main_sha=$current_sha" >> "$GITHUB_OUTPUT"
+          if [ "$current_sha" != "$GENERATION_SHA" ]; then
+            echo "Production artifact is stale relative to main. Run production generation again."
+            exit 1
+          fi
+
+      - name: Download review artifact
+        env:
+          SOURCE_RUN_ID: ${{ steps.inputs.outputs.source_run_id }}
+          WEEK_START: ${{ steps.inputs.outputs.week_start }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p review-bundle
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$REPOSITORY" \
+            --name "weekly-report-review-$WEEK_START" \
+            --dir review-bundle
+
+      - name: Validate review bundle and approval
+        id: bundle
+        env:
+          APPROVE_WARNING: ${{ github.event.inputs.approve_warning }}
+        run: |
+          set +e
+          extra_args=""
+          if [ "$APPROVE_WARNING" = "true" ]; then
+            extra_args="--approve-warning"
+          fi
+          python3 automation_pipeline.py validate-bundle \
+            --bundle-dir review-bundle \
+            --week-start "${{ steps.inputs.outputs.week_start }}" \
+            --source-run-id "${{ steps.inputs.outputs.source_run_id }}" \
+            --generation-sha "${{ steps.source_run.outputs.generation_sha }}" \
+            --current-main-sha "${{ steps.main_sha.outputs.current_main_sha }}" \
+            $extra_args
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      - name: Publish reviewed artifact
+        id: publish
+        env:
+          APPROVE_WARNING: ${{ github.event.inputs.approve_warning }}
+          WEEK_START: ${{ steps.inputs.outputs.week_start }}
+          COMPACT_WEEK_START: ${{ steps.inputs.outputs.compact_week_start }}
+        run: |
+          set +e
+          approve_args=""
+          if [ "$APPROVE_WARNING" = "true" ]; then
+            approve_args="--approve-warning"
+          fi
+          python3 publish_weekly.py \
+            "review-bundle/weekly_data_${COMPACT_WEEK_START}.json" \
+            --qa-report "review-bundle/qa_report_${COMPACT_WEEK_START}.json" \
+            $approve_args
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -ne 0 ]; then
+            exit "$code"
+          fi
+          if git diff --quiet -- published/; then
+            echo "result=noop_identical" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=published" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate publish diff scope
+        if: steps.publish.outputs.result == 'published'
+        run: |
+          git diff --name-only > changed_files.txt
+          python3 - <<'PY'
+          from automation_pipeline import validate_published_diff_paths
+
+          paths = [line.strip() for line in open("changed_files.txt", encoding="utf-8") if line.strip()]
+          validate_published_diff_paths(paths)
+          PY
+
+      - name: Commit and push published report
+        id: commit
+        if: steps.publish.outputs.result == 'published'
+        env:
+          GENERATION_SHA: ${{ steps.source_run.outputs.generation_sha }}
+          WEEK_START: ${{ steps.inputs.outputs.week_start }}
+        run: |
+          git fetch origin main
+          current_sha="$(git rev-parse origin/main)"
+          if [ "$current_sha" != "$GENERATION_SHA" ]; then
+            echo "Production artifact is stale relative to main. Blocking publish commit."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add published/latest.json "published/archive/weekly_${{ steps.inputs.outputs.compact_week_start }}.json"
+          git diff --cached --quiet && {
+            echo "result=noop_identical" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          git commit -m "Publish weekly report ${WEEK_START}"
+          commit_sha="$(git rev-parse HEAD)"
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+          echo "result=published" >> "$GITHUB_OUTPUT"
+          git push origin HEAD:main
+
+      - name: Write publish job summary
+        if: always()
+        env:
+          SOURCE_RUN_ID: ${{ steps.inputs.outputs.source_run_id }}
+          WEEK_START: ${{ steps.inputs.outputs.week_start }}
+          GENERATION_SHA: ${{ steps.source_run.outputs.generation_sha }}
+          CURRENT_MAIN_SHA: ${{ steps.main_sha.outputs.current_main_sha }}
+          APPROVE_WARNING: ${{ github.event.inputs.approve_warning }}
+          PUBLISH_EXIT_CODE: ${{ steps.publish.outputs.exit_code }}
+          PUBLISH_RESULT: ${{ steps.publish.outputs.result }}
+          COMMIT_SHA: ${{ steps.commit.outputs.commit_sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          def value(name, default="unavailable"):
+              return os.environ.get(name) or default
+
+          compact = value("WEEK_START", "").replace("-", "")
+          qa_path = Path("review-bundle") / f"qa_report_{compact}.json"
+          manifest_path = Path("review-bundle") / f"review_manifest_{compact}.json"
+          qa = json.loads(qa_path.read_text(encoding="utf-8")) if qa_path.exists() else {}
+          result = value("PUBLISH_RESULT")
+          if result == "published":
+              publish_result = "PUBLISHED"
+          elif result == "noop_identical":
+              publish_result = "NO-OP IDENTICAL"
+          else:
+              publish_result = "BLOCKED"
+
+          lines = [
+              "# DBG Weekly Report - Approved Publish",
+              "",
+              f"- Source generation run: {value('SOURCE_RUN_ID')}",
+              f"- Week: {value('WEEK_START')}",
+              f"- Generation SHA: {value('GENERATION_SHA')}",
+              f"- Current main SHA: {value('CURRENT_MAIN_SHA')}",
+              f"- Translation mode: {qa.get('translation_mode', 'unavailable')}",
+              f"- QA status: {qa.get('status', 'unavailable')}",
+              f"- Warning approval: {value('APPROVE_WARNING')}",
+              f"- Artifact integrity: {'PASS' if manifest_path.exists() else 'unavailable'}",
+              f"- Publish guard: exit {value('PUBLISH_EXIT_CODE')}",
+              f"- Publish result: {publish_result}",
+          ]
+          if value("COMMIT_SHA") != "unavailable":
+              lines.append(f"- Resulting commit SHA: {value('COMMIT_SHA')}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("\n".join(str(line) for line in lines) + "\n")
+          print("\n".join(str(line) for line in lines))
+          PY

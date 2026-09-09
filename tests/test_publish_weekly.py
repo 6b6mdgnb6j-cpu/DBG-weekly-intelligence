@@ -81,6 +81,20 @@ def write_published_state(archive, latest, archive_payload=None, latest_payload=
     )
 
 
+def write_latest_state(latest, payload=None):
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    latest.write_text(
+        json.dumps(payload or weekly_payload(week_start="2019-12-25", week_end="2019-12-31"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def write_exact_archive_state(archive, payload=None):
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    published = publish_weekly.build_published_payload(payload or weekly_payload())
+    archive.write_bytes(publish_weekly.serialize_published_payload(published))
+
+
 def temp_publish_files(published_dir):
     return list(Path(published_dir).glob("**/*.tmp"))
 
@@ -283,8 +297,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             weekly = write_weekly(tmp)
             qa = write_qa(tmp, weekly, "PASS")
             published_dir, archive, latest = published_paths(tmp)
-            write_published_state(archive, latest)
-            old_archive = archive.read_bytes()
+            write_latest_state(latest)
             old_latest = latest.read_bytes()
 
             def fail_archive(target, data, expected_payload, stage):
@@ -297,7 +310,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
                     publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
 
             self.assertEqual(ctx.exception.stage, "archive_replace")
-            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertFalse(archive.exists())
             self.assertEqual(latest.read_bytes(), old_latest)
             self.assertFalse(temp_publish_files(published_dir))
 
@@ -306,8 +319,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             weekly = write_weekly(tmp)
             qa = write_qa(tmp, weekly, "PASS")
             published_dir, archive, latest = published_paths(tmp)
-            write_published_state(archive, latest)
-            old_archive = archive.read_bytes()
+            write_latest_state(latest)
             old_latest = latest.read_bytes()
             original_replace = publish_weekly.os.replace
 
@@ -321,7 +333,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
                     publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
 
             self.assertEqual(ctx.exception.stage, "archive_replace")
-            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertFalse(archive.exists())
             self.assertEqual(latest.read_bytes(), old_latest)
             self.assertFalse(temp_publish_files(published_dir))
 
@@ -330,8 +342,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             weekly = write_weekly(tmp)
             qa = write_qa(tmp, weekly, "PASS")
             published_dir, archive, latest = published_paths(tmp)
-            write_published_state(archive, latest)
-            old_archive = archive.read_bytes()
+            write_latest_state(latest)
             old_latest = latest.read_bytes()
             real_writer = publish_weekly.atomic_write_json_bytes
 
@@ -346,7 +357,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
 
             self.assertEqual(ctx.exception.stage, "latest_replace")
             self.assertEqual(ctx.exception.rollback_status, "successful")
-            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertFalse(archive.exists())
             self.assertEqual(latest.read_bytes(), old_latest)
             self.assertFalse(temp_publish_files(published_dir))
 
@@ -355,8 +366,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             weekly = write_weekly(tmp)
             qa = write_qa(tmp, weekly, "PASS")
             published_dir, archive, latest = published_paths(tmp)
-            write_published_state(archive, latest)
-            old_archive = archive.read_bytes()
+            write_latest_state(latest)
             old_latest = latest.read_bytes()
             original_replace = publish_weekly.os.replace
 
@@ -371,7 +381,7 @@ class PublishWeeklyGuardTests(unittest.TestCase):
 
             self.assertEqual(ctx.exception.stage, "latest_replace")
             self.assertEqual(ctx.exception.rollback_status, "successful")
-            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertFalse(archive.exists())
             self.assertEqual(latest.read_bytes(), old_latest)
             self.assertFalse(temp_publish_files(published_dir))
 
@@ -380,7 +390,8 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             weekly = write_weekly(tmp)
             qa = write_qa(tmp, weekly, "PASS")
             published_dir, archive, latest = published_paths(tmp)
-            write_published_state(archive, latest)
+            write_exact_archive_state(archive)
+            write_latest_state(latest)
             real_writer = publish_weekly.atomic_write_json_bytes
 
             def fail_latest_and_rollback(target, data, expected_payload, stage):
@@ -447,18 +458,52 @@ class PublishWeeklyGuardTests(unittest.TestCase):
 
             self.assertFalse(published_dir.exists())
 
-    def test_existing_archive_overwrite_success(self):
+    def test_existing_archive_different_blocks_overwrite(self):
         with tempfile.TemporaryDirectory() as tmp:
             weekly = write_weekly(tmp)
             qa = write_qa(tmp, weekly, "PASS")
             published_dir, archive, latest = published_paths(tmp)
             write_published_state(archive, latest)
 
-            publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
 
-            archive_payload = json.loads(archive.read_text(encoding="utf-8"))
-            self.assertEqual(archive_payload["week_start"], "2020-01-01")
-            self.assertEqual(archive.read_bytes(), latest.read_bytes())
+            self.assertIn("archive", str(ctx.exception))
+
+    def test_existing_archive_and_latest_identical_noop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            archive.parent.mkdir(parents=True)
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            published_payload = publish_weekly.build_published_payload(weekly_payload())
+            data = publish_weekly.serialize_published_payload(published_payload)
+            archive.write_bytes(data)
+            latest.write_bytes(data)
+
+            _, _, _, _, wrote = publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertFalse(wrote)
+            self.assertEqual(archive.read_bytes(), data)
+            self.assertEqual(latest.read_bytes(), data)
+
+    def test_older_week_than_latest_blocks_rollback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            latest.parent.mkdir(parents=True)
+            latest.write_text(
+                json.dumps(weekly_payload(week_start="2020-01-08", week_end="2020-01-14"), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertIn("older than published latest", str(ctx.exception))
+            self.assertFalse(archive.exists())
 
     def test_new_archive_creation_success(self):
         with tempfile.TemporaryDirectory() as tmp:
