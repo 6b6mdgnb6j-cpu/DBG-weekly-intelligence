@@ -28,10 +28,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.14'
           cache: pip
@@ -123,7 +123,7 @@ jobs:
 
       - name: Upload review artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: weekly-report-review-${{ steps.week.outputs.week_start }}
           retention-days: 14
@@ -137,7 +137,7 @@ jobs:
 
       - name: Upload debug artifacts
         if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: weekly-report-debug-${{ steps.week.outputs.week_start }}
           retention-days: 7
