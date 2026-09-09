@@ -3,6 +3,7 @@ import json
 import os
 import re
 import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -11,7 +12,9 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-v6"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-v7"
+SOURCE_CHUNK_TOKEN_LIMIT = 256
+MODEL_SOURCE_TOKEN_LIMIT = 512
 DEFAULT_GENERATION_CONFIG = {
     "max_new_tokens": 240,
     "num_beams": 4,
@@ -23,6 +26,12 @@ DEFAULT_GENERATION_CONFIG = {
 
 class TranslationUnavailableError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    valid: bool
+    reason: str = "ok"
 
 
 def looks_chinese(text):
@@ -116,19 +125,20 @@ class TranslationSanityValidator:
     )
 
     @classmethod
-    def is_valid(cls, original, translated, source=""):
+    def validate_with_reason(cls, original, translated, source=""):
         if not (translated or "").strip():
-            return False
-        if any(term in translated for term in cls.BAD_GARBAGE_TERMS):
-            return False
+            return ValidationResult(False, "empty_translation")
+        for term in cls.BAD_GARBAGE_TERMS:
+            if term in translated:
+                return ValidationResult(False, f"garbage_term:{term}")
         if re.search(r"([\u4e00-\u9fff])\1{2,}", translated):
-            return False
+            return ValidationResult(False, "repeated_character")
         if re.search(r"(.{2,12})\1{4,}", translated):
-            return False
+            return ValidationResult(False, "repeated_phrase")
         if "JPX (JPX)" in translated:
-            return False
+            return ValidationResult(False, "duplicate_term:JPX")
         if "\ufffd" in translated:
-            return False
+            return ValidationResult(False, "replacement_character")
 
         checked = 0
         controls = 0
@@ -139,24 +149,35 @@ class TranslationSanityValidator:
             if unicodedata.category(char).startswith("C"):
                 controls += 1
         if checked and controls / checked > cls.BAD_CONTROL_RATIO:
-            return False
+            return ValidationResult(False, "control_ratio")
 
         original_len = max(len(original or ""), 1)
         translated_len = len(translated or "")
-        if original_len >= 20 and (translated_len / original_len > 3.0 or translated_len / original_len < 0.08):
-            return False
+        if original_len >= 20:
+            ratio = translated_len / original_len
+            if ratio > 3.0:
+                return ValidationResult(False, "length_ratio_high")
+            if ratio < 0.08:
+                return ValidationResult(False, "length_ratio_low")
 
         original_lower = (original or "").lower()
         if "dematerialized" in original_lower and ("物质化" in translated or "非物质化" in translated):
-            return False
+            return ValidationResult(False, "dematerialized_mistranslation")
 
         critical_terms = ("Clearstream", "Eurex", "HKEX", "CFTC", "SEC", "ECB", "FOMC", "JPX")
         for term in critical_terms:
             term_pattern = r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])"
             if re.search(term_pattern, original or "", flags=re.I) and term not in translated:
-                return False
+                return ValidationResult(False, f"critical_term_missing:{term}")
 
-        return not any(term in translated for term in cls.BAD_TERMS)
+        for term in cls.BAD_TERMS:
+            if term in translated:
+                return ValidationResult(False, f"bad_term:{term}")
+        return ValidationResult(True)
+
+    @classmethod
+    def is_valid(cls, original, translated, source=""):
+        return cls.validate_with_reason(original, translated, source).valid
 
 
 class LocalNLLBProvider:
@@ -176,6 +197,10 @@ class LocalNLLBProvider:
         self.load_failed = False
         self.load_error = ""
         self.load_warning_logged = False
+        self.last_error = ""
+        self.translation_call_count = 0
+        self.chunked_text_count = 0
+        self.translated_chunk_count = 0
 
     def _load(self):
         if self.model is not None and self.tokenizer is not None:
@@ -201,22 +226,131 @@ class LocalNLLBProvider:
             self.model = None
             return False
 
+    def _token_ids(self, text):
+        if hasattr(self.tokenizer, "encode"):
+            try:
+                return list(self.tokenizer.encode(text, add_special_tokens=False))
+            except TypeError:
+                return list(self.tokenizer.encode(text))
+        encoded = self.tokenizer(text, add_special_tokens=False)
+        ids = encoded.get("input_ids", []) if isinstance(encoded, dict) else []
+        if ids and isinstance(ids[0], list):
+            ids = ids[0]
+        return list(ids)
+
+    def _token_count(self, text):
+        return len(self._token_ids(text))
+
+    def _decode_token_ids(self, token_ids):
+        if hasattr(self.tokenizer, "decode"):
+            return self.tokenizer.decode(token_ids, skip_special_tokens=True).strip()
+        return " ".join(str(token) for token in token_ids).strip()
+
+    def _split_oversized_segment(self, segment):
+        words = re.findall(r"\S+\s*", segment)
+        chunks = []
+        current = ""
+        for word in words:
+            candidate = current + word
+            if current and self._token_count(candidate) > SOURCE_CHUNK_TOKEN_LIMIT:
+                chunks.append(current.strip())
+                current = word
+            else:
+                current = candidate
+
+            if self._token_count(current) > SOURCE_CHUNK_TOKEN_LIMIT:
+                ids = self._token_ids(current)
+                for start in range(0, len(ids), SOURCE_CHUNK_TOKEN_LIMIT):
+                    piece = self._decode_token_ids(ids[start : start + SOURCE_CHUNK_TOKEN_LIMIT])
+                    if piece:
+                        chunks.append(piece)
+                current = ""
+
+        if current.strip():
+            chunks.append(current.strip())
+        return chunks
+
+    def _candidate_segments(self, text):
+        normalized = re.sub(r"\s+", " ", text or "").strip()
+        if not normalized:
+            return []
+        paragraphs = [part.strip() for part in re.split(r"\n{2,}", text) if part.strip()]
+        if len(paragraphs) <= 1:
+            paragraphs = [normalized]
+
+        segments = []
+        for paragraph in paragraphs:
+            parts = re.split(r"(?<=[.!?。！？])\s+", re.sub(r"\s+", " ", paragraph).strip())
+            segments.extend([part.strip() for part in parts if part.strip()])
+        return segments
+
+    def _split_text_into_chunks(self, text):
+        if self._token_count(text) <= SOURCE_CHUNK_TOKEN_LIMIT:
+            return [text.strip()]
+
+        chunks = []
+        current = ""
+        for segment in self._candidate_segments(text):
+            if self._token_count(segment) > SOURCE_CHUNK_TOKEN_LIMIT:
+                if current:
+                    chunks.append(current.strip())
+                    current = ""
+                chunks.extend(self._split_oversized_segment(segment))
+                continue
+
+            candidate = f"{current} {segment}".strip() if current else segment
+            if current and self._token_count(candidate) > SOURCE_CHUNK_TOKEN_LIMIT:
+                chunks.append(current.strip())
+                current = segment
+            else:
+                current = candidate
+
+        if current:
+            chunks.append(current.strip())
+        return [chunk for chunk in chunks if chunk]
+
+    def _translate_chunk(self, chunk, chunk_index, total_chunks):
+        token_count = self._token_count(chunk)
+        if token_count > SOURCE_CHUNK_TOKEN_LIMIT:
+            self.last_error = f"chunk {chunk_index}/{total_chunks} exceeds token budget: {token_count}"
+            return ""
+        inputs = self.tokenizer(chunk, return_tensors="pt", truncation=True, max_length=MODEL_SOURCE_TOKEN_LIMIT)
+        output = self.model.generate(
+            **inputs,
+            forced_bos_token_id=self.forced_bos_token_id,
+            **DEFAULT_GENERATION_CONFIG,
+        )
+        self.translation_call_count += 1
+        self.translated_chunk_count += 1
+        return self.tokenizer.decode(output[0], skip_special_tokens=True).strip()
+
     def translate(self, text, source_lang="en", target_lang="zh"):
         if source_lang != "en" or target_lang != "zh" or not (text or "").strip():
             return ""
+        self.last_error = ""
         if not self._load():
+            self.last_error = self.load_error or "model unavailable"
             return ""
         try:
-            inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
-            output = self.model.generate(
-                **inputs,
-                forced_bos_token_id=self.forced_bos_token_id,
-                **DEFAULT_GENERATION_CONFIG,
-            )
-            return self.tokenizer.decode(output[0], skip_special_tokens=True).strip()
+            chunks = self._split_text_into_chunks(text)
+            if not chunks:
+                self.last_error = "empty text after chunking"
+                return ""
+            if len(chunks) > 1:
+                self.chunked_text_count += 1
+            translated_chunks = []
+            total = len(chunks)
+            for index, chunk in enumerate(chunks, start=1):
+                translated = self._translate_chunk(chunk, index, total)
+                if not translated:
+                    self.last_error = self.last_error or f"chunk {index}/{total} produced empty output"
+                    return ""
+                translated_chunks.append(translated)
+            return " ".join(translated_chunks).strip()
         except Exception as exc:
             if self.logger:
                 self.logger.warning("Local NLLB translation failed: %s", exc)
+            self.last_error = str(exc)
             return ""
 
 
@@ -339,7 +473,7 @@ class TitleTranslator:
         if self.enabled:
             self.cache = _load_cache(logger)
 
-    def _translate_text(self, text, source):
+    def _translate_text(self, text, source, field="text"):
         if not self.enabled or not text or detect_language(text) != "en":
             return ""
         provider = self.provider
@@ -360,25 +494,37 @@ class TitleTranslator:
         raw = provider.translate(text, source_lang="en", target_lang="zh")
         if not raw:
             if self.strict:
-                reason = getattr(provider, "load_error", "") or "empty provider output"
-                raise TranslationUnavailableError(f"translation unavailable for source={source!r}: {reason}")
+                reason = getattr(provider, "last_error", "") or getattr(provider, "load_error", "") or "empty provider output"
+                raise TranslationUnavailableError(
+                    f"translation unavailable for source={source!r} field={field} text={text[:120]!r}: {reason}"
+                )
             return ""
         normalized, changes = self.normalizer.normalize(raw, text, source)
-        if not TranslationSanityValidator.is_valid(text, normalized, source):
+        validation = TranslationSanityValidator.validate_with_reason(text, normalized, source)
+        if not validation.valid:
             if self.logger:
-                self.logger.warning("Translation rejected by sanity validator for source=%s text=%r", source, text[:120])
+                self.logger.warning(
+                    "Translation rejected by sanity validator: reason=%s source=%s text=%r",
+                    validation.reason,
+                    source,
+                    text[:120],
+                )
             self.cache[key] = {
                 "translation": "",
                 "raw_translation": raw,
                 "terminology_changes": changes,
                 "invalid": True,
+                "invalid_reason": validation.reason,
                 "model": provider.model_name,
                 "generation_config_version": GENERATION_CONFIG_VERSION,
                 "glossary_version": self.normalizer.version,
             }
             self.cache_dirty = True
             if self.strict:
-                raise TranslationUnavailableError(f"translation rejected by sanity validator for source={source!r} text={text[:120]!r}")
+                raise TranslationUnavailableError(
+                    f"translation rejected by sanity validator: reason={validation.reason} "
+                    f"source={source!r} field={field} text={text[:120]!r}"
+                )
             return ""
 
         self.cache[key] = {
@@ -414,7 +560,7 @@ class TitleTranslator:
                 clean["title_en"] = clean.get("title_en", "")
             elif title_lang == "en":
                 clean["title_en"] = title_original
-                clean["title_cn"] = self._translate_text(title_original, source)
+                clean["title_cn"] = self._translate_text(title_original, source, field="title")
                 if self.strict and not clean["title_cn"]:
                     raise TranslationUnavailableError(f"required title translation missing for source={source!r}")
             else:
@@ -426,7 +572,7 @@ class TitleTranslator:
                 clean["summary_en"] = clean.get("summary_en", "")
             elif summary_lang == "en":
                 clean["summary_en"] = summary_original
-                clean["summary_cn"] = self._translate_text(summary_original, source)
+                clean["summary_cn"] = self._translate_text(summary_original, source, field="summary")
                 if self.strict and summary_original.strip() and not clean["summary_cn"]:
                     raise TranslationUnavailableError(f"required summary translation missing for source={source!r}")
             else:
