@@ -12,8 +12,9 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-v8"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-v9"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
+RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MODEL_SOURCE_TOKEN_LIMIT = 512
 DEFAULT_GENERATION_CONFIG = {
     "max_new_tokens": 240,
@@ -201,6 +202,7 @@ class LocalNLLBProvider:
         self.translation_call_count = 0
         self.chunked_text_count = 0
         self.translated_chunk_count = 0
+        self.last_translation_metadata = {}
 
     def _load(self):
         if self.model is not None and self.tokenizer is not None:
@@ -246,22 +248,22 @@ class LocalNLLBProvider:
             return self.tokenizer.decode(token_ids, skip_special_tokens=True).strip()
         return " ".join(str(token) for token in token_ids).strip()
 
-    def _split_oversized_segment(self, segment):
+    def _split_oversized_segment(self, segment, chunk_token_limit):
         words = re.findall(r"\S+\s*", segment)
         chunks = []
         current = ""
         for word in words:
             candidate = current + word
-            if current and self._token_count(candidate) > SOURCE_CHUNK_TOKEN_LIMIT:
+            if current and self._token_count(candidate) > chunk_token_limit:
                 chunks.append(current.strip())
                 current = word
             else:
                 current = candidate
 
-            if self._token_count(current) > SOURCE_CHUNK_TOKEN_LIMIT:
+            if self._token_count(current) > chunk_token_limit:
                 ids = self._token_ids(current)
-                for start in range(0, len(ids), SOURCE_CHUNK_TOKEN_LIMIT):
-                    piece = self._decode_token_ids(ids[start : start + SOURCE_CHUNK_TOKEN_LIMIT])
+                for start in range(0, len(ids), chunk_token_limit):
+                    piece = self._decode_token_ids(ids[start : start + chunk_token_limit])
                     if piece:
                         chunks.append(piece)
                 current = ""
@@ -284,22 +286,23 @@ class LocalNLLBProvider:
             segments.extend([part.strip() for part in parts if part.strip()])
         return segments
 
-    def _split_text_into_chunks(self, text):
-        if self._token_count(text) <= SOURCE_CHUNK_TOKEN_LIMIT:
+    def _split_text_into_chunks(self, text, chunk_token_limit=None):
+        chunk_token_limit = chunk_token_limit or SOURCE_CHUNK_TOKEN_LIMIT
+        if self._token_count(text) <= chunk_token_limit:
             return [text.strip()]
 
         chunks = []
         current = ""
         for segment in self._candidate_segments(text):
-            if self._token_count(segment) > SOURCE_CHUNK_TOKEN_LIMIT:
+            if self._token_count(segment) > chunk_token_limit:
                 if current:
                     chunks.append(current.strip())
                     current = ""
-                chunks.extend(self._split_oversized_segment(segment))
+                chunks.extend(self._split_oversized_segment(segment, chunk_token_limit))
                 continue
 
             candidate = f"{current} {segment}".strip() if current else segment
-            if current and self._token_count(candidate) > SOURCE_CHUNK_TOKEN_LIMIT:
+            if current and self._token_count(candidate) > chunk_token_limit:
                 chunks.append(current.strip())
                 current = segment
             else:
@@ -309,9 +312,9 @@ class LocalNLLBProvider:
             chunks.append(current.strip())
         return [chunk for chunk in chunks if chunk]
 
-    def _translate_chunk(self, chunk, chunk_index, total_chunks):
+    def _translate_chunk(self, chunk, chunk_index, total_chunks, chunk_token_limit):
         token_count = self._token_count(chunk)
-        if token_count > SOURCE_CHUNK_TOKEN_LIMIT:
+        if token_count > chunk_token_limit:
             self.last_error = f"chunk {chunk_index}/{total_chunks} exceeds token budget: {token_count}"
             return ""
         inputs = self.tokenizer(chunk, return_tensors="pt", truncation=True, max_length=MODEL_SOURCE_TOKEN_LIMIT)
@@ -324,15 +327,25 @@ class LocalNLLBProvider:
         self.translated_chunk_count += 1
         return self.tokenizer.decode(output[0], skip_special_tokens=True).strip()
 
-    def translate(self, text, source_lang="en", target_lang="zh"):
+    def translate(self, text, source_lang="en", target_lang="zh", chunk_token_limit=None):
         if source_lang != "en" or target_lang != "zh" or not (text or "").strip():
             return ""
+        chunk_token_limit = chunk_token_limit or SOURCE_CHUNK_TOKEN_LIMIT
         self.last_error = ""
+        self.last_translation_metadata = {}
         if not self._load():
             self.last_error = self.load_error or "model unavailable"
             return ""
         try:
-            chunks = self._split_text_into_chunks(text)
+            chunks = self._split_text_into_chunks(text, chunk_token_limit=chunk_token_limit)
+            token_counts = [self._token_count(chunk) for chunk in chunks]
+            output_lengths = []
+            self.last_translation_metadata = {
+                "chunk_token_limit": chunk_token_limit,
+                "chunk_count": len(chunks),
+                "chunk_token_counts": token_counts,
+                "chunk_output_lengths": output_lengths,
+            }
             if not chunks:
                 self.last_error = "empty text after chunking"
                 return ""
@@ -341,10 +354,11 @@ class LocalNLLBProvider:
             translated_chunks = []
             total = len(chunks)
             for index, chunk in enumerate(chunks, start=1):
-                translated = self._translate_chunk(chunk, index, total)
+                translated = self._translate_chunk(chunk, index, total, chunk_token_limit)
                 if not translated:
                     self.last_error = self.last_error or f"chunk {index}/{total} produced empty output"
                     return ""
+                output_lengths.append(len(translated))
                 translated_chunks.append(translated)
             return " ".join(translated_chunks).strip()
         except Exception as exc:
@@ -474,6 +488,75 @@ class TitleTranslator:
         if self.enabled:
             self.cache = _load_cache(logger)
 
+    @staticmethod
+    def _length_ratio(original, translated):
+        original_len = len((original or "").strip())
+        translated_len = len((translated or "").strip())
+        if original_len <= 0:
+            return 0.0
+        return translated_len / original_len
+
+    @staticmethod
+    def _provider_translate(provider, text, chunk_token_limit):
+        try:
+            return provider.translate(text, source_lang="en", target_lang="zh", chunk_token_limit=chunk_token_limit)
+        except TypeError as exc:
+            if "chunk_token_limit" not in str(exc):
+                raise
+            return provider.translate(text, source_lang="en", target_lang="zh")
+
+    @staticmethod
+    def _provider_metadata(provider):
+        metadata = getattr(provider, "last_translation_metadata", {}) or {}
+        return {
+            "chunk_token_limit": metadata.get("chunk_token_limit"),
+            "chunk_count": metadata.get("chunk_count"),
+            "chunk_token_counts": metadata.get("chunk_token_counts", []),
+            "chunk_output_lengths": metadata.get("chunk_output_lengths", []),
+        }
+
+    def _log_recovery_diagnostics(
+        self,
+        source,
+        field,
+        text,
+        initial_translation,
+        initial_validation,
+        initial_metadata,
+        recovery_attempted,
+        recovery_translation="",
+        recovery_validation=None,
+        recovery_metadata=None,
+    ):
+        if not self.logger:
+            return
+        final_validation = recovery_validation or initial_validation
+        self.logger.warning(
+            "Translation length-ratio recovery diagnostics: "
+            "source=%s field=%s text_prefix=%r original_length=%s translated_length=%s ratio=%.3f "
+            "initial_reason=%s initial_chunk_limit=%s initial_chunk_count=%s "
+            "initial_chunk_token_counts=%s initial_chunk_output_lengths=%s "
+            "recovery_attempted=%s recovery_chunk_limit=%s recovery_chunk_count=%s "
+            "recovery_output_length=%s final_ratio=%.3f final_reason=%s",
+            source,
+            field,
+            (text or "")[:120],
+            len(text or ""),
+            len(initial_translation or ""),
+            self._length_ratio(text, initial_translation),
+            initial_validation.reason,
+            initial_metadata.get("chunk_token_limit"),
+            initial_metadata.get("chunk_count"),
+            initial_metadata.get("chunk_token_counts"),
+            initial_metadata.get("chunk_output_lengths"),
+            recovery_attempted,
+            (recovery_metadata or {}).get("chunk_token_limit"),
+            (recovery_metadata or {}).get("chunk_count"),
+            len(recovery_translation or ""),
+            self._length_ratio(text, recovery_translation or initial_translation),
+            final_validation.reason,
+        )
+
     def _translate_text(self, text, source, field="text"):
         if not self.enabled or not text or detect_language(text) != "en":
             return ""
@@ -488,11 +571,10 @@ class TitleTranslator:
             value = cached.get("translation", "")
             if value:
                 return value
-            if self.strict:
-                raise TranslationUnavailableError(f"cached translation is empty for source={source!r} text={text[:120]!r}")
-            return ""
+            if cached.get("invalid") and self.logger:
+                self.logger.info("Ignoring invalid cached translation for source=%s field=%s", source, field)
 
-        raw = provider.translate(text, source_lang="en", target_lang="zh")
+        raw = self._provider_translate(provider, text, SOURCE_CHUNK_TOKEN_LIMIT)
         if not raw:
             if self.strict:
                 reason = getattr(provider, "last_error", "") or getattr(provider, "load_error", "") or "empty provider output"
@@ -500,9 +582,42 @@ class TitleTranslator:
                     f"translation unavailable for source={source!r} field={field} text={text[:120]!r}: {reason}"
                 )
             return ""
+        initial_metadata = self._provider_metadata(provider)
         normalized, changes = self.normalizer.normalize(raw, text, source)
         validation = TranslationSanityValidator.validate_with_reason(text, normalized, source)
         if not validation.valid:
+            if validation.reason == "length_ratio_low":
+                recovered_raw = self._provider_translate(provider, text, RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT)
+                recovery_metadata = self._provider_metadata(provider)
+                recovered_normalized, recovered_changes = self.normalizer.normalize(recovered_raw, text, source)
+                recovered_validation = TranslationSanityValidator.validate_with_reason(text, recovered_normalized, source)
+                self._log_recovery_diagnostics(
+                    source,
+                    field,
+                    text,
+                    normalized,
+                    validation,
+                    initial_metadata,
+                    True,
+                    recovered_normalized,
+                    recovered_validation,
+                    recovery_metadata,
+                )
+                if recovered_raw and recovered_validation.valid:
+                    self.cache[key] = {
+                        "translation": recovered_normalized,
+                        "raw_translation": recovered_raw,
+                        "terminology_changes": recovered_changes,
+                        "model": provider.model_name,
+                        "generation_config_version": GENERATION_CONFIG_VERSION,
+                        "glossary_version": self.normalizer.version,
+                        "recovered_from": "length_ratio_low",
+                    }
+                    self.cache_dirty = True
+                    return recovered_normalized
+                validation = recovered_validation
+                normalized = recovered_normalized
+
             if self.logger:
                 self.logger.warning(
                     "Translation rejected by sanity validator: reason=%s source=%s text=%r",
@@ -510,17 +625,6 @@ class TitleTranslator:
                     source,
                     text[:120],
                 )
-            self.cache[key] = {
-                "translation": "",
-                "raw_translation": raw,
-                "terminology_changes": changes,
-                "invalid": True,
-                "invalid_reason": validation.reason,
-                "model": provider.model_name,
-                "generation_config_version": GENERATION_CONFIG_VERSION,
-                "glossary_version": self.normalizer.version,
-            }
-            self.cache_dirty = True
             if self.strict:
                 raise TranslationUnavailableError(
                     f"translation rejected by sanity validator: reason={validation.reason} "

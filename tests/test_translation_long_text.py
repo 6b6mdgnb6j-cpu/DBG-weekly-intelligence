@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import crawler.translator as translator
 from crawler.translator import (
@@ -8,6 +8,8 @@ from crawler.translator import (
     TitleTranslator,
     TranslationSanityValidator,
     TranslationUnavailableError,
+    RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
+    SOURCE_CHUNK_TOKEN_LIMIT,
     _cache_key,
 )
 
@@ -49,6 +51,35 @@ class FailingSecondChunkModel(EchoModel):
         if self.calls == 2:
             return [[""]]
         return super().generate(**inputs)
+
+
+class RecordingProvider:
+    model_name = "fake-model"
+    last_error = ""
+    load_error = ""
+
+    def __init__(self, outputs):
+        self.outputs = list(outputs)
+        self.calls = []
+        self.last_translation_metadata = {}
+
+    def translate(self, text, source_lang="en", target_lang="zh", chunk_token_limit=None):
+        self.calls.append(
+            {
+                "text": text,
+                "source_lang": source_lang,
+                "target_lang": target_lang,
+                "chunk_token_limit": chunk_token_limit,
+            }
+        )
+        output = self.outputs.pop(0) if self.outputs else ""
+        self.last_translation_metadata = {
+            "chunk_token_limit": chunk_token_limit,
+            "chunk_count": 2 if chunk_token_limit == SOURCE_CHUNK_TOKEN_LIMIT else 4,
+            "chunk_token_counts": [chunk_token_limit or 0],
+            "chunk_output_lengths": [len(output)],
+        }
+        return output
 
 
 def fake_provider(model=None):
@@ -180,15 +211,156 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v8", GENERATION_CONFIG_VERSION)
+        self.assertIn("v9", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
-    def test_old_invalid_cached_entry_cannot_poison_new_chunked_key(self):
-        old_version = "nllb-v1-norepeat-terminology-chunked-v7"
+    def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
+        old_version = "nllb-v1-norepeat-terminology-chunked-v8"
         with patch.object(translator, "GENERATION_CONFIG_VERSION", old_version):
             old_key = _cache_key("model", "en", "zh", "long text", 1)
         new_key = _cache_key("model", "en", "zh", "long text", 1)
         self.assertNotEqual(old_key, new_key)
+
+    def test_current_invalid_cached_entry_is_retried_not_returned(self):
+        provider = RecordingProvider(["有效中文翻译"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        key = _cache_key(provider.model_name, "en", "zh", "Market infrastructure update", title_translator.normalizer.version)
+        title_translator.cache = {key: {"translation": "", "invalid": True, "invalid_reason": "length_ratio_low"}}
+        with patch.object(TranslationSanityValidator, "validate_with_reason", return_value=translator.ValidationResult(True)):
+            output = title_translator._translate_text("Market infrastructure update", "Source", "title")
+        self.assertEqual(output, "有效中文翻译")
+        self.assertEqual(len(provider.calls), 1)
+
+    def test_validated_v9_result_is_cached_normally(self):
+        provider = RecordingProvider(["市场基础设施更新"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(TranslationSanityValidator, "validate_with_reason", return_value=translator.ValidationResult(True)):
+            first = title_translator._translate_text("Market infrastructure update", "Source", "title")
+            second = title_translator._translate_text("Market infrastructure update", "Source", "title")
+        self.assertEqual(first, "市场基础设施更新")
+        self.assertEqual(second, "市场基础设施更新")
+        self.assertEqual(len(provider.calls), 1)
+
+    def test_length_ratio_low_triggers_one_recovery_with_smaller_chunks(self):
+        original = " ".join(["market"] * 60)
+        provider = RecordingProvider(["短", "市场基础设施监管政策清算结算跨境资本市场改革持续推进并保持交易后服务稳定运行"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[translator.ValidationResult(False, "length_ratio_low"), translator.ValidationResult(True)],
+        ):
+            output = title_translator._translate_text(original, "Source", "summary")
+        self.assertIn("市场基础设施", output)
+        self.assertEqual([call["chunk_token_limit"] for call in provider.calls], [SOURCE_CHUNK_TOKEN_LIMIT, RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT])
+
+    def test_length_ratio_recovery_retranslates_entire_original_and_preserves_order(self):
+        original = "alpha beta gamma delta"
+        provider = RecordingProvider(["短", "甲 乙 丙 丁"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[translator.ValidationResult(False, "length_ratio_low"), translator.ValidationResult(True)],
+        ):
+            output = title_translator._translate_text(original, "Source", "summary")
+        self.assertEqual(output, "甲 乙 丙 丁")
+        self.assertEqual([call["text"] for call in provider.calls], [original, original])
+
+    def test_length_ratio_recovery_failure_strict_mode_fails(self):
+        provider = RecordingProvider(["短", "仍短"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(False, "length_ratio_low"),
+            ],
+        ):
+            with self.assertRaises(TranslationUnavailableError) as ctx:
+                title_translator._translate_text(" ".join(["market"] * 60), "Source", "summary")
+        self.assertIn("length_ratio_low", str(ctx.exception))
+        self.assertEqual(len(provider.calls), 2)
+
+    def test_bad_term_failure_does_not_trigger_recovery(self):
+        provider = RecordingProvider(["外汇清算更新"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=False)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            return_value=translator.ValidationResult(False, "bad_term:外汇清算"),
+        ):
+            output = title_translator._translate_text("Market update", "Source", "title")
+        self.assertEqual(output, "")
+        self.assertEqual(len(provider.calls), 1)
+
+    def test_critical_term_missing_does_not_trigger_recovery(self):
+        provider = RecordingProvider(["市场规则"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=False)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            return_value=translator.ValidationResult(False, "critical_term_missing:CFTC"),
+        ):
+            output = title_translator._translate_text("CFTC market rule", "Source", "title")
+        self.assertEqual(output, "")
+        self.assertEqual(len(provider.calls), 1)
+
+    def test_length_ratio_recovery_diagnostics_include_chunk_metadata(self):
+        logger = Mock()
+        provider = RecordingProvider(["短", "市场基础设施监管政策清算结算跨境资本市场改革持续推进"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True, logger=logger)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[translator.ValidationResult(False, "length_ratio_low"), translator.ValidationResult(True)],
+        ):
+            title_translator._translate_text(" ".join(["market"] * 50), "Source", "summary")
+        warning_args = " ".join(str(arg) for call in logger.warning.call_args_list for arg in call.args)
+        self.assertIn("length-ratio recovery diagnostics", warning_args)
+        self.assertIn("original_length", warning_args)
+        self.assertIn("initial_chunk_count", warning_args)
+        self.assertIn("recovery_chunk_count", warning_args)
+
+    def test_empty_chunk_output_still_fails_without_cache_poisoning(self):
+        provider = fake_provider(FailingSecondChunkModel())
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=False)
+        title_translator.cache = {}
+        item = {"title_original": "短标题", "summary": "alpha beta gamma delta epsilon zeta", "source": "Source"}
+        with patch.object(translator, "SOURCE_CHUNK_TOKEN_LIMIT", 3):
+            output = title_translator.translate([item])
+        self.assertEqual(output[0]["summary_cn"], "")
+        self.assertEqual(title_translator.cache, {})
+
+    def test_short_collapsed_fake_translation_recovers_with_smaller_chunking(self):
+        class CollapsingModel(EchoModel):
+            def generate(self, **inputs):
+                tokens = inputs["input_ids"][0]
+                if len(tokens) >= 4:
+                    return [["短"]]
+                return [[f"译:{'_'.join(tokens)}"]]
+
+        provider = fake_provider(CollapsingModel())
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        item = {"title_original": "短标题", "summary": "alpha beta gamma delta epsilon zeta eta theta", "source": "Source"}
+        with patch.object(translator, "SOURCE_CHUNK_TOKEN_LIMIT", 4), patch.object(
+            translator, "RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT", 2
+        ), patch.object(TranslationSanityValidator, "validate_with_reason") as validate:
+            validate.side_effect = [
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(True),
+            ]
+            output = title_translator.translate([item])
+        self.assertEqual(output[0]["summary_cn"], "译:alpha_beta 译:gamma_delta 译:epsilon_zeta 译:eta_theta")
 
     def test_intercontinental_exchange_bad_translation_normalizes_to_ice(self):
         normalizer = translator.TerminologyNormalizer()
