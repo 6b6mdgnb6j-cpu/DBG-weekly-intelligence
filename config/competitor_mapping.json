@@ -209,6 +209,26 @@
       "mapping_reason": "content_rule: group-level acquisition/disposal is cross-business unless a specific product rule matched first"
     },
     {
+      "id": "exchange_energy_derivatives",
+      "priority": 18,
+      "competitor_groups": ["JPX", "HKEX", "Euronext", "SGX", "SHFE", "B3", "SIX", "CME"],
+      "keywords_any": ["electricity futures", "power futures", "gas futures", "energy derivatives", "power derivatives", "ttf", "brent"],
+      "competitor_business": "energy_commodity_derivatives",
+      "mapped_dbg_business": "EEX",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: energy and power derivatives signal"
+    },
+    {
+      "id": "exchange_index_derivatives",
+      "priority": 19,
+      "competitor_groups": ["JPX", "HKEX", "Euronext", "SGX", "SHFE", "B3", "SIX", "CME"],
+      "keywords_any": ["index derivatives", "equity index derivatives", "index futures", "index options"],
+      "competitor_business": "index_derivatives_trading",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: index/equity derivatives signal"
+    },
+    {
       "id": "hashkey_crypto",
       "priority": 20,
       "competitor_groups": ["HashKey"],

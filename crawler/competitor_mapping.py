@@ -32,6 +32,15 @@ def _display_text(item):
     return _norm(" ".join(str(field) for field in fields if field))
 
 
+def _content_text(item):
+    fields = [
+        item.get("title_original", ""),
+        item.get("summary_original", ""),
+        item.get("summary", ""),
+    ]
+    return _norm(" ".join(str(field) for field in fields if field))
+
+
 def _contains_keyword(text, keyword):
     keyword = _norm(keyword)
     if not keyword:
@@ -45,6 +54,82 @@ def _contains_keyword(text, keyword):
 
 def _matches_pattern(text, pattern):
     return bool(re.search(pattern, text, flags=re.I))
+
+
+def _contains_any(text, terms):
+    return any(_contains_keyword(text, term) for term in terms)
+
+
+def _business_object_families(text):
+    families = set()
+    if _contains_any(text, ("clearing", "ccp", "settlement", "post-trade", "post trade")):
+        families.add("post_trade_clearing")
+    if _contains_any(text, ("market data", "data product", "dataset", "datasets", "index products", "benchmark", "benchmarks")):
+        families.add("data_index")
+    if _contains_any(text, ("etf", "etfs", "cash equity", "listing", "trading hours", "extended trading hours")):
+        families.add("cash_exchange")
+    if _contains_any(text, ("derivatives", "futures", "options", "swap", "swaps")):
+        families.add("derivatives")
+    if _contains_any(text, ("energy", "power", "gas", "brent", "ttf", "commodity", "commodities")):
+        families.add("energy_commodities")
+    return families
+
+
+def _is_broad_multi_business_collaboration(text):
+    collaboration = _contains_any(
+        text,
+        (
+            "memorandum of understanding",
+            "mou",
+            "business collaboration",
+            "strategic collaboration",
+            "strategic partnership",
+            "partnership",
+        ),
+    )
+    return collaboration and len(_business_object_families(text)) >= 2
+
+
+def _is_cash_or_listing_exchange_only(text):
+    cash_listing_signal = _contains_any(
+        text,
+        (
+            "cash equity",
+            "cash equities",
+            "listing",
+            "listings",
+            "listed securities",
+            "trading and listing",
+            "trading activity",
+            "trading activities",
+            "exchange figures",
+        ),
+    )
+    derivatives_or_clearing_signal = _contains_any(
+        text,
+        (
+            "derivatives",
+            "futures",
+            "options",
+            "swap",
+            "swaps",
+            "clearing",
+            "ccp",
+            "commodity futures",
+            "energy derivatives",
+        ),
+    )
+    return cash_listing_signal and not derivatives_or_clearing_signal
+
+
+def _cross_business_mapping(group, reason):
+    return {
+        "competitor_group": group,
+        "competitor_business": "cross_business_or_unmapped",
+        "mapped_dbg_business": FALLBACK_BUSINESS,
+        "mapping_confidence": "high",
+        "mapping_reason": reason,
+    }
 
 
 def _identify_competitor_group(item, config):
@@ -94,6 +179,19 @@ def map_competitor_item(item, config=None):
     config = config or _load_config()
     group = _identify_competitor_group(item, config)
     text = _display_text(item)
+    content_text = _content_text(item)
+
+    if _is_broad_multi_business_collaboration(content_text):
+        return _cross_business_mapping(
+            group,
+            "semantic_guard: broad partnership/MOU spans multiple business lines",
+        )
+
+    if _is_cash_or_listing_exchange_only(content_text):
+        return _cross_business_mapping(
+            group,
+            "semantic_guard: cash/listing exchange activity without derivatives or clearing context",
+        )
 
     for rule in config.get("rules", []):
         groups = rule.get("competitor_groups") or []

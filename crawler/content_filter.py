@@ -114,6 +114,24 @@ HIGH_VALUE_BUSINESS_TERMS = [
 ]
 
 
+ACQUISITION_EVENT_TERMS = [
+    "acquires",
+    "acquired",
+    "acquisition of",
+    "to acquire",
+    "completes acquisition",
+    "completed acquisition",
+    "announces acquisition",
+    "agrees to acquire",
+    "agreement to acquire",
+    "purchase of",
+    "sale of",
+    "divestment",
+    "divestiture",
+    "disposal",
+]
+
+
 REGULATORY_SOURCES = [
     "德国联邦金融监管局",
     "商品期货交易委员会",
@@ -252,6 +270,49 @@ FINANCIAL_POLICY_CONTEXT_TERMS = [
 ]
 
 
+FINANCIAL_MARKET_SETTLEMENT_CONTEXT_TERMS = [
+    "securities settlement",
+    "trade settlement",
+    "clearance and settlement",
+    "national clearance and settlement",
+    "clearing and settlement",
+    "post-trade",
+    "post trade",
+    "csd",
+    "central securities depository",
+    "t+1",
+    "t+2",
+    "delivery-versus-payment",
+    "delivery versus payment",
+    "payment-system settlement",
+    "payment system settlement",
+    "collateral settlement",
+    "digital-asset settlement",
+    "digital asset settlement",
+    "institutional digital-asset settlement",
+    "institutional digital asset settlement",
+    "transaction settlement",
+    "local-currency transaction settlement",
+    "local currency transaction settlement",
+    "settlement infrastructure",
+]
+
+
+NON_FINANCIAL_SETTLEMENT_CONTEXT_TERMS = [
+    "insurance claim",
+    "insurance claims",
+    "home-insurance",
+    "home insurance",
+    "homeowners",
+    "cash settlements",
+    "claim settlement",
+    "claims settlement",
+    "legal settlement",
+    "employment settlement",
+    "consumer compensation settlement",
+]
+
+
 FINANCIAL_MARKET_OBJECT_TERMS = [
     "exchange", "exchanges", "trading", "clearing", "settlement",
     "securities", "derivatives", "asset management", "banking",
@@ -282,6 +343,56 @@ LOW_VALUE_EVENT_TERMS = [
     "award nomination", "awards nomination", "conference participation",
     "conference agenda", "webinar", "podcast", "podcasts", "diversity speech",
     "diversity at the european central bank",
+]
+
+
+ROUTINE_ENFORCEMENT_TERMINATION_TERMS = [
+    "termination of enforcement action",
+    "termination of enforcement actions",
+    "terminates enforcement action",
+    "terminates enforcement actions",
+    "terminated enforcement action",
+    "terminated enforcement actions",
+]
+
+
+CONSUMER_SCAM_ALERT_TERMS = [
+    "phishing scam",
+    "phishing scams",
+    "scam alert",
+    "scam alerts",
+    "fraudulent website",
+    "fraudulent document",
+    "impersonating",
+    "consumer alert",
+    "stay alert",
+]
+
+
+CONSUMER_SCAM_CONTEXT_TERMS = [
+    "payment card",
+    "payment cards",
+    "contactless mobile payments",
+    "mobile payments",
+    "card binding",
+    "binding of payment cards",
+    "retail customer",
+    "retail customers",
+    "public to stay alert",
+]
+
+
+SCAM_MATERIAL_OVERRIDE_TERMS = [
+    "systemic",
+    "systemic payment infrastructure",
+    "payment infrastructure disruption",
+    "banking-system impact",
+    "banking system impact",
+    "new regulation",
+    "market-infrastructure change",
+    "market infrastructure change",
+    "large-scale operational incident",
+    "large scale operational incident",
 ]
 
 
@@ -422,6 +533,21 @@ def has_material_development_signal(text):
     return contains_any_phrase(text, MATERIAL_DEVELOPMENT_TERMS)
 
 
+def has_acquisition_event_signal(text):
+    return contains_any_phrase(text, ACQUISITION_EVENT_TERMS)
+
+
+def has_high_value_business_signal(text):
+    for term in HIGH_VALUE_BUSINESS_TERMS:
+        if term == "acquisition":
+            if has_acquisition_event_signal(text):
+                return True
+            continue
+        if term in text:
+            return True
+    return False
+
+
 def has_routine_operational_signal(text):
     return contains_any_phrase(text, ROUTINE_OPERATIONAL_TERMS)
 
@@ -560,6 +686,44 @@ def has_low_value_event_signal(text):
     return contains_any_phrase(text, LOW_VALUE_EVENT_TERMS)
 
 
+def is_routine_enforcement_termination(text):
+    return contains_any_phrase(text, ROUTINE_ENFORCEMENT_TERMINATION_TERMS)
+
+
+def is_financial_market_settlement_signal(text):
+    if not contains_term(text, "settlement") and "settlements" not in text:
+        return False
+    if contains_any_phrase(text, FINANCIAL_MARKET_SETTLEMENT_CONTEXT_TERMS):
+        return True
+    if contains_any_phrase(text, NON_FINANCIAL_SETTLEMENT_CONTEXT_TERMS):
+        return False
+    return contains_any_phrase(
+        text,
+        (
+            "securities",
+            "trades",
+            "clearing",
+            "post-trade",
+            "post trade",
+            "central securities depository",
+            "collateral",
+            "repo",
+            "digital asset",
+            "institutional",
+            "local currency transaction",
+            "payment system",
+        ),
+    )
+
+
+def is_consumer_scam_alert_without_material_impact(text):
+    if not contains_any_phrase(text, CONSUMER_SCAM_ALERT_TERMS):
+        return False
+    if contains_any_phrase(text, SCAM_MATERIAL_OVERRIDE_TERMS):
+        return False
+    return contains_any_phrase(text, CONSUMER_SCAM_CONTEXT_TERMS)
+
+
 # Scoring
 
 def score_item(item):
@@ -576,11 +740,19 @@ def score_item(item):
     reasons = []
 
     for term in POSITIVE_TERMS[bucket]:
+        if term == "settlement" and not is_financial_market_settlement_signal(text):
+            continue
+        if term == "acquisition" and not has_acquisition_event_signal(text):
+            continue
         if term in text:
             score += 2
             reasons.append(term)
 
     for term in HIGH_IMPORTANCE_TERMS:
+        if term == "settlement" and not is_financial_market_settlement_signal(text):
+            continue
+        if term == "acquisition" and not has_acquisition_event_signal(text):
+            continue
         if term in text:
             score += 2
             reasons.append(f"important:{term}")
@@ -592,10 +764,12 @@ def score_item(item):
 
     if bucket in ("dbg", "competitor"):
         for term in HIGH_VALUE_BUSINESS_TERMS:
+            if term == "acquisition" and not has_acquisition_event_signal(text):
+                continue
             if term in text:
                 score += 6
                 reasons.append(f"hard_signal:{term}")
-    elif contains_any_phrase(text, HIGH_VALUE_BUSINESS_TERMS):
+    elif has_high_value_business_signal(text):
         score += 4
         reasons.append("hard_signal:business_development")
 
@@ -643,6 +817,14 @@ def score_item(item):
     if is_nasdaq_routine_short_interest(item, text):
         score -= 8
         reasons.append("downrank:nasdaq_routine_short_interest")
+
+    if is_routine_enforcement_termination(text):
+        score -= 6
+        reasons.append("downrank:routine_enforcement_termination")
+
+    if is_consumer_scam_alert_without_material_impact(text):
+        score -= 8
+        reasons.append("downrank:consumer_scam_alert")
 
     if has_low_value_event_signal(text):
         score -= 8

@@ -104,6 +104,54 @@ class CompetitorMappingGoldCases(unittest.TestCase):
 
         self.assert_mapping(value, "Other / Cross-business", forbidden="Eurex")
 
+    def test_energy_futures_map_to_eex_before_generic_derivatives(self):
+        value = competitor(
+            "JJ-Link Phase 2 Launches Offering Forward Transactions Based on the Electricity Futures Market",
+            "The offering is based on the electricity futures market.",
+            source="日本交易所集团",
+            brand="JPX",
+        )
+
+        self.assert_mapping(value, "EEX", forbidden="Eurex")
+
+    def test_cash_listing_exchange_figures_without_derivatives_map_cross_business(self):
+        value = competitor(
+            "SIX Exchanges Figures: August 2026",
+            "Monthly key figures of SIX Swiss Exchange and BME Exchange on trading and listing activities.",
+            source="瑞士交易所",
+            brand="SIX",
+        )
+
+        self.assert_mapping(value, "Other / Cross-business", forbidden="Eurex")
+
+    def test_broad_multi_business_mou_maps_cross_business(self):
+        value = competitor(
+            "The New York Stock Exchange and Korea Exchange Agree to Memorandum of Understanding for Business Collaboration",
+            "The collaboration covers settlement-cycle modernization, extended trading hours, ETFs, market data and index products.",
+            source="洲际交易所",
+            brand="ICE",
+        )
+
+        self.assert_mapping(value, "Other / Cross-business", forbidden="DBG Market Data")
+
+    def test_derivatives_controls_still_map_to_eurex(self):
+        for value in (
+            competitor(
+                "ICE’s Interest Rate Futures Markets Hit Record Open Interest",
+                "Interest rate futures, Euribor and €STR futures hit record open interest.",
+                source="洲际交易所",
+                brand="ICE",
+            ),
+            competitor(
+                "Exchange launches new equity index derivatives",
+                "New futures and options on an equity index.",
+                source="日本交易所集团",
+                brand="JPX",
+            ),
+        ):
+            with self.subTest(title=value["title_original"]):
+                self.assert_mapping(value, "Eurex", forbidden="EEX")
+
 
 class RelevanceGoldCases(unittest.TestCase):
     def assert_dropped(self, value, reason_part=None):
@@ -194,6 +242,95 @@ class RelevanceGoldCases(unittest.TestCase):
                 "Treasury proposes regulations for tax-exempt bonds",
                 "The proposed regulation concerns municipal securities and tax-exempt bonds.",
                 source="美国财政部",
+            )
+        )
+
+    def test_settlement_requires_financial_market_context(self):
+        score, reason = score_item(
+            item(
+                "ASIC warns insurers cash settlements should not short-change homeowners in need",
+                "Home insurers may be using cash settlements in a significant percentage of insurance claims.",
+                source="澳大利亚证券和投资委员会",
+                subcategory="亚太",
+            )
+        )
+        self.assertNotIn("settlement", reason)
+        self.assertNotIn("important:settlement", reason)
+        self.assertLess(score, MIN_SCORE)
+
+        positive_controls = [
+            item(
+                "SEC Proposes to Modernize Rules for Registered Transfer Agents",
+                "Transfer agents are a key component of the national clearance and settlement system.",
+                source="证券交易委员会",
+            ),
+            item(
+                "DTCC advances T+1 securities settlement",
+                "The update covers securities settlement and post-trade market infrastructure.",
+                source="DTCC",
+                category="Competitor",
+                brand="DTCC",
+            ),
+            item(
+                "Crypto Finance expands institutional digital asset trading and settlement",
+                "The product enables regulated institutional digital-asset settlement.",
+                source="Crypto Finance",
+                category="DBG",
+                brand="Crypto Finance",
+            ),
+            item(
+                "BI and MAS operationalise local-currency transaction settlement framework",
+                "The framework supports settlement of bilateral local-currency transactions.",
+                source="新加坡金融管理局",
+                subcategory="亚太",
+            ),
+        ]
+        for value in positive_controls:
+            with self.subTest(title=value["title_original"]):
+                score, reason = score_item(value)
+                self.assertGreaterEqual(score, MIN_SCORE, reason)
+                self.assertIn("settlement", reason)
+
+    def test_acquisition_requires_event_context(self):
+        score, reason = score_item(
+            item(
+                "Federal Reserve Board announces termination of enforcement actions with United Texas Bank, Quontic Bank Acquisition Corp., and Quontic Bank Holdings Corp.",
+                "The Board announced termination of routine enforcement actions.",
+                source="联邦储备系统",
+            )
+        )
+        self.assertNotIn("important:acquisition", reason)
+        self.assertNotIn("hard_signal:business_development", reason)
+        self.assertIn("downrank:routine_enforcement_termination", reason)
+        self.assertLess(score, MIN_SCORE)
+
+        score, reason = score_item(
+            competitor(
+                "Nasdaq Completes Acquisition of Dasseti",
+                "Nasdaq completed the acquisition of Dasseti to expand private markets capabilities.",
+                source="纳斯达克公司",
+                brand="Nasdaq",
+            )
+        )
+        self.assertGreaterEqual(score, MIN_SCORE, reason)
+        self.assertIn("acquisition", reason)
+
+    def test_consumer_phishing_payment_alert_drops_without_material_impact(self):
+        self.assert_dropped(
+            item(
+                "HKMA reminds public to stay alert to phishing scams targeting binding of payment cards to contactless mobile payments",
+                "The alert reminds retail customers to stay alert to phishing scams involving card binding.",
+                source="香港金融管理局",
+                subcategory="中国",
+            ),
+            "downrank:consumer_scam_alert",
+        )
+        self.assert_kept(
+            item(
+                "Central bank reports large-scale operational incident affecting payment infrastructure",
+                "The notice covers systemic payment infrastructure disruption and market-infrastructure change.",
+                source="香港金融管理局",
+                subcategory="中国",
             )
         )
 
