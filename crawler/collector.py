@@ -7,6 +7,7 @@ from .competitor_mapping import apply_competitor_mapping
 from .date_utils import parse_week_start, week_file_key
 from .dedupe import dedupe_news
 from .event_cluster import cluster_same_event_items
+from .geography import apply_macro_geography
 from .news_model import ensure_news_schema
 from .official_source_parser import (
     collect_asic_media_releases,
@@ -357,7 +358,8 @@ def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR):
         if status["status"] == "success":
             status["status"] = classify_empty_status(status, enabled_by_name.get(name, {}))
 
-    mapped_items = apply_competitor_mapping(clustered)
+    geographically_mapped = apply_macro_geography(clustered)
+    mapped_items = apply_competitor_mapping(geographically_mapped)
     translated = TitleTranslator(enabled=translate, logger=logger).translate(mapped_items)
 
     weekly_payload = {

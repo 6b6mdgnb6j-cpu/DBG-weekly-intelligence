@@ -112,6 +112,22 @@ def normalize_title(value):
     return re.sub(r"\s+", " ", (value or "").strip().lower())
 
 
+def item_text(item):
+    return normalize_title(
+        " ".join(
+            str(value)
+            for value in (
+                item.get("title_original"),
+                item.get("summary"),
+                item.get("source"),
+                item.get("brand"),
+                item.get("mapped_dbg_business"),
+            )
+            if value
+        )
+    )
+
+
 def parse_item_date(value):
     if not value:
         return None
@@ -265,10 +281,30 @@ def evaluate_content(payload, week_start, week_end):
         )
 
     competitor_missing_mapping = []
+    competitor_mapping_warnings = []
+    container_page_issues = []
     for index, item in enumerate(items):
+        title = normalize_title(item.get("title_original") or item.get("title"))
+        text = item_text(item)
+        container_titles = {"podcast", "podcasts", "press releases", "newsroom", "media"}
+        if title in container_titles or title.startswith(("podcast:", "podcasts:", "podcast ", "podcasts ")):
+            container_page_issues.append({"index": index, "title": item.get("title_original") or item.get("title")})
         if item.get("category") != "Competitor":
             continue
         if "competitor_group" in item and "mapped_dbg_business" in item:
+            mapped = item.get("mapped_dbg_business", "")
+            has_derivatives_context = any(term in text for term in ("derivatives", "futures", "options", "clearing", "swap"))
+            if any(term in text for term in ("without derivatives", "no derivatives")):
+                has_derivatives_context = False
+            if mapped == "Eurex" and any(term in text for term in ("etf", "etfs", "cash equity", "listing")) and not has_derivatives_context:
+                competitor_mapping_warnings.append(
+                    {
+                        "index": index,
+                        "title": item.get("title_original") or item.get("title"),
+                        "mapped_dbg_business": mapped,
+                        "reason": "cash/ETF/listing signal mapped to Eurex without derivatives or clearing context",
+                    }
+                )
             continue
         competitor_missing_mapping.append({"index": index, "title": item.get("title_original") or item.get("title")})
     check_result(
@@ -278,6 +314,22 @@ def evaluate_content(payload, week_start, week_end):
         not competitor_missing_mapping,
         "Competitor items should include mapping fields when the current schema provides them.",
         {"issues": competitor_missing_mapping[:10], "count": len(competitor_missing_mapping)},
+    )
+    check_result(
+        checks,
+        "no_obvious_container_pages",
+        WARNING,
+        not container_page_issues,
+        "Final items should not include obvious container/listing pages.",
+        {"issues": container_page_issues[:10], "count": len(container_page_issues)},
+    )
+    check_result(
+        checks,
+        "competitor_mapping_signals_consistent",
+        WARNING,
+        not competitor_mapping_warnings,
+        "Competitor business mapping should not contradict strong content signals.",
+        {"issues": competitor_mapping_warnings[:10], "count": len(competitor_mapping_warnings)},
     )
 
     return checks, issues, {"final_items": final_count, "highlights": highlight_count}

@@ -94,6 +94,37 @@ TIER_2_HIGHLIGHT_TERMS = [
 ]
 
 
+DBG_STRATEGIC_HIGHLIGHT_TERMS = [
+    "swapclear",
+    "overnight index swap",
+    "overnight index swaps",
+    "ois",
+    "interest rate futures",
+    "euribor",
+    "€str",
+    "estr futures",
+    "order book requirement",
+    "sef",
+    "clearing requirement",
+    "cross-product clearing",
+    "settlement infrastructure",
+    "dlt settlement",
+    "data product",
+    "market data",
+    "benchmark partnership",
+    "major acquisition",
+    "marketaxess",
+]
+
+
+ROUTINE_HIGHLIGHT_CAP_TERMS = [
+    "indicative quarterly review changes",
+    "quarterly review changes",
+    "constituent review",
+    "index series review",
+]
+
+
 LOW_VALUE_HIGHLIGHT_TERMS = [
     "survey",
     "year in review",
@@ -107,6 +138,10 @@ LOW_VALUE_HIGHLIGHT_TERMS = [
     "educational program",
     "investor sentiment",
     "mortgage performance",
+    "action required",
+    "decommission",
+    "decommissioning",
+    "effective 31 december",
 ]
 
 
@@ -132,6 +167,12 @@ def highlight_score(item):
         return 0
     if has_routine_operational_signal(text) and not routine_operational_is_overridden(text):
         return 0
+    if contains_any_phrase(text, LOW_VALUE_HIGHLIGHT_TERMS) and not (
+        contains_any_phrase(text, DBG_STRATEGIC_HIGHLIGHT_TERMS)
+        or contains_any_phrase(text, TIER_1_HIGHLIGHT_TERMS)
+        or contains_any_phrase(text, MONETARY_POLICY_HIGHLIGHT_TERMS)
+    ):
+        return 0
 
     score = int(item.get("relevance_score") or 0)
     score += SOURCE_IMPORTANCE.get(item.get("source", ""), 0)
@@ -147,6 +188,8 @@ def highlight_score(item):
         score += 7
     if contains_any_phrase(text, HIGH_VALUE_BUSINESS_TERMS):
         score += 5
+    if contains_any_phrase(text, DBG_STRATEGIC_HIGHLIGHT_TERMS):
+        score += 6
     if contains_any_phrase(text, TIER_1_HIGHLIGHT_TERMS):
         score += 10
     elif contains_any_phrase(text, TIER_2_HIGHLIGHT_TERMS):
@@ -162,6 +205,8 @@ def highlight_score(item):
         if contains_any_phrase(text, MARKET_WIDE_TERMS):
             score += 2
     if contains_any_phrase(text, LOW_VALUE_HIGHLIGHT_TERMS):
+        score -= 8
+    if contains_any_phrase(text, ROUTINE_HIGHLIGHT_CAP_TERMS):
         score -= 8
     return score
 

@@ -137,6 +137,16 @@
   },
   "rules": [
     {
+      "id": "ice_interest_rate_derivatives",
+      "priority": 7,
+      "competitor_groups": ["ICE"],
+      "keywords_any": ["interest rate futures", "euribor", "€str", "estr futures", "rates curve"],
+      "competitor_business": "interest_rate_derivatives",
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: ICE interest-rate derivatives and rates futures signal"
+    },
+    {
       "id": "ice_fixed_income_marketplace",
       "priority": 8,
       "competitor_groups": ["ICE"],
@@ -189,6 +199,16 @@
       "mapping_reason": "content_rule: group-level financial results are cross-business"
     },
     {
+      "id": "group_corporate_event",
+      "priority": 12,
+      "competitor_groups": ["Cboe", "JPX", "Euronext", "LSEG", "Nasdaq", "ICE", "SIX", "CME", "B3", "HKEX", "SGX"],
+      "keywords_any": ["completes sale", "announces sale", "divestment", "divestiture", "disposal", "corporate disposal"],
+      "competitor_business": "group_corporate_strategy",
+      "mapped_dbg_business": "Other / Cross-business",
+      "mapping_confidence": "high",
+      "mapping_reason": "content_rule: group-level acquisition/disposal is cross-business unless a specific product rule matched first"
+    },
+    {
       "id": "hashkey_crypto",
       "priority": 20,
       "competitor_groups": ["HashKey"],
@@ -210,7 +230,7 @@
     },
     {
       "id": "lseg_lch_clearing",
-      "priority": 20,
+      "priority": 15,
       "competitor_groups": ["LSEG"],
       "keywords_any": ["lch", "swapclear", "repoclear", "clearing house", "ccp"],
       "competitor_business": "clearing_house",
@@ -273,10 +293,10 @@
       "priority": 24,
       "competitor_groups": ["HKEX"],
       "keywords_any": ["market access", "mainland insurance funds", "etf", "etfs", "exchange-traded fund"],
-      "competitor_business": "exchange_market_access",
-      "mapped_dbg_business": "Eurex",
+      "competitor_business": "cash_equity_etf_market_access",
+      "mapped_dbg_business": "Other / Cross-business",
       "mapping_confidence": "high",
-      "mapping_reason": "content_rule: HKEX market-access/trading product signal"
+      "mapping_reason": "content_rule: cash equity/ETF market-access signal is cross-business without derivatives content"
     },
     {
       "id": "nasdaq_derivatives",

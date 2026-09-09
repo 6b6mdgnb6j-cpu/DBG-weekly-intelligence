@@ -47,6 +47,7 @@ HIGH_VALUE_MACRO_TERMS = [
     "proposed rulemaking",
     "proposed rule",
     "nprm",
+    "proposes to modernize rules",
     "requests comment on proposal",
     "seeks public comment",
     "public consultation",
@@ -213,11 +214,13 @@ NEGATIVE_TERMS = [
     "appointed", "elects", "elected", "management board", "board member",
     "investor warning", "investor warnings", "scam warning", "scam alert",
     "fraudsters impersonate", "agenda", "conference", "speaker", "meeting",
+    "podcast", "podcasts", "hall of fame", "nomination", "nominations",
 ]
 
 
 NON_FINANCIAL_POLICY_TERMS = [
     "narcotics", "cartel", "cartels", "cocaine", "violent gangs",
+    "terrorist networks", "terrorist network", "terrorist", "violent far-left",
     "illegal aliens", "refundable tax credits", "tax credits from abuse",
     "venezuela's economic recovery", "venezuela’s economic recovery",
     "earthquake relief",
@@ -246,6 +249,39 @@ FINANCIAL_POLICY_CONTEXT_TERMS = [
     "systemic risk", "market structure", "broker", "dealer",
     "broker-dealer", "investment fund", "investment funds",
     "asset management", "exchange", "exchanges", "cross-border finance",
+]
+
+
+FINANCIAL_MARKET_OBJECT_TERMS = [
+    "exchange", "exchanges", "trading", "clearing", "settlement",
+    "securities", "derivatives", "asset management", "banking",
+    "payment", "payments", "collateral", "benchmark", "index",
+    "indices", "market data", "financial infrastructure", "fund",
+    "funds", "capital market", "capital markets", "market structure",
+    "bank", "banks", "broker", "dealer", "swap", "swaps", "futures",
+    "options", "etf", "etfs", "bond", "bonds", "repo", "custody",
+]
+
+
+GENERIC_ACTION_TERMS = [
+    "consultation", "public consultation", "proposed rule",
+    "proposed regulation", "proposed regulations", "final rule",
+    "interim final rule", "sanctions", "enforcement", "announcement",
+    "partnership",
+]
+
+
+STANDALONE_STRONG_CONTEXT_TERMS = [
+    "monetary policy", "financial stability", "fomc", "federal open market committee",
+    "systemic risk", "inflation", "interest rate", "interest rates",
+]
+
+
+LOW_VALUE_EVENT_TERMS = [
+    "save the date", "call for nominations", "hall of fame nominations",
+    "award nomination", "awards nomination", "conference participation",
+    "conference agenda", "webinar", "podcast", "podcasts", "diversity speech",
+    "diversity at the european central bank",
 ]
 
 
@@ -435,6 +471,15 @@ def is_clearstream_dlt_settlement_signal(item, text):
     return has_central_bank and has_dlt and has_infra
 
 
+def is_clearstream_monthly_figures_signal(item, text):
+    source = (item.get("source") or "").lower()
+    brand = (item.get("brand") or "").lower()
+    original = normalize_text(item.get("title_original"), item.get("summary_original"), item.get("summary"))
+    if "明讯银行" not in source and "clearstream" not in brand and "clearstream" not in original:
+        return False
+    return "clearstream" in text and "figures" in text
+
+
 def is_lch_ois_clearing_signal(item, text):
     source = (item.get("source") or "").lower()
     original = normalize_text(item.get("title_original"), item.get("summary_original"), item.get("summary"))
@@ -501,6 +546,20 @@ def is_non_financial_policy_context(text):
     return not contains_any_phrase(text, FINANCIAL_POLICY_CONTEXT_TERMS)
 
 
+def lacks_financial_market_object_for_generic_action(text):
+    if contains_any_phrase(text, STANDALONE_STRONG_CONTEXT_TERMS):
+        return False
+    if not contains_any_phrase(text, GENERIC_ACTION_TERMS):
+        return False
+    if contains_any_phrase(text, FINANCIAL_MARKET_OBJECT_TERMS):
+        return False
+    return True
+
+
+def has_low_value_event_signal(text):
+    return contains_any_phrase(text, LOW_VALUE_EVENT_TERMS)
+
+
 # Scoring
 
 def score_item(item):
@@ -565,6 +624,10 @@ def score_item(item):
         score += 8
         reasons.append("source_signal:clearstream_dlt_settlement")
 
+    if is_clearstream_monthly_figures_signal(item, text):
+        score += 6
+        reasons.append("source_signal:clearstream_monthly_figures")
+
     if is_lch_ois_clearing_signal(item, text):
         score += 8
         reasons.append("source_signal:lch_ois_clearing")
@@ -581,6 +644,10 @@ def score_item(item):
         score -= 8
         reasons.append("downrank:nasdaq_routine_short_interest")
 
+    if has_low_value_event_signal(text):
+        score -= 8
+        reasons.append("downrank:low_value_event")
+
     individual_enforcement = is_individual_enforcement(text)
     market_wide = contains_any_phrase(text, MARKET_WIDE_TERMS)
     if individual_enforcement and not market_wide:
@@ -590,6 +657,10 @@ def score_item(item):
     if contains_any_phrase(text, NON_FINANCIAL_POLICY_TERMS) or is_non_financial_policy_context(text):
         score -= 8
         reasons.append("downrank:non_financial_policy")
+
+    if bucket == "macro" and lacks_financial_market_object_for_generic_action(text):
+        score -= 6
+        reasons.append("downrank:no_financial_market_object")
 
     personnel_change = contains_any_phrase(
         text,

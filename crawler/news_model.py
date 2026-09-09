@@ -1,4 +1,5 @@
 import html
+import re
 import unicodedata
 
 from .date_utils import normalize_date
@@ -93,16 +94,55 @@ def normalize_text_encoding(value, clear_garbage=False):
     return text
 
 
+def clean_summary_text(summary, title=""):
+    text = normalize_text_encoding(summary, clear_garbage=True)
+    if not text:
+        return ""
+
+    text = re.sub(r"<\s*br\s*/?\s*>", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = " ".join(text.split())
+
+    boilerplate_markers = (
+        "this is the website of japan exchange group (jpx), which operates tokyo stock exchange, osaka exchange, and tokyo commodity exchange.",
+    )
+    for marker in boilerplate_markers:
+        pattern = re.compile(rf"\s*\|\s*{re.escape(marker)}", flags=re.I)
+        text = pattern.sub("", text)
+
+    title_clean = normalize_text_encoding(title)
+    if title_clean and text.lower().startswith(title_clean.lower()):
+        raw_remainder = text[len(title_clean):]
+        if raw_remainder.startswith((" |", "|", " - ", " – ", " — ", ": ")):
+            remainder = raw_remainder.lstrip(" |-:–—")
+            text = remainder
+        elif clear_title_only_summary(text, title_clean):
+            return ""
+
+    if clear_title_only_summary(text, title_clean):
+        return ""
+    return normalize_text_encoding(text, clear_garbage=True)
+
+
+def clear_title_only_summary(summary, title):
+    if not summary or not title:
+        return False
+    summary_key = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", summary.lower())
+    title_key = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", title.lower())
+    return bool(summary_key and title_key and summary_key == title_key)
+
+
 def standardize_news(source, title, url, date="", summary=""):
     title = normalize_text_encoding(title)
+    summary = clean_summary_text(summary, title)
     return {
         "date": normalize_date(date, source),
         "title_original": title,
         "title_original_lang": "",
         "title_cn": "",
         "title_en": "",
-        "summary": normalize_text_encoding(summary, clear_garbage=True),
-        "summary_original": normalize_text_encoding(summary, clear_garbage=True),
+        "summary": summary,
+        "summary_original": summary,
         "summary_original_lang": "",
         "summary_cn": "",
         "summary_en": "",
