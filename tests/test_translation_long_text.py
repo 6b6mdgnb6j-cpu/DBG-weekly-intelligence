@@ -180,14 +180,47 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
+        self.assertIn("v8", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_chunked_key(self):
-        old_version = "nllb-v1-norepeat-terminology-v6"
+        old_version = "nllb-v1-norepeat-terminology-chunked-v7"
         with patch.object(translator, "GENERATION_CONFIG_VERSION", old_version):
             old_key = _cache_key("model", "en", "zh", "long text", 1)
         new_key = _cache_key("model", "en", "zh", "long text", 1)
         self.assertNotEqual(old_key, new_key)
+
+    def test_intercontinental_exchange_bad_translation_normalizes_to_ice(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "欧元交易所公布市场数据增长",
+            "Intercontinental Exchange reports market data growth",
+            "洲际交易所",
+        )
+        self.assertIn("ICE", normalized)
+        self.assertNotIn("欧元交易所", normalized)
+        self.assertIn("Intercontinental Exchange", changes)
+        self.assertTrue(TranslationSanityValidator.is_valid("Intercontinental Exchange reports market data growth", normalized))
+
+    def test_unrelated_euro_exchange_bad_term_still_rejects(self):
+        result = TranslationSanityValidator.validate_with_reason("Market data growth", "欧元交易所公布市场数据增长")
+        self.assertFalse(result.valid)
+        self.assertEqual(result.reason, "bad_term:欧元交易所")
+
+    def test_eurex_existing_normalization_remains_unchanged(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize("欧元交易所推出清算服务", "Eurex launches clearing service", "Eurex")
+        self.assertIn("Eurex", normalized)
+        self.assertNotIn("欧元交易所", normalized)
+
+    def test_intercontinental_exchange_rule_is_not_headline_specific(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "欧元交易所宣布新的数据服务",
+            "Intercontinental Exchange announces a new data service",
+            "洲际交易所",
+        )
+        self.assertEqual(normalized, "ICE宣布新的数据服务")
 
 
 if __name__ == "__main__":

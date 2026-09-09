@@ -145,6 +145,14 @@ def review_artifact_ready(review_uploaded, validation_code, manifest_code, bundl
     )
 
 
+def workflow_step_status(outcome, exit_code):
+    if outcome == "skipped" or exit_code in (None, "", "unavailable"):
+        return "NOT RUN"
+    if outcome == "success" and str(exit_code) == "0":
+        return "PASS"
+    return "FAILED"
+
+
 def write_review_manifest(output_dir, week_start, generation_commit_sha, generation_run_id):
     if not VALID_RUN_ID_RE.fullmatch(str(generation_run_id or "")):
         raise AutomationValidationError("generation_run_id must contain digits only")

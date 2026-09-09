@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-v7"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-v8"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 MODEL_SOURCE_TOKEN_LIMIT = 512
 DEFAULT_GENERATION_CONFIG = {
@@ -412,6 +412,7 @@ class TerminologyNormalizer:
         ("Euronext", r"欧元集团", "Euronext"),
         ("FDIC", r"联邦银行局|联邦金融监管局", "FDIC"),
         ("FSC", r"联邦书商管理局", "FSC"),
+        ("Intercontinental Exchange", r"欧元交易所", "ICE"),
     ]
 
     def __init__(self):

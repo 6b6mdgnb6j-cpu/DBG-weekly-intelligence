@@ -20,6 +20,7 @@ from automation_pipeline import (
     validate_published_diff_paths,
     validate_source_run_metadata,
     write_review_manifest,
+    workflow_step_status,
 )
 from crawler.translator import LocalNLLBProvider, TitleTranslator, TranslationUnavailableError
 from qa_gate import file_sha256
@@ -312,6 +313,37 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertFalse(review_artifact_ready("false", "0", "0", "0"))
         self.assertFalse(review_artifact_ready("true", "4", "0", "0"))
         self.assertFalse(review_artifact_ready("true", "0", "4", "0"))
+
+    def test_workflow_step_status_distinguishes_not_run_from_failed(self):
+        self.assertEqual(workflow_step_status("success", "0"), "PASS")
+        self.assertEqual(workflow_step_status("skipped", ""), "NOT RUN")
+        self.assertEqual(workflow_step_status("success", ""), "NOT RUN")
+        self.assertEqual(workflow_step_status("success", "4"), "FAILED")
+
+    def test_production_workflow_gates_require_outcome_and_exit_code(self):
+        workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
+        expected_gates = [
+            "steps.tests.outcome == 'success' && steps.tests.outputs.exit_code == '0'",
+            "steps.compile.outcome == 'success' && steps.compile.outputs.exit_code == '0'",
+            "steps.translation_preflight.outcome == 'success' && steps.translation_preflight.outputs.exit_code == '0'",
+            "steps.weekly.outcome == 'success' && steps.weekly.outputs.exit_code == '0'",
+            "steps.bilingual_validation.outcome == 'success' && steps.bilingual_validation.outputs.exit_code == '0'",
+            "steps.manifest.outcome == 'success' && steps.manifest.outputs.exit_code == '0'",
+            "steps.bundle_validation.outcome == 'success' && steps.bundle_validation.outputs.exit_code == '0'",
+        ]
+        for gate in expected_gates:
+            with self.subTest(gate=gate):
+                self.assertIn(gate, workflow)
+
+    def test_review_upload_requires_bundle_validation_success_and_exit_zero(self):
+        workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
+        self.assertIn(
+            "if: steps.bundle_validation.outcome == 'success' && steps.bundle_validation.outputs.exit_code == '0'",
+            workflow,
+        )
+
+    def test_summary_reports_not_run_for_skipped_downstream_steps(self):
+        self.assertEqual(workflow_step_status("skipped", ""), "NOT RUN")
 
 
 if __name__ == "__main__":
