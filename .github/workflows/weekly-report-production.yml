@@ -25,7 +25,6 @@ jobs:
     timeout-minutes: 60
     env:
       TZ: Asia/Shanghai
-      HF_HOME: ${{ runner.temp }}/huggingface
       WEEKLY_REPORT_TRANSLATION_ALLOW_DOWNLOAD: "1"
 
     steps:
@@ -102,6 +101,12 @@ jobs:
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
+
+      - name: Configure translation cache
+        if: steps.tests.outputs.exit_code == '0' && steps.compile.outputs.exit_code == '0'
+        run: |
+          echo "HF_HOME=$RUNNER_TEMP/huggingface" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/huggingface"
 
       - name: Translation preflight
         id: translation_preflight
