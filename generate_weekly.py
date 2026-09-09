@@ -39,8 +39,8 @@ BRAND_ORDER = [
 ]
 
 
-def load_weekly_data(start):
-    path = OUTPUT_DIR / f"weekly_data_{week_file_key(start)}.json"
+def load_weekly_data(start, output_dir=OUTPUT_DIR):
+    path = Path(output_dir) / f"weekly_data_{week_file_key(start)}.json"
     with open(path, encoding="utf-8") as f:
         return json.load(f), path
 
@@ -67,9 +67,10 @@ def build_group_config(items):
     return config
 
 
-def render_report(start_arg=None):
+def render_report(start_arg=None, output_dir=OUTPUT_DIR):
     week_start, _ = parse_week_start(start_arg)
-    payload, weekly_data_path = load_weekly_data(week_start)
+    output_dir = Path(output_dir)
+    payload, weekly_data_path = load_weekly_data(week_start, output_dir=output_dir)
     items = apply_competitor_mapping(payload.get("items", []))
 
     with open(TEMPLATE_FILE, encoding="utf-8") as f:
@@ -92,7 +93,8 @@ def render_report(start_arg=None):
         html.escape(json.dumps(report_data, ensure_ascii=False), quote=False),
     )
 
-    output_path = OUTPUT_DIR / f"weekly_report_{week_file_key(week_start)}.html"
+    output_path = output_dir / f"weekly_report_{week_file_key(week_start)}.html"
+    output_path.parent.mkdir(exist_ok=True, parents=True)
     output_path.write_text(rendered, encoding="utf-8")
 
     return output_path, weekly_data_path, len(highlights)

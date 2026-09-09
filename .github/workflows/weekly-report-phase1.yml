@@ -75,6 +75,7 @@ jobs:
               f.write(f"week_start={start.isoformat()}\n")
               f.write(f"week_end={end.isoformat()}\n")
               f.write(f"compact_week_start={compact}\n")
+              f.write(f"output_dir=output/ci/{compact}\n")
           print(f"Resolved week: {start.isoformat()} to {end.isoformat()}")
           PY
 
@@ -102,7 +103,7 @@ jobs:
         if: steps.tests.outputs.exit_code == '0' && steps.compile.outputs.exit_code == '0'
         run: |
           set +e
-          python3 run_weekly.py --start "${{ steps.week.outputs.week_start }}" --no-translate
+          python3 run_weekly.py --start "${{ steps.week.outputs.week_start }}" --no-translate --output-dir "${{ steps.week.outputs.output_dir }}"
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
@@ -128,11 +129,11 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: |
-            output/weekly_data_${{ steps.week.outputs.compact_week_start }}.json
-            output/source_status_${{ steps.week.outputs.compact_week_start }}.json
-            output/weekly_report_${{ steps.week.outputs.compact_week_start }}.html
-            output/qa_report_${{ steps.week.outputs.compact_week_start }}.json
-            output/qa_report_${{ steps.week.outputs.compact_week_start }}.md
+            ${{ steps.week.outputs.output_dir }}/weekly_data_${{ steps.week.outputs.compact_week_start }}.json
+            ${{ steps.week.outputs.output_dir }}/source_status_${{ steps.week.outputs.compact_week_start }}.json
+            ${{ steps.week.outputs.output_dir }}/weekly_report_${{ steps.week.outputs.compact_week_start }}.html
+            ${{ steps.week.outputs.output_dir }}/qa_report_${{ steps.week.outputs.compact_week_start }}.json
+            ${{ steps.week.outputs.output_dir }}/qa_report_${{ steps.week.outputs.compact_week_start }}.md
 
       - name: Upload debug artifacts
         if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
@@ -144,7 +145,7 @@ jobs:
           path: |
             raw/**/*${{ steps.week.outputs.compact_week_start }}*
             logs/**/*${{ steps.week.outputs.compact_week_start }}*
-            output/*${{ steps.week.outputs.compact_week_start }}*
+            ${{ steps.week.outputs.output_dir }}/*${{ steps.week.outputs.compact_week_start }}*
 
       - name: Write job summary
         if: always()
@@ -152,6 +153,7 @@ jobs:
           WEEK_START: ${{ steps.week.outputs.week_start }}
           WEEK_END: ${{ steps.week.outputs.week_end }}
           COMPACT_WEEK_START: ${{ steps.week.outputs.compact_week_start }}
+          CI_OUTPUT_DIR: ${{ steps.week.outputs.output_dir }}
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
           COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
           WEEKLY_EXIT_CODE: ${{ steps.weekly.outputs.exit_code }}
@@ -168,8 +170,9 @@ jobs:
           week_start = value("WEEK_START")
           week_end = value("WEEK_END")
           compact = value("COMPACT_WEEK_START", "")
-          qa_path = Path("output") / f"qa_report_{compact}.json"
-          weekly_path = Path("output") / f"weekly_data_{compact}.json"
+          output_dir = Path(value("CI_OUTPUT_DIR", "output"))
+          qa_path = output_dir / f"qa_report_{compact}.json"
+          weekly_path = output_dir / f"weekly_data_{compact}.json"
           qa = None
           weekly = None
           qa_error = ""

@@ -23,6 +23,7 @@ def payload(items=None, highlights=None):
     return {
         "week_start": "2020-01-01",
         "week_end": "2020-01-07",
+        "translation_mode": "bilingual",
         "source_count": 5,
         "registered_source_count": 5,
         "item_count": len(items),
@@ -88,6 +89,8 @@ class QAGateTests(unittest.TestCase):
         report = self.evaluate()
         self.assertEqual(report["status"], PASS)
         self.assertEqual(report["publish_recommendation"], "ready_for_manual_review")
+        self.assertEqual(report["translation_mode"], "bilingual")
+        self.assertEqual(report["summary"]["translation_mode"], "bilingual")
 
     def test_known_blocked_source_does_not_warn_or_fail(self):
         report = self.evaluate(statuses=[source_status("KNOWN_BLOCKED", "blocked")])
@@ -248,6 +251,31 @@ class QAPolicyTests(unittest.TestCase):
             self.assertEqual(artifacts["weekly_data_sha256"], file_sha256(weekly_path))
             self.assertEqual(artifacts["source_status"], str(status_path))
             self.assertEqual(artifacts["source_status_sha256"], file_sha256(status_path))
+
+    def test_run_qa_writes_report_files_to_output_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            weekly_path = root / "weekly.json"
+            status_path = root / "source_status.json"
+            policy_path = root / "qa_policy.json"
+            sources_path = root / "sources.json"
+            output_dir = root / "ci" / "20200101"
+            weekly_path.write_text(json.dumps(payload()), encoding="utf-8")
+            status_path.write_text(json.dumps([source_status("HEALTHY")]), encoding="utf-8")
+            policy_path.write_text(json.dumps(base_policy()), encoding="utf-8")
+            sources_path.write_text("[]", encoding="utf-8")
+
+            result = run_qa(
+                weekly_data_path=weekly_path,
+                source_status_path=status_path,
+                policy_path=policy_path,
+                sources_path=sources_path,
+                output_dir=output_dir,
+            )
+
+            self.assertEqual(result["json_path"].parent, output_dir)
+            self.assertEqual(result["md_path"].parent, output_dir)
+            self.assertEqual(result["report"]["translation_mode"], "bilingual")
 
 
 if __name__ == "__main__":

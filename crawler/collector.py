@@ -41,9 +41,10 @@ def load_sources():
         return json.load(f)
 
 
-def setup_logger(start):
-    LOG_DIR.mkdir(exist_ok=True)
-    log_file = LOG_DIR / f"collect_{week_file_key(start)}.log"
+def setup_logger(start, log_dir=LOG_DIR):
+    log_dir = Path(log_dir)
+    log_dir.mkdir(exist_ok=True, parents=True)
+    log_file = log_dir / f"collect_{week_file_key(start)}.log"
 
     logger = logging.getLogger("weekly_report.collector")
     logger.setLevel(logging.INFO)
@@ -63,7 +64,7 @@ def setup_logger(start):
 
 
 def save_json(path, data):
-    path.parent.mkdir(exist_ok=True)
+    path.parent.mkdir(exist_ok=True, parents=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -171,9 +172,10 @@ def strip_internal_fields(item):
     return clean
 
 
-def collect_week(start_arg=None, translate=True):
+def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR):
     week_start, week_end = parse_week_start(start_arg)
-    logger, log_file = setup_logger(week_start)
+    output_dir = Path(output_dir)
+    logger, log_file = setup_logger(week_start, LOG_DIR)
     sources = load_sources()
     enabled_sources = [source for source in sources if source.get("enabled", True)]
 
@@ -361,6 +363,7 @@ def collect_week(start_arg=None, translate=True):
     weekly_payload = {
         "week_start": str(week_start),
         "week_end": str(week_end),
+        "translation_mode": "bilingual" if translate else "no_translate",
         "source_count": len(enabled_sources),
         "registered_source_count": len(sources),
         "item_count": len(translated),
@@ -381,9 +384,9 @@ def collect_week(start_arg=None, translate=True):
         "items": translated,
     }
 
-    weekly_data_path = OUTPUT_DIR / f"weekly_data_{week_file_key(week_start)}.json"
-    status_path = OUTPUT_DIR / f"source_status_{week_file_key(week_start)}.json"
-    rejected_path = OUTPUT_DIR / f"relevance_rejected_{week_file_key(week_start)}.json"
+    weekly_data_path = output_dir / f"weekly_data_{week_file_key(week_start)}.json"
+    status_path = output_dir / f"source_status_{week_file_key(week_start)}.json"
+    rejected_path = output_dir / f"relevance_rejected_{week_file_key(week_start)}.json"
     save_json(weekly_data_path, weekly_payload)
     save_json(status_path, source_statuses)
     save_json(rejected_path, relevance_rejected)

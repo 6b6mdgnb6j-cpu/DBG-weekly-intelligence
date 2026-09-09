@@ -14,6 +14,7 @@ def weekly_payload(**overrides):
     payload = {
         "week_start": "2020-01-01",
         "week_end": "2020-01-07",
+        "translation_mode": "bilingual",
         "source_count": 5,
         "registered_source_count": 5,
         "item_count": 1,
@@ -43,6 +44,7 @@ def write_qa(root, weekly_path, status="PASS", **overrides):
     report = {
         "week_start": "2020-01-01",
         "week_end": "2020-01-07",
+        "translation_mode": "bilingual",
         "status": status,
         "summary": {"final_items": 1, "highlights": 1},
         "checks": [],
@@ -126,6 +128,49 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             self.assertEqual(report["status"], "WARNING")
             self.assertTrue(archive.exists())
             self.assertTrue(latest.exists())
+
+    def test_no_translate_artifact_blocks_publish(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp, weekly_payload(translation_mode="no_translate"))
+            qa = write_qa(tmp, weekly, "PASS", translation_mode="no_translate")
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=Path(tmp) / "published")
+            self.assertEqual(ctx.exception.exit_code, 4)
+            self.assertIn("not bilingual", str(ctx.exception))
+
+    def test_warning_approval_does_not_allow_no_translate_publish(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp, weekly_payload(translation_mode="no_translate"))
+            qa = write_qa(tmp, weekly, "WARNING", translation_mode="no_translate")
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=Path(tmp) / "published",
+                    approve_warning=True,
+                )
+            self.assertEqual(ctx.exception.exit_code, 4)
+            self.assertIn("not bilingual", str(ctx.exception))
+
+    def test_legacy_artifact_without_translation_mode_blocks_publish(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = weekly_payload()
+            payload.pop("translation_mode")
+            weekly = write_weekly(tmp, payload)
+            qa = write_qa(tmp, weekly, "PASS", translation_mode="")
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=Path(tmp) / "published")
+            self.assertEqual(ctx.exception.exit_code, 4)
+            self.assertIn("not bilingual", str(ctx.exception))
+
+    def test_qa_translation_mode_mismatch_blocks_publish(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS", translation_mode="no_translate")
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=Path(tmp) / "published")
+            self.assertEqual(ctx.exception.exit_code, 4)
+            self.assertIn("translation mode", str(ctx.exception))
 
     def test_fail_blocks_even_with_warning_approval(self):
         with tempfile.TemporaryDirectory() as tmp:

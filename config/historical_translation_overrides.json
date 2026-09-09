@@ -1,0 +1,24 @@
+{
+  "https://www.jpx.co.jp/english/corporate/news/news-releases/0060/20260727-01.html": {
+    "summary_cn": "大阪交易所欢迎大起证券成为 OSE 商品期货和期权的经纪交易参与者。该页面来自运营东京证券交易所、大阪交易所和东京商品交易所的日本交易所集团（JPX）官网。"
+  },
+  "https://www.jpx.co.jp/english/corporate/news/news-releases/6020/20260727-01.html": {
+    "summary_cn": "JPXI 为 J-Quants Pro 新增所有权数据集。该页面来自运营东京证券交易所、大阪交易所和东京商品交易所的日本交易所集团（JPX）官网。"
+  },
+  "https://www.jpx.co.jp/english/corporate/news/news-releases/0060/20260729-01.html": {
+    "summary_cn": "JPXI 与 QUICK 将联合运营“JPX-QUICK 加密资产指数系列”。该页面来自运营东京证券交易所、大阪交易所和东京商品交易所的日本交易所集团（JPX）官网。"
+  },
+  "https://www.eex.com/en/newsroom/detail?tx_news_pi1%5Baction%5D=detail&tx_news_pi1%5Bcontroller%5D=News&tx_news_pi1%5Bnews%5D=15561&cHash=8e1357f5dd376be2efa8f01c335574f0": {
+    "title_cn": "市场更新 - EEX 衍生品市场扩展与统一：新增天然气期货、延长期限，并统一天然气和电力期权产品",
+    "summary_cn": "继推出新的 EEX 天然气期货、增加新期限并统一 EEX 电力和天然气期权产品后，EEX 扩展了市场数据组合。相关市场数据已加入 EEX Group DataSource 产品。"
+  },
+  "https://www.cftc.gov/PressRoom/PressReleases/9286-26": {
+    "summary_cn": "CFTC 发布征求意见请求，以进一步了解并加强对算力衍生品市场的监管。"
+  },
+  "https://ir.theice.com/press/news-details/2026/ICEs-Interest-Rate-Futures-Markets-Hit-Record-Open-Interest/default.aspx": {
+    "summary_cn": "受 Euribor 和欧元短期利率（€STR）期货未平仓合约创纪录推动，ICE 宣布其利率期货市场未平仓合约达到纪录水平。2026 年 9 月 2 日，ICE 利率期货市场未平仓合约达 1450 万张，同比增长 25%；其中 ICE Euribor 期货未平仓合约达 580 万张，同比增长 16%，ICE €STR 期货未平仓合约达 330 万张，同比增长 109%。"
+  },
+  "https://www.sec.gov/newsroom/press-releases/2026-80-sec-fda-announce-mou-bolster-cooperation-ensure-market-integrity": {
+    "summary_cn": "美国证券交易委员会（SEC）和美国食品药品监督管理局（FDA）宣布签署谅解备忘录，旨在协助两家机构履行各自职责，维护市场诚信并加强合作。"
+  }
+}

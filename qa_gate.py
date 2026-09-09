@@ -513,6 +513,7 @@ def evaluate_qa(weekly_payload, source_statuses, policy, sources, today=None):
         "registered_source_count": weekly_payload.get("registered_source_count", ""),
         "source_status_count": len(source_statuses),
         "pipeline_counts": weekly_payload.get("pipeline_counts", {}),
+        "translation_mode": weekly_payload.get("translation_mode", ""),
     }
     return {
         "week_start": str(week_start),
@@ -528,6 +529,7 @@ def evaluate_qa(weekly_payload, source_statuses, policy, sources, today=None):
         "unexpected_failures": source_result["unexpected_failures"],
         "global_retry": source_result["global_retry"],
         "publish_recommendation": publish_recommendation(status),
+        "translation_mode": weekly_payload.get("translation_mode", ""),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }
 
@@ -545,6 +547,7 @@ def render_markdown(report):
         f"- Week: {report['week_start']} to {report['week_end']}",
         f"- Final items: {report['summary']['final_items']}",
         f"- Highlights: {report['summary']['highlights']}",
+        f"- Translation mode: {report.get('translation_mode', '') or 'unknown'}",
         f"- Publish recommendation: {report['publish_recommendation']}",
         "",
         "## Blocking Issues",
@@ -570,11 +573,12 @@ def render_markdown(report):
     return "\n".join(lines) + "\n"
 
 
-def write_reports(report):
-    OUTPUT_DIR.mkdir(exist_ok=True)
+def write_reports(report, output_dir=OUTPUT_DIR):
+    output_dir = Path(output_dir)
+    output_dir.mkdir(exist_ok=True, parents=True)
     key = report["week_start"].replace("-", "")
-    json_path = OUTPUT_DIR / f"qa_report_{key}.json"
-    md_path = OUTPUT_DIR / f"qa_report_{key}.md"
+    json_path = output_dir / f"qa_report_{key}.json"
+    md_path = output_dir / f"qa_report_{key}.md"
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     md_path.write_text(render_markdown(report), encoding="utf-8")
     return json_path, md_path
@@ -588,10 +592,11 @@ def qa_exit_code(status, fail_on_warning=False):
     return 0
 
 
-def artifact_paths(start):
+def artifact_paths(start, output_dir=OUTPUT_DIR):
     week_start, _ = parse_week_start(start)
     key = week_file_key(week_start)
-    return OUTPUT_DIR / f"weekly_data_{key}.json", OUTPUT_DIR / f"source_status_{key}.json"
+    output_dir = Path(output_dir)
+    return output_dir / f"weekly_data_{key}.json", output_dir / f"source_status_{key}.json"
 
 
 def run_qa(
@@ -603,12 +608,13 @@ def run_qa(
     fail_on_warning=False,
     write_report_files=True,
     expected_week_start=None,
+    output_dir=OUTPUT_DIR,
 ):
     if weekly_data_path and source_status_path:
         weekly_path = Path(weekly_data_path)
         status_path = Path(source_status_path)
     elif start:
-        weekly_path, status_path = artifact_paths(start)
+        weekly_path, status_path = artifact_paths(start, output_dir=output_dir)
     else:
         raise QAExecutionError("Provide start or both weekly_data_path and source_status_path.")
 
@@ -642,7 +648,7 @@ def run_qa(
     json_path = None
     md_path = None
     if write_report_files:
-        json_path, md_path = write_reports(report)
+        json_path, md_path = write_reports(report, output_dir=output_dir)
 
     return {
         "status": report["status"],
@@ -665,6 +671,7 @@ def parse_args(argv=None):
     parser.add_argument("--policy", default=str(POLICY_FILE), help="Path to QA policy JSON.")
     parser.add_argument("--sources", default=str(SOURCE_FILE), help="Path to sources.json.")
     parser.add_argument("--fail-on-warning", action="store_true", help="Return non-zero for WARNING as well as FAIL.")
+    parser.add_argument("--output-dir", default=str(OUTPUT_DIR), help="Directory for default weekly/QA artifacts.")
     return parser.parse_args(argv)
 
 
@@ -678,6 +685,7 @@ def main(argv=None):
             policy_path=args.policy,
             sources_path=args.sources,
             fail_on_warning=args.fail_on_warning,
+            output_dir=args.output_dir,
         )
     except QAExecutionError as exc:
         print(f"QA EXECUTION ERROR: {exc}", file=sys.stderr)

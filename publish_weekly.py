@@ -15,8 +15,9 @@ PUBLISHED_DIR = BASE_DIR / "published"
 ARCHIVE_DIR = PUBLISHED_DIR / "archive"
 
 SOURCE_REQUIRED_FIELDS = ("week_start", "week_end", "items", "source_count")
-PUBLISHED_REQUIRED_FIELDS = ("week_start", "week_end", "items", "highlights", "sections", "source_count")
+PUBLISHED_REQUIRED_FIELDS = ("week_start", "week_end", "translation_mode", "items", "highlights", "sections", "source_count")
 VALID_QA_STATUSES = {PASS, WARNING, FAIL}
+PUBLISHABLE_TRANSLATION_MODE = "bilingual"
 
 
 class PublishBlockedError(Exception):
@@ -51,6 +52,8 @@ def validate_source_payload(payload):
         raise ValueError("Source weekly JSON field 'items' must be a list.")
     if not payload.get("week_start") or not payload.get("week_end"):
         raise ValueError("Source weekly JSON must include non-empty week_start and week_end.")
+    if payload.get("translation_mode") != PUBLISHABLE_TRANSLATION_MODE:
+        raise PublishBlockedError("weekly artifact is not bilingual production output", 4)
 
 
 def build_published_payload(payload):
@@ -58,6 +61,7 @@ def build_published_payload(payload):
     published = {
         "week_start": payload.get("week_start"),
         "week_end": payload.get("week_end"),
+        "translation_mode": payload.get("translation_mode"),
         "source_count": payload.get("source_count"),
         "registered_source_count": payload.get("registered_source_count", payload.get("source_count")),
         "item_count": payload.get("item_count", len(items)),
@@ -176,6 +180,8 @@ def validate_qa_guard(payload, source_path, approve_warning=False, qa_report_pat
 
     if payload.get("week_start") != report.get("week_start") or payload.get("week_end") != report.get("week_end"):
         raise PublishBlockedError("QA report week does not match weekly data", 4)
+    if report.get("translation_mode") != payload.get("translation_mode"):
+        raise PublishBlockedError("QA report translation mode does not match weekly artifact", 4)
 
     artifacts = report.get("input_artifacts") or {}
     expected_hash = artifacts.get("weekly_data_sha256")

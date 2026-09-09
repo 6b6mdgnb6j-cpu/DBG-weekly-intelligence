@@ -71,6 +71,7 @@ class RunWeeklyIntegrationTests(unittest.TestCase):
             "no_translate": False,
             "skip_qa": False,
             "fail_on_warning": False,
+            "output_dir": "output",
         }
         defaults.update(overrides)
         return argparse.Namespace(**defaults)
@@ -158,8 +159,20 @@ class RunWeeklyIntegrationTests(unittest.TestCase):
                 args=self.args(no_translate=True),
             )
         self.assertEqual(code, 0)
-        collect_mock.assert_called_once_with(start_arg="2020-01-01", translate=False)
+        collect_mock.assert_called_once_with(start_arg="2020-01-01", translate=False, output_dir="output")
         qa_mock.assert_called_once()
+
+    def test_output_dir_is_passed_to_generation_render_and_qa(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = str(Path(tmp) / "ci" / "20200101")
+            code, _, collect_mock, render_mock, qa_mock, _ = self.run_with_mocks(
+                Path(tmp),
+                args=self.args(output_dir=output_dir),
+            )
+        self.assertEqual(code, 0)
+        collect_mock.assert_called_once_with(start_arg="2020-01-01", translate=True, output_dir=output_dir)
+        render_mock.assert_called_once_with("2020-01-01", output_dir=output_dir)
+        self.assertEqual(qa_mock.call_args.kwargs["output_dir"], output_dir)
 
     def test_qa_report_paths_are_surfaced(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -191,6 +204,11 @@ class RunWeeklyCLITests(unittest.TestCase):
         with patch("sys.argv", ["run_weekly.py", "--fail-on-warning"]):
             args = run_weekly.parse_args()
         self.assertTrue(args.fail_on_warning)
+
+    def test_parse_output_dir_flag(self):
+        with patch("sys.argv", ["run_weekly.py", "--output-dir", "output/ci/20200101"]):
+            args = run_weekly.parse_args()
+        self.assertEqual(args.output_dir, "output/ci/20200101")
 
 
 if __name__ == "__main__":

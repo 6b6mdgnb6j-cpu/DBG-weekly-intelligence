@@ -12,6 +12,7 @@ def parse_args():
     parser.add_argument("--no-translate", action="store_true", help="Skip title translation.")
     parser.add_argument("--skip-qa", action="store_true", help="Skip post-generation QA gate.")
     parser.add_argument("--fail-on-warning", action="store_true", help="Return non-zero when QA status is WARNING.")
+    parser.add_argument("--output-dir", default="output", help="Directory for weekly output artifacts.")
     return parser.parse_args()
 
 
@@ -73,8 +74,8 @@ def print_qa_summary(qa_result):
 
 
 def run_weekly(args):
-    result = collect_week(start_arg=args.start, translate=not args.no_translate)
-    html_path, weekly_data_path, highlight_count = render_report(args.start)
+    result = collect_week(start_arg=args.start, translate=not args.no_translate, output_dir=args.output_dir)
+    html_path, weekly_data_path, highlight_count = render_report(args.start, output_dir=args.output_dir)
 
     print_generation_summary(result, html_path, weekly_data_path, highlight_count)
 
@@ -88,6 +89,7 @@ def run_weekly(args):
             source_status_path=result["source_status_path"],
             fail_on_warning=args.fail_on_warning,
             expected_week_start=result["week_start"],
+            output_dir=args.output_dir,
         )
     except Exception as exc:
         print("\nQA EXECUTION ERROR")
