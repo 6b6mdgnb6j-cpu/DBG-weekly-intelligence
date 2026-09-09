@@ -2,6 +2,7 @@ import argparse
 import json
 import re
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -72,6 +73,78 @@ def artifact_path(output_dir, kind, week_start):
     return Path(output_dir) / artifact_filename(kind, week_start)
 
 
+def translation_preflight(provider_factory=None, attempts=3, sleep_seconds=5):
+    if provider_factory is None:
+        from crawler.translator import LocalNLLBProvider
+
+        provider_factory = LocalNLLBProvider
+
+    try:
+        import torch  # noqa: F401
+        import transformers  # noqa: F401
+    except Exception as exc:
+        raise AutomationValidationError(f"TRANSLATION PREFLIGHT FAILED: dependency unavailable: {exc}") from exc
+
+    last_error = ""
+    for attempt in range(1, attempts + 1):
+        provider = provider_factory()
+        try:
+            output = provider.translate(
+                "Clearstream settlement update",
+                source_lang="en",
+                target_lang="zh",
+            )
+        except Exception as exc:
+            output = ""
+            last_error = str(exc)
+        if output and output.strip():
+            return True
+        last_error = last_error or getattr(provider, "load_error", "") or "empty translation output"
+        if attempt < attempts:
+            time.sleep(sleep_seconds * attempt)
+
+    raise AutomationValidationError(f"TRANSLATION PREFLIGHT FAILED: model download/load unavailable: {last_error}")
+
+
+def validate_bilingual_artifacts(output_dir, week_start):
+    validate_week_start(week_start)
+    output_dir = Path(output_dir)
+    weekly = artifact_path(output_dir, "weekly_data", week_start)
+    source_status = artifact_path(output_dir, "source_status", week_start)
+    qa_report = artifact_path(output_dir, "qa_report", week_start)
+    html = artifact_path(output_dir, "html", week_start)
+
+    for path in (weekly, source_status, qa_report, html):
+        if not path.exists():
+            raise AutomationValidationError(f"required artifact missing before manifest: {path.name}")
+
+    weekly_payload = load_json(weekly)
+    qa_payload = load_json(qa_report)
+    validate_bilingual_payload(weekly_payload)
+    validate_qa_binding(weekly_payload, weekly, qa_payload, week_start)
+    if not html.read_text(encoding="utf-8", errors="replace").strip():
+        raise AutomationValidationError("HTML artifact is empty")
+    return True
+
+
+def summary_highlight_count(weekly_payload, qa_payload):
+    qa_summary = qa_payload.get("summary") if isinstance(qa_payload, dict) else {}
+    qa_highlights = qa_summary.get("highlights") if isinstance(qa_summary, dict) else None
+    if isinstance(qa_highlights, int):
+        return qa_highlights
+    highlights = weekly_payload.get("highlights") if isinstance(weekly_payload, dict) else []
+    return len(highlights) if isinstance(highlights, list) else 0
+
+
+def review_artifact_ready(review_uploaded, validation_code, manifest_code, bundle_validation_code):
+    return (
+        str(review_uploaded).lower() == "true"
+        and str(validation_code) == "0"
+        and str(manifest_code) == "0"
+        and str(bundle_validation_code) == "0"
+    )
+
+
 def write_review_manifest(output_dir, week_start, generation_commit_sha, generation_run_id):
     if not VALID_RUN_ID_RE.fullmatch(str(generation_run_id or "")):
         raise AutomationValidationError("generation_run_id must contain digits only")
@@ -84,10 +157,9 @@ def write_review_manifest(output_dir, week_start, generation_commit_sha, generat
     qa_markdown = artifact_path(output_dir, "qa_markdown", week_start)
     html = artifact_path(output_dir, "html", week_start)
 
+    validate_bilingual_artifacts(output_dir, week_start)
     weekly_payload = load_json(weekly)
     qa_payload = load_json(qa_report)
-    validate_bilingual_payload(weekly_payload)
-    validate_qa_binding(weekly_payload, weekly, qa_payload, week_start)
 
     artifacts = {}
     for key, path in (
@@ -254,11 +326,27 @@ def cli(argv=None):
     validate.add_argument("--current-main-sha")
     validate.add_argument("--approve-warning", action="store_true")
 
+    preflight = sub.add_parser("translation-preflight")
+    preflight.add_argument("--attempts", type=int, default=3)
+    preflight.add_argument("--sleep-seconds", type=int, default=5)
+
+    bilingual = sub.add_parser("validate-bilingual")
+    bilingual.add_argument("--output-dir", required=True)
+    bilingual.add_argument("--week-start", required=True)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "manifest":
             path = write_review_manifest(args.output_dir, args.week_start, args.generation_sha, args.generation_run_id)
             print(path)
+            return 0
+        if args.command == "translation-preflight":
+            translation_preflight(attempts=args.attempts, sleep_seconds=args.sleep_seconds)
+            print("TRANSLATION PREFLIGHT: PASS")
+            return 0
+        if args.command == "validate-bilingual":
+            validate_bilingual_artifacts(args.output_dir, args.week_start)
+            print("BILINGUAL VALIDATION: PASS")
             return 0
         if args.command == "validate-bundle":
             manifest_payload = validate_manifest(

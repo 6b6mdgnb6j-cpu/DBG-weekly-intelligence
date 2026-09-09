@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import run_weekly
+from crawler.translator import TranslationUnavailableError
 from qa_gate import QAExecutionError
 
 
@@ -72,6 +73,7 @@ class RunWeeklyIntegrationTests(unittest.TestCase):
             "skip_qa": False,
             "fail_on_warning": False,
             "output_dir": "output",
+            "require_translation": False,
         }
         defaults.update(overrides)
         return argparse.Namespace(**defaults)
@@ -159,7 +161,12 @@ class RunWeeklyIntegrationTests(unittest.TestCase):
                 args=self.args(no_translate=True),
             )
         self.assertEqual(code, 0)
-        collect_mock.assert_called_once_with(start_arg="2020-01-01", translate=False, output_dir="output")
+        collect_mock.assert_called_once_with(
+            start_arg="2020-01-01",
+            translate=False,
+            output_dir="output",
+            require_translation=False,
+        )
         qa_mock.assert_called_once()
 
     def test_output_dir_is_passed_to_generation_render_and_qa(self):
@@ -168,11 +175,38 @@ class RunWeeklyIntegrationTests(unittest.TestCase):
             code, _, collect_mock, render_mock, qa_mock, _ = self.run_with_mocks(
                 Path(tmp),
                 args=self.args(output_dir=output_dir),
-            )
+        )
         self.assertEqual(code, 0)
-        collect_mock.assert_called_once_with(start_arg="2020-01-01", translate=True, output_dir=output_dir)
+        collect_mock.assert_called_once_with(
+            start_arg="2020-01-01",
+            translate=True,
+            output_dir=output_dir,
+            require_translation=False,
+        )
         render_mock.assert_called_once_with("2020-01-01", output_dir=output_dir)
         self.assertEqual(qa_mock.call_args.kwargs["output_dir"], output_dir)
+
+    def test_require_translation_failure_returns_nonzero_before_render_and_qa(self):
+        qa_mock = Mock(return_value=qa_result())
+        with patch.object(
+            run_weekly,
+            "collect_week",
+            side_effect=TranslationUnavailableError("model unavailable"),
+        ) as collect_mock, patch.object(run_weekly, "render_report") as render_mock, patch.object(
+            run_weekly, "run_qa", qa_mock
+        ), patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            code = run_weekly.run_weekly(self.args(require_translation=True))
+
+        self.assertEqual(code, 4)
+        collect_mock.assert_called_once_with(
+            start_arg="2020-01-01",
+            translate=True,
+            output_dir="output",
+            require_translation=True,
+        )
+        render_mock.assert_not_called()
+        qa_mock.assert_not_called()
+        self.assertIn("TRANSLATION REQUIRED BUT UNAVAILABLE", stdout.getvalue())
 
     def test_qa_report_paths_are_surfaced(self):
         with tempfile.TemporaryDirectory() as tmp:

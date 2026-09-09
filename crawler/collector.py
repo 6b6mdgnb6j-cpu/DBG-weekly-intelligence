@@ -173,7 +173,7 @@ def strip_internal_fields(item):
     return clean
 
 
-def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR):
+def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR, require_translation=False):
     week_start, week_end = parse_week_start(start_arg)
     output_dir = Path(output_dir)
     logger, log_file = setup_logger(week_start, LOG_DIR)
@@ -360,7 +360,7 @@ def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR):
 
     geographically_mapped = apply_macro_geography(clustered)
     mapped_items = apply_competitor_mapping(geographically_mapped)
-    translated = TitleTranslator(enabled=translate, logger=logger).translate(mapped_items)
+    translated = TitleTranslator(enabled=translate, logger=logger, strict=require_translation).translate(mapped_items)
 
     weekly_payload = {
         "week_start": str(week_start),

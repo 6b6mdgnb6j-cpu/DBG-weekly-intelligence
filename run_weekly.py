@@ -2,6 +2,7 @@ import argparse
 import sys
 
 from crawler.collector import collect_week
+from crawler.translator import TranslationUnavailableError
 from generate_weekly import render_report
 from qa_gate import FAIL, WARNING, run_qa
 
@@ -13,6 +14,7 @@ def parse_args():
     parser.add_argument("--skip-qa", action="store_true", help="Skip post-generation QA gate.")
     parser.add_argument("--fail-on-warning", action="store_true", help="Return non-zero when QA status is WARNING.")
     parser.add_argument("--output-dir", default="output", help="Directory for weekly output artifacts.")
+    parser.add_argument("--require-translation", action="store_true", help="Fail if bilingual translation cannot be completed.")
     return parser.parse_args()
 
 
@@ -74,7 +76,23 @@ def print_qa_summary(qa_result):
 
 
 def run_weekly(args):
-    result = collect_week(start_arg=args.start, translate=not args.no_translate, output_dir=args.output_dir)
+    require_translation = getattr(args, "require_translation", False)
+    if args.no_translate and require_translation:
+        print("\nTRANSLATION CONFIGURATION ERROR")
+        print("--require-translation cannot be used with --no-translate")
+        return 4
+    try:
+        result = collect_week(
+            start_arg=args.start,
+            translate=not args.no_translate,
+            output_dir=args.output_dir,
+            require_translation=require_translation,
+        )
+    except TranslationUnavailableError as exc:
+        print("\nTRANSLATION REQUIRED BUT UNAVAILABLE")
+        print(str(exc))
+        print("No review-ready bilingual artifact should be published.")
+        return 4
     html_path, weekly_data_path, highlight_count = render_report(args.start, output_dir=args.output_dir)
 
     print_generation_summary(result, html_path, weekly_data_path, highlight_count)

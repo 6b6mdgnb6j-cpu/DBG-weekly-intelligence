@@ -25,6 +25,8 @@ jobs:
     timeout-minutes: 60
     env:
       TZ: Asia/Shanghai
+      HF_HOME: ${{ runner.temp }}/huggingface
+      WEEKLY_REPORT_TRANSLATION_ALLOW_DOWNLOAD: "1"
 
     steps:
       - name: Checkout
@@ -101,19 +103,41 @@ jobs:
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Generate bilingual weekly report and QA
-        id: weekly
+      - name: Translation preflight
+        id: translation_preflight
         if: steps.tests.outputs.exit_code == '0' && steps.compile.outputs.exit_code == '0'
         run: |
           set +e
-          python3 run_weekly.py --start "${{ steps.week.outputs.week_start }}" --output-dir "${{ steps.week.outputs.output_dir }}"
+          python3 automation_pipeline.py translation-preflight --attempts 3 --sleep-seconds 5
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Generate bilingual weekly report and QA
+        id: weekly
+        if: steps.translation_preflight.outputs.exit_code == '0'
+        run: |
+          set +e
+          python3 run_weekly.py --start "${{ steps.week.outputs.week_start }}" --output-dir "${{ steps.week.outputs.output_dir }}" --require-translation
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Validate bilingual artifacts before manifest
+        id: bilingual_validation
+        if: steps.weekly.outputs.exit_code == '0'
+        run: |
+          set +e
+          python3 automation_pipeline.py validate-bilingual \
+            --output-dir "${{ steps.week.outputs.output_dir }}" \
+            --week-start "${{ steps.week.outputs.week_start }}"
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Create review manifest
         id: manifest
-        if: steps.weekly.outputs.exit_code == '0' || steps.weekly.outputs.exit_code == '2'
+        if: steps.bilingual_validation.outputs.exit_code == '0'
         run: |
           set +e
           python3 automation_pipeline.py manifest \
@@ -155,7 +179,8 @@ jobs:
           exit 0
 
       - name: Upload review artifacts
-        if: always()
+        id: upload_review
+        if: steps.bundle_validation.outputs.exit_code == '0'
         uses: actions/upload-artifact@v7
         with:
           name: weekly-report-review-${{ steps.week.outputs.week_start }}
@@ -170,7 +195,7 @@ jobs:
             ${{ steps.week.outputs.output_dir }}/review_manifest_${{ steps.week.outputs.compact_week_start }}.json
 
       - name: Upload debug artifacts
-        if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
+        if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.translation_preflight.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.bilingual_validation.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
         uses: actions/upload-artifact@v7
         with:
           name: weekly-report-debug-${{ steps.week.outputs.week_start }}
@@ -190,10 +215,13 @@ jobs:
           PROD_OUTPUT_DIR: ${{ steps.week.outputs.output_dir }}
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
           COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
+          PREFLIGHT_EXIT_CODE: ${{ steps.translation_preflight.outputs.exit_code }}
           WEEKLY_EXIT_CODE: ${{ steps.weekly.outputs.exit_code }}
+          BILINGUAL_VALIDATION_EXIT_CODE: ${{ steps.bilingual_validation.outputs.exit_code }}
           MANIFEST_EXIT_CODE: ${{ steps.manifest.outputs.exit_code }}
           BUNDLE_VALIDATION_EXIT_CODE: ${{ steps.bundle_validation.outputs.exit_code }}
           PUBLISHED_SAFETY_EXIT_CODE: ${{ steps.published_safety.outputs.exit_code }}
+          REVIEW_UPLOADED: ${{ steps.upload_review.outcome == 'success' }}
           GENERATION_RUN_ID: ${{ github.run_id }}
           GENERATION_SHA: ${{ github.sha }}
         run: |
@@ -214,20 +242,25 @@ jobs:
           manifest_path = output_dir / f"review_manifest_{compact}.json"
           qa = json.loads(qa_path.read_text(encoding="utf-8")) if qa_path.exists() else {}
           weekly = json.loads(weekly_path.read_text(encoding="utf-8")) if weekly_path.exists() else {}
+          from automation_pipeline import review_artifact_ready, summary_highlight_count
 
           tests_code = value("TEST_EXIT_CODE")
           compile_code = value("COMPILE_EXIT_CODE")
+          preflight_code = value("PREFLIGHT_EXIT_CODE")
           weekly_code = value("WEEKLY_EXIT_CODE")
+          bilingual_code = value("BILINGUAL_VALIDATION_EXIT_CODE")
           manifest_code = value("MANIFEST_EXIT_CODE")
           validation_code = value("BUNDLE_VALIDATION_EXIT_CODE")
           safety_code = value("PUBLISHED_SAFETY_EXIT_CODE")
-          generation = "SUCCESS" if weekly_code == "0" and manifest_code == "0" and validation_code == "0" else "FAILED"
-          if weekly_code == "2" and manifest_code == "0":
-              generation = "QA FAIL - REVIEW ARTIFACT UPLOADED"
+          review_ready = review_artifact_ready(value("REVIEW_UPLOADED"), bilingual_code, manifest_code, validation_code)
+          generation = "SUCCESS" if weekly_code == "0" and review_ready else "FAILED"
           qa_status = qa.get("status", "unavailable")
           warnings = sum(1 for check in qa.get("checks", []) if check.get("result") == "WARNING") if qa else "unavailable"
           known_gaps = len(qa.get("known_gaps", [])) if qa else "unavailable"
-          validation = "PASS" if validation_code == "0" else "FAILED"
+          validation = "PASS" if bilingual_code == "0" else "FAILED"
+          review_artifact = f"weekly-report-review-{week_start}" if review_ready else "NOT READY"
+          debug_artifact = f"weekly-report-debug-{week_start}" if not review_ready else "not uploaded"
+          highlight_count = summary_highlight_count(weekly, qa)
 
           lines = [
               "# DBG Weekly Report - Production",
@@ -237,11 +270,12 @@ jobs:
               f"- Translation mode: {weekly.get('translation_mode', 'unavailable')}",
               f"- QA status: {qa_status}",
               f"- Final items: {weekly.get('item_count', 'unavailable')}",
-              f"- Highlights: {len(weekly.get('highlights', [])) if weekly else 'unavailable'}",
+              f"- Highlights: {highlight_count}",
               f"- Warnings: {warnings}",
               f"- Known gaps: {known_gaps}",
               f"- Bilingual validation: {validation}",
-              f"- Review artifact: weekly-report-review-{week_start}",
+              f"- Review artifact: {review_artifact}",
+              f"- Debug artifact: {debug_artifact}",
               f"- Generation run ID: {value('GENERATION_RUN_ID')}",
               f"- Generation commit SHA: {value('GENERATION_SHA')}",
               "- Publish: NOT PERFORMED",
@@ -253,9 +287,11 @@ jobs:
               "",
               f"- Tests: {tests_code}",
               f"- Compile: {compile_code}",
+              f"- Translation preflight: {preflight_code}",
               f"- Weekly generation / QA: {weekly_code}",
+              f"- Bilingual validation: {bilingual_code}",
               f"- Manifest: {manifest_code}",
-              f"- Bilingual validation: {validation_code}",
+              f"- Bundle integrity validation: {validation_code}",
               f"- Published safety: {safety_code}",
           ]
           if qa_status == "WARNING":
@@ -277,7 +313,9 @@ jobs:
         env:
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
           COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
+          PREFLIGHT_EXIT_CODE: ${{ steps.translation_preflight.outputs.exit_code }}
           WEEKLY_EXIT_CODE: ${{ steps.weekly.outputs.exit_code }}
+          BILINGUAL_VALIDATION_EXIT_CODE: ${{ steps.bilingual_validation.outputs.exit_code }}
           MANIFEST_EXIT_CODE: ${{ steps.manifest.outputs.exit_code }}
           BUNDLE_VALIDATION_EXIT_CODE: ${{ steps.bundle_validation.outputs.exit_code }}
           PUBLISHED_SAFETY_EXIT_CODE: ${{ steps.published_safety.outputs.exit_code }}
@@ -290,6 +328,10 @@ jobs:
             echo "COMPILE FAILED"
             exit "${COMPILE_EXIT_CODE:-1}"
           fi
+          if [ "${PREFLIGHT_EXIT_CODE:-1}" != "0" ]; then
+            echo "TRANSLATION PREFLIGHT FAILED"
+            exit "${PREFLIGHT_EXIT_CODE:-1}"
+          fi
           if [ "${PUBLISHED_SAFETY_EXIT_CODE:-1}" != "0" ]; then
             echo "SAFETY VIOLATION: Production generation must not modify published/"
             exit "${PUBLISHED_SAFETY_EXIT_CODE:-1}"
@@ -297,6 +339,10 @@ jobs:
           if [ "${WEEKLY_EXIT_CODE:-1}" != "0" ]; then
             echo "WEEKLY GENERATION OR QA FAILED"
             exit "${WEEKLY_EXIT_CODE:-1}"
+          fi
+          if [ "${BILINGUAL_VALIDATION_EXIT_CODE:-1}" != "0" ]; then
+            echo "BILINGUAL ARTIFACT VALIDATION FAILED"
+            exit "${BILINGUAL_VALIDATION_EXIT_CODE:-1}"
           fi
           if [ "${MANIFEST_EXIT_CODE:-1}" != "0" ]; then
             echo "REVIEW MANIFEST FAILED"

@@ -1,7 +1,10 @@
 import json
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from automation_pipeline import (
     AutomationValidationError,
@@ -9,11 +12,16 @@ from automation_pipeline import (
     artifact_path,
     publish_allowed_by_qa,
     review_artifact_name,
+    review_artifact_ready,
+    summary_highlight_count,
+    translation_preflight,
+    validate_bilingual_artifacts,
     validate_manifest,
     validate_published_diff_paths,
     validate_source_run_metadata,
     write_review_manifest,
 )
+from crawler.translator import LocalNLLBProvider, TitleTranslator, TranslationUnavailableError
 from qa_gate import file_sha256
 
 
@@ -127,6 +135,27 @@ class AutomationPipelineContractTests(unittest.TestCase):
             with self.assertRaises(AutomationValidationError):
                 make_bundle(tmp, weekly_overrides={"translation_mode": "no_translate"})
 
+    def test_missing_title_cn_fails_before_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(AutomationValidationError):
+                make_bundle(tmp, weekly_overrides={"items": [dict(weekly_payload()["items"][0], title_cn="")]})
+
+    def test_missing_summary_cn_fails_before_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            item = dict(weekly_payload()["items"][0])
+            item["summary_cn"] = ""
+            with self.assertRaises(AutomationValidationError):
+                make_bundle(tmp, weekly_overrides={"items": [item]})
+
+    def test_empty_original_summary_allows_empty_summary_cn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            item = dict(weekly_payload()["items"][0])
+            item["summary"] = ""
+            item["summary_original"] = ""
+            item["summary_cn"] = ""
+            make_bundle(tmp, weekly_overrides={"items": [item]})
+            self.assertTrue(validate_bilingual_artifacts(tmp, WEEK))
+
     def test_weekly_data_sha_mismatch_blocks(self):
         with tempfile.TemporaryDirectory() as tmp:
             make_bundle(tmp)
@@ -210,6 +239,79 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertTrue(validate_published_diff_paths(["published/latest.json", "published/archive/weekly_20260105.json"]))
         with self.assertRaises(AutomationValidationError):
             validate_published_diff_paths(["published/latest.json", "crawler/content_filter.py"])
+
+    def test_translation_preflight_success_allows_generation(self):
+        class ReadyProvider:
+            def translate(self, text, source_lang="en", target_lang="zh"):
+                return "Clearstream 结算更新"
+
+        with patch.dict(sys.modules, {"torch": types.SimpleNamespace(), "transformers": types.SimpleNamespace()}):
+            self.assertTrue(translation_preflight(provider_factory=ReadyProvider, attempts=1, sleep_seconds=0))
+
+    def test_translation_preflight_download_unavailable_blocks_before_generation(self):
+        class BrokenProvider:
+            load_error = "model download unavailable"
+
+            def translate(self, text, source_lang="en", target_lang="zh"):
+                return ""
+
+        with patch.dict(sys.modules, {"torch": types.SimpleNamespace(), "transformers": types.SimpleNamespace()}):
+            with self.assertRaises(AutomationValidationError):
+                translation_preflight(provider_factory=BrokenProvider, attempts=2, sleep_seconds=0)
+
+    def test_strict_translation_provider_unavailable_hard_fails(self):
+        class EmptyProvider:
+            model_name = "test-model"
+            load_error = "model unavailable"
+
+            def translate(self, text, source_lang="en", target_lang="zh"):
+                return ""
+
+        translator = TitleTranslator(enabled=True, provider=EmptyProvider(), strict=True)
+        with self.assertRaises(TranslationUnavailableError):
+            translator.translate([{"title_original": "Market infrastructure update", "summary": "", "source": "Source"}])
+
+    def test_non_strict_translation_provider_unavailable_keeps_local_fallback(self):
+        class EmptyProvider:
+            model_name = "test-model"
+            load_error = "model unavailable"
+
+            def translate(self, text, source_lang="en", target_lang="zh"):
+                return ""
+
+        translator = TitleTranslator(enabled=True, provider=EmptyProvider(), strict=False)
+        translated = translator.translate([{"title_original": "Market infrastructure update", "summary": "", "source": "Source"}])
+        self.assertEqual(translated[0]["title_cn"], "")
+
+    def test_local_provider_load_failure_is_not_retried_per_field(self):
+        calls = {"tokenizer": 0}
+
+        class BrokenTokenizer:
+            @staticmethod
+            def from_pretrained(*args, **kwargs):
+                calls["tokenizer"] += 1
+                raise OSError("cached files unavailable")
+
+        fake_transformers = types.SimpleNamespace(
+            AutoTokenizer=BrokenTokenizer,
+            AutoModelForSeq2SeqLM=types.SimpleNamespace(from_pretrained=lambda *args, **kwargs: None),
+        )
+        provider = LocalNLLBProvider(local_files_only=True)
+        with patch.dict(sys.modules, {"transformers": fake_transformers}):
+            self.assertEqual(provider.translate("First title"), "")
+            self.assertEqual(provider.translate("Second title"), "")
+        self.assertEqual(calls["tokenizer"], 1)
+
+    def test_summary_highlight_count_uses_qa_summary_when_weekly_has_no_highlights(self):
+        weekly = {"highlights": []}
+        qa = {"summary": {"highlights": 5}}
+        self.assertEqual(summary_highlight_count(weekly, qa), 5)
+
+    def test_review_artifact_ready_requires_full_bilingual_bundle_success(self):
+        self.assertTrue(review_artifact_ready("true", "0", "0", "0"))
+        self.assertFalse(review_artifact_ready("false", "0", "0", "0"))
+        self.assertFalse(review_artifact_ready("true", "4", "0", "0"))
+        self.assertFalse(review_artifact_ready("true", "0", "4", "0"))
 
 
 if __name__ == "__main__":

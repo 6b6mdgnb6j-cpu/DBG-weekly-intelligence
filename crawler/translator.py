@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -18,6 +19,10 @@ DEFAULT_GENERATION_CONFIG = {
     "no_repeat_ngram_size": 3,
     "repetition_penalty": 1.1,
 }
+
+
+class TranslationUnavailableError(RuntimeError):
+    pass
 
 
 def looks_chinese(text):
@@ -155,30 +160,43 @@ class TranslationSanityValidator:
 
 
 class LocalNLLBProvider:
-    def __init__(self, logger=None):
+    def __init__(self, logger=None, local_files_only=None):
         self.logger = logger
         self.model_name = NLLB_MODEL_NAME
         self.source_lang = "eng_Latn"
         self.target_lang = "zho_Hans"
+        self.local_files_only = (
+            os.environ.get("WEEKLY_REPORT_TRANSLATION_ALLOW_DOWNLOAD") != "1"
+            if local_files_only is None
+            else local_files_only
+        )
         self.tokenizer = None
         self.model = None
         self.forced_bos_token_id = None
+        self.load_failed = False
+        self.load_error = ""
+        self.load_warning_logged = False
 
     def _load(self):
         if self.model is not None and self.tokenizer is not None:
             return True
+        if self.load_failed:
+            return False
         try:
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, local_files_only=True)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, local_files_only=self.local_files_only)
             self.tokenizer.src_lang = self.source_lang
-            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name, local_files_only=True)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name, local_files_only=self.local_files_only)
             self.model.eval()
             self.forced_bos_token_id = self.tokenizer.convert_tokens_to_ids(self.target_lang)
             return True
         except Exception as exc:
-            if self.logger:
+            self.load_failed = True
+            self.load_error = str(exc)
+            if self.logger and not self.load_warning_logged:
                 self.logger.warning("Local NLLB provider unavailable; translation disabled: %s", exc)
+                self.load_warning_logged = True
             self.tokenizer = None
             self.model = None
             return False
@@ -310,10 +328,11 @@ class TerminologyNormalizer:
 
 
 class TitleTranslator:
-    def __init__(self, enabled=True, logger=None, provider=None):
+    def __init__(self, enabled=True, logger=None, provider=None, strict=False):
         self.enabled = enabled
         self.logger = logger
         self.provider = provider
+        self.strict = strict
         self.normalizer = TerminologyNormalizer()
         self.cache = {}
         self.cache_dirty = False
@@ -331,10 +350,18 @@ class TitleTranslator:
         key = _cache_key(provider.model_name, "en", "zh", text, self.normalizer.version)
         cached = self.cache.get(key)
         if isinstance(cached, dict) and "translation" in cached:
-            return cached.get("translation", "")
+            value = cached.get("translation", "")
+            if value:
+                return value
+            if self.strict:
+                raise TranslationUnavailableError(f"cached translation is empty for source={source!r} text={text[:120]!r}")
+            return ""
 
         raw = provider.translate(text, source_lang="en", target_lang="zh")
         if not raw:
+            if self.strict:
+                reason = getattr(provider, "load_error", "") or "empty provider output"
+                raise TranslationUnavailableError(f"translation unavailable for source={source!r}: {reason}")
             return ""
         normalized, changes = self.normalizer.normalize(raw, text, source)
         if not TranslationSanityValidator.is_valid(text, normalized, source):
@@ -350,6 +377,8 @@ class TitleTranslator:
                 "glossary_version": self.normalizer.version,
             }
             self.cache_dirty = True
+            if self.strict:
+                raise TranslationUnavailableError(f"translation rejected by sanity validator for source={source!r} text={text[:120]!r}")
             return ""
 
         self.cache[key] = {
@@ -386,6 +415,8 @@ class TitleTranslator:
             elif title_lang == "en":
                 clean["title_en"] = title_original
                 clean["title_cn"] = self._translate_text(title_original, source)
+                if self.strict and not clean["title_cn"]:
+                    raise TranslationUnavailableError(f"required title translation missing for source={source!r}")
             else:
                 clean["title_en"] = clean.get("title_en", title_original)
                 clean["title_cn"] = clean.get("title_cn", "")
@@ -396,6 +427,8 @@ class TitleTranslator:
             elif summary_lang == "en":
                 clean["summary_en"] = summary_original
                 clean["summary_cn"] = self._translate_text(summary_original, source)
+                if self.strict and summary_original.strip() and not clean["summary_cn"]:
+                    raise TranslationUnavailableError(f"required summary translation missing for source={source!r}")
             else:
                 clean["summary_en"] = ""
                 clean["summary_cn"] = ""
