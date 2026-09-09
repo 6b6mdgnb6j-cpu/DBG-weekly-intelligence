@@ -64,6 +64,7 @@ class RecordingProvider:
         self.last_translation_metadata = {}
 
     def translate(self, text, source_lang="en", target_lang="zh", chunk_token_limit=None):
+        chunk_token_limit = chunk_token_limit or SOURCE_CHUNK_TOKEN_LIMIT
         self.calls.append(
             {
                 "text": text,
@@ -73,10 +74,15 @@ class RecordingProvider:
             }
         )
         output = self.outputs.pop(0) if self.outputs else ""
+        token_count = len([token for token in str(text).split() if token])
+        token_counts = []
+        while token_count > 0:
+            token_counts.append(min(chunk_token_limit, token_count))
+            token_count -= chunk_token_limit
         self.last_translation_metadata = {
             "chunk_token_limit": chunk_token_limit,
-            "chunk_count": 2 if chunk_token_limit == SOURCE_CHUNK_TOKEN_LIMIT else 4,
-            "chunk_token_counts": [chunk_token_limit or 0],
+            "chunk_count": len(token_counts),
+            "chunk_token_counts": token_counts,
             "chunk_output_lengths": [len(output)],
         }
         return output
@@ -211,11 +217,11 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v9", GENERATION_CONFIG_VERSION)
+        self.assertIn("v10", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
-        old_version = "nllb-v1-norepeat-terminology-chunked-v8"
+        old_version = "nllb-v1-norepeat-terminology-chunked-recovery-v9"
         with patch.object(translator, "GENERATION_CONFIG_VERSION", old_version):
             old_key = _cache_key("model", "en", "zh", "long text", 1)
         new_key = _cache_key("model", "en", "zh", "long text", 1)
@@ -254,7 +260,48 @@ class LongTextTranslationTests(unittest.TestCase):
         ):
             output = title_translator._translate_text(original, "Source", "summary")
         self.assertIn("市场基础设施", output)
-        self.assertEqual([call["chunk_token_limit"] for call in provider.calls], [SOURCE_CHUNK_TOKEN_LIMIT, RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT])
+        self.assertEqual([call["chunk_token_limit"] for call in provider.calls], [SOURCE_CHUNK_TOKEN_LIMIT, 30])
+
+    def test_adaptive_recovery_splits_49_token_single_chunk(self):
+        original = " ".join(f"token{i}" for i in range(49))
+        provider = RecordingProvider(["短", "完整中文翻译覆盖全部原文信息并保持顺序"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[translator.ValidationResult(False, "length_ratio_low"), translator.ValidationResult(True)],
+        ):
+            title_translator._translate_text(original, "Source", "summary")
+        initial_call, recovery_call = provider.calls
+        self.assertEqual(initial_call["chunk_token_limit"], SOURCE_CHUNK_TOKEN_LIMIT)
+        self.assertLess(recovery_call["chunk_token_limit"], 49)
+        self.assertEqual(recovery_call["chunk_token_limit"], 25)
+        self.assertGreater(provider.last_translation_metadata["chunk_count"], 1)
+        self.assertEqual(provider.last_translation_metadata["chunk_token_counts"], [25, 24])
+
+    def test_recovery_cannot_repeat_identical_chunk_plan_when_smaller_plan_possible(self):
+        original = " ".join(f"token{i}" for i in range(49))
+        provider = RecordingProvider(["短", "完整中文翻译覆盖全部原文信息并保持顺序"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[translator.ValidationResult(False, "length_ratio_low"), translator.ValidationResult(True)],
+        ):
+            title_translator._translate_text(original, "Source", "summary")
+        self.assertEqual(len(provider.calls), 2)
+        self.assertNotEqual(provider.calls[0]["chunk_token_limit"], provider.calls[1]["chunk_token_limit"])
+        self.assertNotEqual([49], provider.last_translation_metadata["chunk_token_counts"])
+
+    def test_adaptive_recovery_respects_configured_maximum_for_large_failed_chunk(self):
+        metadata = {"chunk_token_counts": [300]}
+        self.assertEqual(TitleTranslator._effective_recovery_chunk_limit(metadata), RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT)
+
+    def test_adaptive_recovery_handles_small_failed_chunk_without_minimum_blocking_split(self):
+        metadata = {"chunk_token_counts": [10]}
+        self.assertEqual(TitleTranslator._effective_recovery_chunk_limit(metadata), 9)
 
     def test_length_ratio_recovery_retranslates_entire_original_and_preserves_order(self):
         original = "alpha beta gamma delta"
@@ -328,6 +375,8 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("length-ratio recovery diagnostics", warning_args)
         self.assertIn("original_length", warning_args)
         self.assertIn("initial_chunk_count", warning_args)
+        self.assertIn("configured_recovery_chunk_limit", warning_args)
+        self.assertIn("effective_recovery_chunk_limit", warning_args)
         self.assertIn("recovery_chunk_count", warning_args)
 
     def test_empty_chunk_output_still_fails_without_cache_poisoning(self):
@@ -352,15 +401,13 @@ class LongTextTranslationTests(unittest.TestCase):
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
         item = {"title_original": "短标题", "summary": "alpha beta gamma delta epsilon zeta eta theta", "source": "Source"}
-        with patch.object(translator, "SOURCE_CHUNK_TOKEN_LIMIT", 4), patch.object(
-            translator, "RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT", 2
-        ), patch.object(TranslationSanityValidator, "validate_with_reason") as validate:
+        with patch.object(translator, "SOURCE_CHUNK_TOKEN_LIMIT", 4), patch.object(TranslationSanityValidator, "validate_with_reason") as validate:
             validate.side_effect = [
                 translator.ValidationResult(False, "length_ratio_low"),
                 translator.ValidationResult(True),
             ]
             output = title_translator.translate([item])
-        self.assertEqual(output[0]["summary_cn"], "译:alpha_beta 译:gamma_delta 译:epsilon_zeta 译:eta_theta")
+        self.assertEqual(output[0]["summary_cn"], "译:alpha_beta_gamma 译:delta_epsilon_zeta 译:eta_theta")
 
     def test_intercontinental_exchange_bad_translation_normalizes_to_ice(self):
         normalizer = translator.TerminologyNormalizer()

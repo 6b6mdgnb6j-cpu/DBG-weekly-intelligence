@@ -12,9 +12,10 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-v9"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-v10"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
+MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
 MODEL_SOURCE_TOKEN_LIMIT = 512
 DEFAULT_GENERATION_CONFIG = {
     "max_new_tokens": 240,
@@ -515,6 +516,28 @@ class TitleTranslator:
             "chunk_output_lengths": metadata.get("chunk_output_lengths", []),
         }
 
+    @staticmethod
+    def _effective_recovery_chunk_limit(initial_metadata):
+        token_counts = [
+            count
+            for count in (initial_metadata.get("chunk_token_counts") or [])
+            if isinstance(count, int) and count > 0
+        ]
+        if not token_counts:
+            return RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT
+
+        largest_failed_chunk = max(token_counts)
+        if largest_failed_chunk <= 1:
+            return 1
+
+        effective = min(
+            RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
+            max(MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT, (largest_failed_chunk + 1) // 2),
+        )
+        if effective >= largest_failed_chunk:
+            effective = largest_failed_chunk - 1
+        return max(1, effective)
+
     def _log_recovery_diagnostics(
         self,
         source,
@@ -536,8 +559,9 @@ class TitleTranslator:
             "source=%s field=%s text_prefix=%r original_length=%s translated_length=%s ratio=%.3f "
             "initial_reason=%s initial_chunk_limit=%s initial_chunk_count=%s "
             "initial_chunk_token_counts=%s initial_chunk_output_lengths=%s "
-            "recovery_attempted=%s recovery_chunk_limit=%s recovery_chunk_count=%s "
-            "recovery_output_length=%s final_ratio=%.3f final_reason=%s",
+            "recovery_attempted=%s configured_recovery_chunk_limit=%s effective_recovery_chunk_limit=%s "
+            "recovery_chunk_count=%s recovery_chunk_token_counts=%s initial_output_length=%s "
+            "recovery_output_length=%s initial_ratio=%.3f final_ratio=%.3f final_reason=%s",
             source,
             field,
             (text or "")[:120],
@@ -550,9 +574,13 @@ class TitleTranslator:
             initial_metadata.get("chunk_token_counts"),
             initial_metadata.get("chunk_output_lengths"),
             recovery_attempted,
+            RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
             (recovery_metadata or {}).get("chunk_token_limit"),
             (recovery_metadata or {}).get("chunk_count"),
+            (recovery_metadata or {}).get("chunk_token_counts"),
+            len(initial_translation or ""),
             len(recovery_translation or ""),
+            self._length_ratio(text, initial_translation),
             self._length_ratio(text, recovery_translation or initial_translation),
             final_validation.reason,
         )
@@ -587,7 +615,8 @@ class TitleTranslator:
         validation = TranslationSanityValidator.validate_with_reason(text, normalized, source)
         if not validation.valid:
             if validation.reason == "length_ratio_low":
-                recovered_raw = self._provider_translate(provider, text, RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT)
+                recovery_chunk_limit = self._effective_recovery_chunk_limit(initial_metadata)
+                recovered_raw = self._provider_translate(provider, text, recovery_chunk_limit)
                 recovery_metadata = self._provider_metadata(provider)
                 recovered_normalized, recovered_changes = self.normalizer.normalize(recovered_raw, text, source)
                 recovered_validation = TranslationSanityValidator.validate_with_reason(text, recovered_normalized, source)
