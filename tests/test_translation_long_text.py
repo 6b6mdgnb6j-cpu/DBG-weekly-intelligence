@@ -217,7 +217,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v14", GENERATION_CONFIG_VERSION)
+        self.assertIn("v15", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -716,6 +716,59 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         self.assertIn("金融服务委员会", normalized)
         self.assertNotIn("国际证券交易委员会", normalized)
+
+    def test_fsc_conflicting_expansion_normalizes_to_fsc_with_acronym_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "FSC 国际证券交易委员会推出政策路线图",
+            "FSC Introduces Policy Roadmap",
+            "FSC",
+        )
+        self.assertIn("FSC", normalized)
+        self.assertNotIn("国际证券交易委员会", normalized)
+
+    def test_intercontinental_exchange_bad_variants_normalize_to_ice(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "ICE 2026年8月 跨大陆交易报告统计数据。国际大陆交易所公布市场数据。",
+            "Intercontinental Exchange Reports August 2026 Statistics",
+            "ICE",
+        )
+        self.assertIn("ICE", normalized)
+        self.assertNotIn("跨大陆交易", normalized)
+        self.assertNotIn("国际大陆交易所", normalized)
+
+    def test_margin_efficiency_normalizes_only_with_original_phrase(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "利率效率改善",
+            "margin efficiency improved in clearing portfolios",
+            "Eurex",
+        )
+        self.assertIn("保证金效率", normalized)
+        self.assertNotIn("利率效率", normalized)
+
+    def test_interest_rate_remains_interest_rate_without_margin_efficiency(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "利率效率改善",
+            "interest rate efficiency improved",
+            "Eurex",
+        )
+        self.assertEqual(normalized, "利率效率改善")
+        self.assertEqual(changes, [])
+
+    def test_currency_terms_normalize_with_original_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "加拿大美元和墨西哥指利率互换",
+            "Canadian Dollar- and Mexican Peso-Denominated Interest Rate Swaps",
+            "CFTC",
+        )
+        self.assertIn("加拿大元", normalized)
+        self.assertIn("墨西哥比索", normalized)
+        self.assertNotIn("加拿大美元", normalized)
+        self.assertNotIn("墨西哥指", normalized)
 
     def test_critical_term_validator_ignores_lowercase_ordinary_six(self):
         result = TranslationSanityValidator.validate_with_reason(

@@ -351,6 +351,160 @@ class QAGateTests(unittest.TestCase):
         report = self.evaluate(weekly=weekly)
         self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
 
+    def test_translation_quality_weak_report_verb_can_drop_when_object_preserved(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Nasdaq Reports August 2026 Volumes",
+                    title_cn="2026年8月Nasdaq交易量",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_translation_quality_acquisition_still_fails_when_substantive_action_missing(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Company reports acquisition of X",
+                    title_cn="公司报告X",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_title_proposition_missing", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_launch_still_fails_when_missing(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="EEX launches new freight data products",
+                    title_cn="EEX新的货运数据产品",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_title_proposition_missing", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_consultation_on_proposed_amendments_is_not_action_warning(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="MAS consults on legislative amendments",
+                    title_cn="MAS就立法修订展开咨询",
+                    summary_original="MAS published a consultation paper on proposed legislative amendments to the framework.",
+                    summary_cn="MAS发布了一份关于框架立法修正案的咨询文件。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+        self.assertNotIn("translation_action_direction_missing", issue_ids)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+        self.assertEqual(self.check(report, "translation_quality_warnings")["result"], PASS)
+
+    def test_translation_quality_rescission_action_still_fails_when_missing(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="SEC proposes rescission of a political contribution rule",
+                    title_cn="SEC提议政治捐款规则",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_title_proposition_missing", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_currency_corruption_fails(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Canadian Dollar- and Mexican Peso-Denominated Interest Rate Swaps",
+                    title_cn="加拿大美元和墨西哥指利率互换",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_proper_noun_mismatch", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_summary_later_substantive_clause_missing_fails(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="FINRA",
+                    title_original="FINRA replaces pattern day trader rule",
+                    title_cn="FINRA取代日内交易者规则",
+                    summary_original=(
+                        "On this episode of FINRA Unscripted, learn why FINRA replaced the decades-old "
+                        "Pattern Day Trader rule — including the $25,000 minimum equity requirement — "
+                        "with a modern, risk-based intraday margin standard, and what the change means "
+                        "for investors and member firms."
+                    ),
+                    summary_cn="在本期FINRA节目中，了解FINRA为何取代已有数十年历史的日内交易者规则，包括25,000美元的最低股权要求。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_suspicious_compression", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_summary_preserving_later_clause_passes(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="FINRA",
+                    title_original="FINRA replaces pattern day trader rule",
+                    title_cn="FINRA取代日内交易者规则",
+                    summary_original=(
+                        "On this episode of FINRA Unscripted, learn why FINRA replaced the decades-old "
+                        "Pattern Day Trader rule — including the $25,000 minimum equity requirement — "
+                        "with a modern, risk-based intraday margin standard, and what the change means "
+                        "for investors and member firms."
+                    ),
+                    summary_cn="本期FINRA节目介绍其为何取代旧的日内交易者规则，包括25,000美元最低权益要求，并采用现代、基于风险的日内保证金标准，以及该变化对投资者和会员公司的影响。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_translation_quality_short_simple_summary_does_not_trigger_compression(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Nasdaq Reports August 2026 Volumes",
+                    title_cn="2026年8月Nasdaq交易量",
+                    summary_original="Nasdaq reported August 2026 trading volumes.",
+                    summary_cn="Nasdaq公布2026年8月交易量。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
     def test_translation_quality_stox_bad_variant_uses_ascii_boundaries(self):
         weekly = payload(
             items=[

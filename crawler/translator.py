@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v14"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v15"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -467,7 +467,7 @@ class TerminologyNormalizer:
             ],
         },
         "STOXX": {"aliases": [], "bad": [r"STTOXX", r"(?<![A-Za-z0-9])STOX(?![A-Za-z0-9])", "斯托克斯"]},
-        "ICE": {"aliases": ["Intercontinental Exchange"], "bad": ["冰岛", "欧元交易所"]},
+        "ICE": {"aliases": ["Intercontinental Exchange"], "bad": ["冰岛", "欧元交易所", "国际大陆交易所", "跨大陆交易"]},
         "SIX": {"aliases": ["SIX Exchanges"], "bad": ["六个交易所", "六个", "六"]},
         "Nasdaq": {"aliases": [], "bad": ["纳斯达克"]},
         "Cboe": {"aliases": [], "bad": []},
@@ -484,7 +484,7 @@ class TerminologyNormalizer:
         "MAS": {"aliases": ["Monetary Authority of Singapore"], "bad": []},
         "HKEX": {"aliases": ["Hong Kong Exchanges and Clearing"], "bad": ["希克克斯", "希克斯"]},
         "JPX": {"aliases": ["Japan Exchange Group"], "bad": ["日本交流集团", "日本交易所集团"]},
-        "FSC": {"aliases": ["Financial Services Commission"], "bad": ["联邦书商管理局", "国际SEC"]},
+        "FSC": {"aliases": ["Financial Services Commission"], "bad": ["联邦书商管理局", "国际SEC", "国际证券交易委员会"]},
         "ECB": {"aliases": ["European Central Bank"], "bad": ["欧洲央行"]},
         "FOMC": {"aliases": ["Federal Open Market Committee"], "bad": ["联邦开放市场委员会"]},
     }
@@ -509,10 +509,10 @@ class TerminologyNormalizer:
         "HKMA": {"香港货币管理局": "HKMA", "香港金融管理局": "HKMA"},
         "JPX": {"日本交流集团": "JPX", "日本交易所集团": "JPX"},
         "SIX": {"六个交易所": "SIX Exchanges", "六个": "SIX", "六": "SIX"},
-        "ICE": {"冰岛": "ICE", "欧元交易所": "ICE"},
+        "ICE": {"冰岛": "ICE", "欧元交易所": "ICE", "国际大陆交易所": "ICE", "跨大陆交易": "ICE"},
         "FINRA": {"国际金融基金会": "FINRA"},
         "FTSE": {"FTC": "FTSE"},
-        "FSC": {"国际SEC": "FSC", "联邦书商管理局": "FSC"},
+        "FSC": {"国际SEC": "FSC", "联邦书商管理局": "FSC", "国际证券交易委员会": "FSC"},
     }
     CONTEXT_ALIASES = {
         "Clearstream": ["明讯银行"],
@@ -558,6 +558,11 @@ class TerminologyNormalizer:
         ("FSC", r"联邦书商管理局", "FSC"),
         ("Financial Services Commission", r"国际证券交易委员会", "金融服务委员会"),
         ("Intercontinental Exchange", r"欧元交易所", "ICE"),
+        ("margin efficiency", r"利率效率", "保证金效率"),
+        ("Canadian Dollar", r"加拿大美元", "加拿大元"),
+        ("Canadian dollar", r"加拿大美元", "加拿大元"),
+        ("Mexican Peso", r"墨西哥指", "墨西哥比索"),
+        ("Mexican peso", r"墨西哥指", "墨西哥比索"),
         ("open interest", r"开放利率", "未平仓量"),
         ("interest rate swap", r"利率交换", "利率互换"),
         ("interest rate swaps", r"利率交换", "利率互换"),
@@ -664,6 +669,10 @@ class TerminologyNormalizer:
                         continue
                     if canonical == "SIX" and bad in ("六", "六个") and re.search(r"\bsix\b", original or ""):
                         continue
+                    if canonical == "FSC" and bad == "国际证券交易委员会" and re.search(
+                        r"\bFinancial Services Commission\b", original or "", flags=re.I
+                    ):
+                        continue
                     replace(bad if bad.startswith("(?<") else re.escape(bad), canonical, canonical)
 
         for brand, replacements in self.source_edits.items():
@@ -674,6 +683,10 @@ class TerminologyNormalizer:
                     if brand == "ICE" and bad == "冰岛" and re.search(r"\bIceland(?:ic)?\b", original or "", flags=re.I):
                         continue
                     if brand == "SIX" and bad in ("六", "六个") and re.search(r"\bsix\b", original or ""):
+                        continue
+                    if brand == "FSC" and bad == "国际证券交易委员会" and re.search(
+                        r"\bFinancial Services Commission\b", original or "", flags=re.I
+                    ):
                         continue
                     replace(re.escape(bad), good, good)
 

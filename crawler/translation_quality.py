@@ -13,9 +13,13 @@ PROPER_NOUN_RULES = [
     ("United States", ("美国",), ("美国国",)),
     ("U.S.", ("美国",), ("美国国",)),
     ("Switzerland", ("瑞士",), ("瑞士兰",)),
+    ("Canadian Dollar", ("加拿大元",), ("加拿大美元",)),
+    ("Canadian dollar", ("加拿大元",), ("加拿大美元",)),
+    ("Mexican Peso", ("墨西哥比索",), ("墨西哥指",)),
+    ("Mexican peso", ("墨西哥比索",), ("墨西哥指",)),
 ]
 
-TITLE_ANCHORS = [
+SUBSTANTIVE_TITLE_ANCHORS = [
     ("inflow", (r"\binflows?\b", r"\boutflows?\b"), ("流入", "流出", "资金流")),
     ("launch", (r"\blaunch(?:es|ed|ing)?\b", r"\bintroduc(?:e|es|ed|ing)\b"), ("推出", "发布", "引入", "发起")),
     ("acquire", (r"\bacquir(?:e|es|ed|ing)\b", r"\bacquisition\b"), ("收购", "并购")),
@@ -26,7 +30,6 @@ TITLE_ANCHORS = [
     ("extend", (r"\bextend(?:s|ed|ing)?\b",), ("延长", "延期", "扩大", "扩展")),
     ("increase", (r"\bincreas(?:e|es|ed|ing)\b", r"\brecord\b"), ("增加", "上升", "提高", "创纪录")),
     ("decrease", (r"\breduc(?:e|es|ed|ing)\b", r"\bdecreas(?:e|es|ed|ing)\b"), ("减少", "下降", "降低")),
-    ("report", (r"\breport(?:s|ed|ing)?\b",), ("报告", "公布")),
     ("partner", (r"\bpartner(?:s|ed|ing|ship)?\b",), ("合作", "伙伴")),
     ("clear", (r"\bclear(?:s|ed|ing)?\b", r"\bclearing\b"), ("清算",)),
     ("settle", (r"\bsettle(?:s|d|ment)?\b", r"\bsettlement\b"), ("结算",)),
@@ -185,7 +188,7 @@ def _title_proposition_issues(index, item):
     if not original or not translated:
         return []
     issues = []
-    for anchor_id, original_patterns, translated_signals in TITLE_ANCHORS:
+    for anchor_id, original_patterns, translated_signals in SUBSTANTIVE_TITLE_ANCHORS:
         if _contains_english(original, original_patterns) and not _contains_any(translated, translated_signals):
             issues.append(
                 _issue(
@@ -202,6 +205,16 @@ def _title_proposition_issues(index, item):
     return issues
 
 
+def _consultation_on_proposed_modifier_is_preserved(original, translated):
+    if not re.search(
+        r"\bconsultation\s+(?:paper|document)\b.{0,80}\b(?:on|about)\b.{0,80}\bproposed\b.{0,80}\bamendments?\b",
+        original or "",
+        flags=re.I | re.S,
+    ):
+        return False
+    return _contains_any(translated, ("咨询",)) and _contains_any(translated, ("修正案", "修订", "修订案", "修法"))
+
+
 def _action_direction_issues(index, item):
     issues = []
     for field, original, translated in _translated_fields(item):
@@ -214,6 +227,8 @@ def _action_direction_issues(index, item):
             ):
                 continue
             if not _contains_english(original, original_patterns):
+                continue
+            if action_id == "propose" and _consultation_on_proposed_modifier_is_preserved(original, translated):
                 continue
             if not _contains_any(translated, translated_signals):
                 severity = FAIL if action_id in {"rescind", "ban", "allow"} else WARNING
@@ -243,6 +258,75 @@ def _action_direction_issues(index, item):
     return issues
 
 
+COMPRESSION_CONNECTORS = (
+    r"\s+—\s+",
+    r"\s+-\s+",
+    r";\s+",
+    r"\band what\b",
+    r"\bwith (?:a |an |the )?",
+)
+
+COMPRESSION_ANCHORS = [
+    (r"\brisk[- ]based\b|\brisk\b", ("风险",)),
+    (r"\bintraday\b", ("日内",)),
+    (r"\bmargin\b", ("保证金",)),
+    (r"\bstandard\b", ("标准",)),
+    (r"\binvestors?\b", ("投资者",)),
+    (r"\bmember firms?\b", ("成员公司", "会员公司", "成员", "会员")),
+    (r"\breplac(?:e|es|ed|ing)\b", ("取代", "替换", "更换")),
+    (r"\bmeans?\b|\bimplications?\b", ("意味", "影响", "含义")),
+]
+
+
+def _late_segments(original):
+    parts = [original or ""]
+    for connector in COMPRESSION_CONNECTORS:
+        next_parts = []
+        for part in parts:
+            next_parts.extend(re.split(connector, part, flags=re.I))
+        parts = next_parts
+    return [part.strip(" .,—-") for part in parts[1:] if len(part.strip(" .,—-")) >= 24]
+
+
+def _segment_anchor_count(segment, translated):
+    expected = []
+    found = 0
+    for original_pattern, translated_terms in COMPRESSION_ANCHORS:
+        if re.search(original_pattern, segment or "", flags=re.I):
+            expected.append(list(translated_terms))
+            if _contains_any(translated, translated_terms):
+                found += 1
+    return len(expected), found, expected
+
+
+def _suspicious_compression_issues(index, item):
+    issues = []
+    for field, original, translated in _translated_fields(item):
+        if field != "summary" or not original or not translated or len(original) < 140:
+            continue
+        for segment in _late_segments(original):
+            expected_count, found_count, expected_terms = _segment_anchor_count(segment, translated)
+            if expected_count >= 3 and found_count <= 1:
+                issues.append(
+                    _issue(
+                        index,
+                        item,
+                        field,
+                        "translation_suspicious_compression",
+                        FAIL,
+                        {
+                            "omitted_segment_prefix": segment[:160],
+                            "expected_signal_groups": expected_terms,
+                            "matched_signal_groups": found_count,
+                            "translated_prefix": translated[:160],
+                        },
+                        "Translated summary appears to preserve an early clause while omitting a later substantive clause.",
+                    )
+                )
+                break
+    return issues
+
+
 def audit_translation_quality(items):
     normalizer = TerminologyNormalizer()
     issues = []
@@ -251,4 +335,5 @@ def audit_translation_quality(items):
         issues.extend(_proper_noun_issues(index, item))
         issues.extend(_title_proposition_issues(index, item))
         issues.extend(_action_direction_issues(index, item))
+        issues.extend(_suspicious_compression_issues(index, item))
     return issues
