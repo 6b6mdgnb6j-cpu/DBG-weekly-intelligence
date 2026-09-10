@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v11"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v12"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -133,6 +133,15 @@ class TranslationSanityValidator:
         cleaned = re.sub(r"[\s\W_]+", "", cleaned, flags=re.UNICODE)
         return len(cleaned)
 
+    @staticmethod
+    def _entity_flags(entity):
+        return 0 if re.search(r"\b[A-Z0-9]{2,}\b", entity or "") else re.I
+
+    @classmethod
+    def _contains_critical_entity(cls, text, entity):
+        pattern = r"(?<![A-Za-z0-9])" + re.escape(entity) + r"(?![A-Za-z0-9])"
+        return bool(re.search(pattern, text or "", flags=cls._entity_flags(entity)))
+
     @classmethod
     def validate_with_reason(cls, original, translated, source="", field="text"):
         if not (translated or "").strip():
@@ -195,8 +204,12 @@ class TranslationSanityValidator:
             ("stablecoin", ("稳定coin",)),
         ]
         for trigger, bad_terms in context_bad_terms:
-            if trigger.lower() in original_lower:
+            if cls._contains_critical_entity(original_text, trigger):
                 for bad in bad_terms:
+                    if trigger in ("ICE", "Intercontinental Exchange") and bad == "冰岛" and re.search(
+                        r"\bIceland(?:ic)?\b", original_text, flags=re.I
+                    ):
+                        continue
                     if bad in translated:
                         return ValidationResult(False, f"context_bad_term:{trigger}:{bad}")
 
@@ -227,8 +240,7 @@ class TranslationSanityValidator:
             "FSC",
         )
         for term in critical_terms:
-            term_pattern = r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])"
-            if re.search(term_pattern, original_text, flags=re.I) and term not in translated:
+            if cls._contains_critical_entity(original_text, term) and term not in translated:
                 return ValidationResult(False, f"critical_term_missing:{term}")
 
         for term in cls.BAD_TERMS:
@@ -546,13 +558,43 @@ class TerminologyNormalizer:
     INDEX_CONTEXT_RE = re.compile(r"\b(?:market\s+index|index\s+series|benchmark\s+index|indices|indexes|ftse)\b", re.I)
 
     @staticmethod
-    def _contains_entity(text, entity):
-        flags = 0 if entity.isupper() and len(entity) <= 5 else re.I
-        return bool(re.search(r"(?<![A-Za-z0-9])" + re.escape(entity) + r"(?![A-Za-z0-9])", text or "", flags=flags))
+    def _entity_flags(entity):
+        return 0 if re.search(r"\b[A-Z0-9]{2,}\b", entity or "") else re.I
+
+    @classmethod
+    def _entity_pattern(cls, entity):
+        return r"(?<![A-Za-z0-9])" + re.escape(entity) + r"(?![A-Za-z0-9])"
+
+    @classmethod
+    def _contains_entity(cls, text, entity):
+        return bool(re.search(cls._entity_pattern(entity), text or "", flags=cls._entity_flags(entity)))
+
+    @classmethod
+    def _entity_matches(cls, text, entity):
+        return list(re.finditer(cls._entity_pattern(entity), text or "", flags=cls._entity_flags(entity)))
 
     def _original_has_entity_evidence(self, original, canonical, aliases):
-        original_lower = (original or "").lower()
-        return self._contains_entity(original, canonical) or any(alias.lower() in original_lower for alias in aliases)
+        return bool(self._original_entity_evidence_positions(original, canonical, aliases))
+
+    def _original_entity_evidence_positions(self, original, canonical, aliases):
+        matches = [(match.start(), canonical) for match in self._entity_matches(original, canonical)]
+        for alias in aliases:
+            matches.extend((match.start(), alias) for match in self._entity_matches(original, alias))
+        return sorted(matches, key=lambda item: item[0])
+
+    def _protected_entities_in_original_order(self, original):
+        entities = []
+        seen = set()
+        for canonical, spec in self.CANONICAL_ENTITIES.items():
+            evidence = self._original_entity_evidence_positions(original, canonical, spec.get("aliases", []))
+            if evidence:
+                entities.append((evidence[0][0], canonical))
+        ordered = []
+        for _, canonical in sorted(entities, key=lambda item: item[0]):
+            if canonical not in seen:
+                ordered.append(canonical)
+                seen.add(canonical)
+        return ordered
 
     def __init__(self):
         glossary = _load_glossary()
@@ -609,9 +651,17 @@ class TerminologyNormalizer:
         if self.INDEX_CONTEXT_RE.search(original or ""):
             replace(r"索引", "指数", "financial index")
 
+        missing_entities = []
+        for canonical in self._protected_entities_in_original_order(original):
+            if not self._contains_entity(out, canonical):
+                missing_entities.append(canonical)
+                changes.append(f"{canonical}:restore_missing_entity")
+        if missing_entities:
+            out = " ".join(missing_entities + [out]).strip()
+
         for brand in self.source_edits:
             brand_pattern = r"^\s*" + re.escape(brand) + r"(?:['’]s)?\b"
-            if re.search(brand_pattern, original or "", flags=re.I) and brand not in out:
+            if re.search(brand_pattern, original or "", flags=self._entity_flags(brand)) and brand not in out:
                 out = f"{brand} {out}".strip()
                 changes.append(f"{brand}:restore_leading_brand")
 
@@ -740,6 +790,44 @@ class TitleTranslator:
             final_validation.reason,
         )
 
+    def _log_rejection_diagnostics(self, source, field, text, raw, normalized, changes, validation):
+        if not self.logger:
+            return
+        critical_term = ""
+        if validation.reason.startswith("critical_term_missing:"):
+            critical_term = validation.reason.split(":", 1)[1]
+        original_entity_evidence = False
+        restoration_attempted = False
+        restoration_changed_output = False
+        if critical_term:
+            spec = self.normalizer.CANONICAL_ENTITIES.get(critical_term, {})
+            original_entity_evidence = self.normalizer._original_has_entity_evidence(
+                text,
+                critical_term,
+                spec.get("aliases", []),
+            )
+            restoration_labels = (
+                f"{critical_term}:restore_missing_entity",
+                f"{critical_term}:restore_leading_brand",
+            )
+            restoration_attempted = any(change in restoration_labels for change in changes)
+            restoration_changed_output = restoration_attempted and raw != normalized
+        self.logger.warning(
+            "Translation rejected by sanity validator: reason=%s critical_term=%s source=%s field=%s "
+            "original_entity_evidence=%s restoration_attempted=%s restoration_changed_output=%s "
+            "original_prefix=%r raw_prefix=%r normalized_prefix=%r",
+            validation.reason,
+            critical_term,
+            source,
+            field,
+            original_entity_evidence,
+            restoration_attempted,
+            restoration_changed_output,
+            (text or "")[:120],
+            (raw or "")[:120],
+            (normalized or "")[:120],
+        )
+
     def _translate_text(self, text, source, field="text"):
         if not self.enabled or not text or detect_language(text) != "en":
             return ""
@@ -802,15 +890,11 @@ class TitleTranslator:
                     self.cache_dirty = True
                     return recovered_normalized
                 validation = recovered_validation
+                raw = recovered_raw
                 normalized = recovered_normalized
+                changes = recovered_changes
 
-            if self.logger:
-                self.logger.warning(
-                    "Translation rejected by sanity validator: reason=%s source=%s text=%r",
-                    validation.reason,
-                    source,
-                    text[:120],
-                )
+            self._log_rejection_diagnostics(source, field, text, raw, normalized, changes, validation)
             if self.strict:
                 raise TranslationUnavailableError(
                     f"translation rejected by sanity validator: reason={validation.reason} "

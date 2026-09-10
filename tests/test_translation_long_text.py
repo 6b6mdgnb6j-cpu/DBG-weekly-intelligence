@@ -217,7 +217,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v11", GENERATION_CONFIG_VERSION)
+        self.assertIn("v12", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -534,6 +534,122 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("六个市场", normalized)
         self.assertIn("冰岛", normalized)
         self.assertNotIn("SIX", normalized)
+
+    def test_cboe_original_entity_survives_when_model_omits_it(self):
+        provider = RecordingProvider(["全球市场报告2026年8月交易量"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(
+            "Cboe Global Markets Reports Trading Volume for August 2026",
+            "芝加哥期权交易所",
+            "title",
+        )
+        self.assertIn("Cboe", output)
+        self.assertEqual(output.count("Cboe"), 1)
+
+    def test_cboe_original_entity_is_not_duplicated_when_model_keeps_it(self):
+        provider = RecordingProvider(["Cboe全球市场报告2026年8月交易量"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(
+            "Cboe Global Markets Reports Trading Volume for August 2026",
+            "芝加哥期权交易所",
+            "title",
+        )
+        self.assertEqual(output.count("Cboe"), 1)
+
+    def test_ice_original_entity_survives_when_model_omits_it(self):
+        provider = RecordingProvider(["利率期货市场创纪录未平仓量"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(
+            "ICE Interest Rate Futures Markets Hit Record Open Interest",
+            "洲际交易所",
+            "title",
+        )
+        self.assertIn("ICE", output)
+        self.assertEqual(output.count("ICE"), 1)
+
+    def test_six_brand_original_entity_survives_when_model_omits_it(self):
+        provider = RecordingProvider(["交易所数据:2026年8月"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text("SIX Exchanges Figures: August 2026", "SIX", "title")
+        self.assertIn("SIX", output)
+        self.assertEqual(output.count("SIX"), 1)
+
+    def test_source_metadata_alone_does_not_insert_cboe(self):
+        provider = RecordingProvider(["全球市场报告2026年8月交易量"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(
+            "Global Markets Reports Trading Volume for August 2026",
+            "Cboe",
+            "title",
+        )
+        self.assertNotIn("Cboe", output)
+
+    def test_ice_source_with_iceland_original_does_not_insert_ice(self):
+        provider = RecordingProvider(["冰岛能源市场活动增加"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text("Icelandic energy market activity increased", "ICE", "title")
+        self.assertEqual(output, "冰岛能源市场活动增加")
+        self.assertNotIn("ICE", output)
+
+    def test_ice_entity_survives_while_six_and_iceland_remain_ordinary(self):
+        provider = RecordingProvider(["报告六个市场的活动,包括冰岛"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(
+            "ICE reported activity across six markets, including Iceland.",
+            "ICE",
+            "title",
+        )
+        self.assertIn("ICE", output)
+        self.assertIn("六个市场", output)
+        self.assertIn("冰岛", output)
+        self.assertNotIn("SIX", output)
+
+    def test_multiple_original_entities_survive_in_original_order(self):
+        provider = RecordingProvider(["宣布新的期权市场数据合作"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(
+            "ICE and Cboe announce new options market data partnership",
+            "Source",
+            "title",
+        )
+        self.assertIn("ICE", output)
+        self.assertIn("Cboe", output)
+        self.assertLess(output.index("ICE"), output.index("Cboe"))
+        self.assertEqual(output.count("ICE"), 1)
+        self.assertEqual(output.count("Cboe"), 1)
+
+    def test_critical_term_validator_ignores_lowercase_ordinary_six(self):
+        result = TranslationSanityValidator.validate_with_reason(
+            "Trading volumes increased across six markets",
+            "六个市场的交易量上升",
+            "SIX",
+            field="title",
+        )
+        self.assertTrue(result.valid)
+
+    def test_lowercase_leading_six_does_not_restore_six_brand(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize("六个市场上涨", "six markets rose", "SIX")
+        self.assertEqual(normalized, "六个市场上涨")
+        self.assertEqual(changes, [])
+
+    def test_normal_text_without_protected_entity_is_unchanged_by_survival(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "市场基础设施更新",
+            "Market infrastructure update",
+            "Cboe",
+        )
+        self.assertEqual(normalized, "市场基础设施更新")
+        self.assertEqual(changes, [])
 
     def test_open_interest_financial_term_normalizes(self):
         normalizer = translator.TerminologyNormalizer()
