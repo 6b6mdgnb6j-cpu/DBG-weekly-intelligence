@@ -9,6 +9,7 @@ from pathlib import Path
 
 from crawler.date_utils import parse_week_start, week_file_key
 from crawler.highlight_ranker import select_highlights
+from crawler.translation_quality import audit_translation_quality
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -331,6 +332,27 @@ def evaluate_content(payload, week_start, week_end):
         "Competitor business mapping should not contradict strong content signals.",
         {"issues": competitor_mapping_warnings[:10], "count": len(competitor_mapping_warnings)},
     )
+
+    translation_issues = audit_translation_quality(items)
+    translation_failures = [issue for issue in translation_issues if issue.get("severity") == FAIL]
+    translation_warnings = [issue for issue in translation_issues if issue.get("severity") == WARNING]
+    check_result(
+        checks,
+        "translation_quality_failures",
+        FAIL,
+        not translation_failures,
+        "Translated artifact must not contain material entity, proper-noun, proposition, or action-direction errors.",
+        {"issues": translation_failures[:10], "count": len(translation_failures)},
+    )
+    check_result(
+        checks,
+        "translation_quality_warnings",
+        WARNING,
+        not translation_warnings,
+        "Translated artifact contains minor quality warnings that need review.",
+        {"issues": translation_warnings[:10], "count": len(translation_warnings)},
+    )
+    issues.extend(translation_issues)
 
     return checks, issues, {"final_items": final_count, "highlights": highlight_count}
 

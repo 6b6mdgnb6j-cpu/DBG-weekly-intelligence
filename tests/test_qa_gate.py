@@ -211,6 +211,184 @@ class QAGateTests(unittest.TestCase):
         self.assertEqual(report["status"], PASS)
         self.assertEqual(len(report["recovered_sources"]), 1)
 
+    def test_translation_quality_proper_noun_mismatch_fails(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Indonesia and Singapore sign financial cooperation memorandum",
+                    title_cn="印尼和新加拿大签署金融合作备忘录",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_proper_noun_mismatch", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_proper_noun_mismatch_fails_even_when_correct_name_also_present(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Bank Indonesia and the Monetary Authority of Singapore operationalise framework",
+                    title_cn="印尼银行和新加坡金融管理局启动框架",
+                    summary_original="Transactions between Indonesia and Singapore will settle in local currencies.",
+                    summary_cn="印尼和新加拿大之间的交易将以本地货币结算。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_proper_noun_mismatch", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_short_title_proposition_missing_fails(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="July saw inflows into funds despite domestic political changes and conflict in the Middle East",
+                    title_cn="尽管国内政治变化和中东冲突",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_title_proposition_missing", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_correct_inflow_title_passes(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="July saw inflows into funds despite domestic political changes and conflict in the Middle East",
+                    title_cn="尽管国内政治变化和中东冲突，7月基金仍出现资金流入",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_translation_quality_rescission_direction_missing_fails(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="SEC Proposes Rescission of Political Contribution Rule for Investment Advisers",
+                    title_cn="SEC提议禁止投资顾问进行政治捐款",
+                    summary_original="The rule currently prohibits certain pay-to-play activity.",
+                    summary_cn="该规则目前禁止某些活动。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_action_direction_missing", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_correct_rescission_direction_passes(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="SEC Proposes Rescission of Political Contribution Rule for Investment Advisers",
+                    title_cn="SEC拟取消投资顾问政治捐款规则",
+                    summary_original="The SEC proposes to rescind the rule that currently prohibits certain pay-to-play activity.",
+                    summary_cn="SEC提议取消目前禁止某些付费参与活动的规则。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_translation_quality_rescission_with_current_prohibition_context_passes_when_cancel_signal_exists(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="SEC Proposes Rescission of Political Contribution Rule for Investment Advisers",
+                    title_cn="SEC拟取消投资顾问政治捐款规则",
+                    summary_original="The SEC proposes to rescind the rule that currently prohibits investment advisers from certain activity.",
+                    summary_cn="SEC提议取消目前禁止投资顾问从事某些活动的规则。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_translation_quality_accepts_common_sec_chinese_name_with_acronym(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="SEC and FDA Announce MOU to Bolster Cooperation and Ensure Market Integrity",
+                    title_cn="SEC和FDA宣布签署谅解备忘录",
+                    summary_original="The SEC and FDA announced a memorandum of understanding.",
+                    summary_cn="美国证券交易委员会（SEC）和美国食品药品监督管理局宣布签署谅解备忘录。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_translation_quality_accepts_common_nasdaq_chinese_rendering(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Nasdaq Reports August 2026 Volumes",
+                    title_cn="纳斯达克报告2026年8月交易量",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_translation_quality_stox_bad_variant_uses_ascii_boundaries(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="STOXX Blue-Chip Indices Composition Changes",
+                    title_cn="STOXX蓝筹指数组成变化",
+                    summary_original="ISS STOXX announced index changes.",
+                    summary_cn="ISSSTOXX宣布指数调整。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+        self.assertNotIn("translation_entity_conflict", issue_ids)
+
+    def test_translation_quality_entity_duplicate_is_warning_not_fail(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="FINRA's Intraday Margin Standard",
+                    title_cn="FINRA (FINRA) 日内保证金标准",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+        self.assertEqual(self.check(report, "translation_quality_warnings")["result"], WARNING)
+        self.assertIn("translation_entity_duplicate", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_quality_normal_title_without_configured_anchor_does_not_false_positive(self):
+        weekly = payload(items=[item(1, title_original="Market structure update for regulated firms", title_cn="受监管机构市场结构更新")], highlights=[])
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
 
 class QAPolicyTests(unittest.TestCase):
     def test_policy_source_ids_exist_in_sources_json(self):

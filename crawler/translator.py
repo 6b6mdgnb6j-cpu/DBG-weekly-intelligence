@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v13"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v14"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -455,9 +455,18 @@ class TerminologyNormalizer:
         "SimCorp": {"aliases": [], "bad": []},
         "ISS STOXX": {
             "aliases": ["ISS-Corporate"],
-            "bad": ["国际空间站STOXX", "国际航天局公司", "国际航天局", "国际空间站", "伊斯斯斯托克斯", "伊斯斯托克斯"],
+            "bad": [
+                "国际空间站STOXX",
+                "国际航天站STOXX",
+                "国际航天局公司",
+                "国际航天局",
+                "国际空间站",
+                "国际航天站",
+                "伊斯斯斯托克斯",
+                "伊斯斯托克斯",
+            ],
         },
-        "STOXX": {"aliases": [], "bad": []},
+        "STOXX": {"aliases": [], "bad": [r"STTOXX", r"(?<![A-Za-z0-9])STOX(?![A-Za-z0-9])", "斯托克斯"]},
         "ICE": {"aliases": ["Intercontinental Exchange"], "bad": ["冰岛", "欧元交易所"]},
         "SIX": {"aliases": ["SIX Exchanges"], "bad": ["六个交易所", "六个", "六"]},
         "Nasdaq": {"aliases": [], "bad": ["纳斯达克"]},
@@ -466,7 +475,7 @@ class TerminologyNormalizer:
         "FTSE": {"aliases": ["FTSE Russell"], "bad": ["FTC"]},
         "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": []},
         "DTCC": {"aliases": [], "bad": []},
-        "FINRA": {"aliases": [], "bad": ["国际金融基金会"]},
+        "FINRA": {"aliases": [], "bad": ["国际金融基金会", "FINA"]},
         "SEC": {"aliases": ["Securities and Exchange Commission"], "bad": ["美国证券交易委员会", "证券交易委员会"]},
         "CFTC": {
             "aliases": ["Commodity Futures Trading Commission"],
@@ -547,12 +556,24 @@ class TerminologyNormalizer:
         ("Euronext", r"欧元集团", "Euronext"),
         ("FDIC", r"联邦银行局|联邦金融监管局", "FDIC"),
         ("FSC", r"联邦书商管理局", "FSC"),
+        ("Financial Services Commission", r"国际证券交易委员会", "金融服务委员会"),
         ("Intercontinental Exchange", r"欧元交易所", "ICE"),
         ("open interest", r"开放利率", "未平仓量"),
         ("interest rate swap", r"利率交换", "利率互换"),
         ("interest rate swaps", r"利率交换", "利率互换"),
         ("intraday margin", r"日内利标准|日内利润标准", "日内保证金标准"),
         ("stablecoin", r"稳定coin", "稳定币"),
+    ]
+
+    PROPER_NOUN_RULES = [
+        ("Singapore", r"新加拿大", "新加坡"),
+        ("Republic of Korea", r"韩国共和国", "韩国"),
+        ("Korea", r"韩国共和国", "韩国"),
+        ("United Kingdom", r"联合王国", "英国"),
+        ("UK", r"联合王国", "英国"),
+        ("United States", r"美国国", "美国"),
+        ("U.S.", r"美国国", "美国"),
+        ("Switzerland", r"瑞士兰", "瑞士"),
     ]
 
     VOLUME_CONTEXT_RE = re.compile(r"\b(?:trading\s+)?volumes?\b|\bmonthly\s+volumes?\b|\bexchange\s+volumes?\b", re.I)
@@ -597,6 +618,20 @@ class TerminologyNormalizer:
                 seen.add(canonical)
         return ordered
 
+    def _dedupe_protected_entities(self, text, original):
+        out = text or ""
+        changes = []
+        for canonical in self._protected_entities_in_original_order(original):
+            pattern = self._entity_pattern(canonical)
+            new = re.sub(pattern + r"\s*\(\s*" + pattern + r"\s*\)", canonical, out, flags=self._entity_flags(canonical))
+            new = re.sub(pattern + r"\s+" + pattern, canonical, new, flags=self._entity_flags(canonical))
+            if canonical in {"Nasdaq", "Cboe", "FINRA", "FTSE", "STOXX", "ICE", "SIX", "Eurex", "EEX"}:
+                new = re.sub(pattern + r"\s+" + re.escape(canonical) + r"(?=[A-Za-z])", canonical + " ", new, flags=self._entity_flags(canonical))
+            if new != out:
+                out = new
+                changes.append(f"{canonical}:dedupe_entity")
+        return out, changes
+
     def __init__(self):
         glossary = _load_glossary()
         self.version = glossary.get("version", 0)
@@ -629,7 +664,7 @@ class TerminologyNormalizer:
                         continue
                     if canonical == "SIX" and bad in ("六", "六个") and re.search(r"\bsix\b", original or ""):
                         continue
-                    replace(re.escape(bad), canonical, canonical)
+                    replace(bad if bad.startswith("(?<") else re.escape(bad), canonical, canonical)
 
         for brand, replacements in self.source_edits.items():
             aliases = self.CONTEXT_ALIASES.get(brand, [])
@@ -646,6 +681,10 @@ class TerminologyNormalizer:
             if source_term.lower() in original_lower:
                 replace(bad_pattern, good, source_term)
 
+        for source_term, bad_pattern, good in self.PROPER_NOUN_RULES:
+            if self._contains_entity(original, source_term):
+                replace(bad_pattern, good, source_term)
+
         if self.VOLUME_CONTEXT_RE.search(original or ""):
             replace(r"月份卷|月份数量|报告卷|(?<![一-龥])卷(?![一-龥])", "交易量", "trading volume")
 
@@ -660,11 +699,17 @@ class TerminologyNormalizer:
         if missing_entities:
             out = " ".join(missing_entities + [out]).strip()
 
+        out, dedupe_changes = self._dedupe_protected_entities(out, original)
+        changes.extend(dedupe_changes)
+
         for brand in self.source_edits:
             brand_pattern = r"^\s*" + re.escape(brand) + r"(?:['’]s)?\b"
             if re.search(brand_pattern, original or "", flags=self._entity_flags(brand)) and brand not in out:
                 out = f"{brand} {out}".strip()
                 changes.append(f"{brand}:restore_leading_brand")
+
+        out, dedupe_changes = self._dedupe_protected_entities(out, original)
+        changes.extend(dedupe_changes)
 
         return out.strip(), changes
 

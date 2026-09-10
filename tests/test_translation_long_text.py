@@ -217,7 +217,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v13", GENERATION_CONFIG_VERSION)
+        self.assertIn("v14", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -467,6 +467,16 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("ISS STOXX", normalized)
         self.assertNotIn("国际空间站", normalized)
 
+    def test_iss_stoxx_conflicting_body_variant_is_removed_when_canonical_present(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "ISS STOXX 国际航天站STOXX可持续性评级更新",
+            "ISS STOXX Sustainability Solutions launches report",
+            "ISS STOXX",
+        )
+        self.assertEqual(normalized.count("ISS STOXX"), 1)
+        self.assertNotIn("国际航天站", normalized)
+
     def test_iss_corporate_entity_does_not_become_space_agency(self):
         normalizer = translator.TerminologyNormalizer()
         normalized, _ = normalizer.normalize(
@@ -486,6 +496,22 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         self.assertIn("SIX", normalized)
         self.assertNotIn("六个交易所", normalized)
+
+    def test_singapore_proper_noun_hallucination_normalizes_from_original_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "印尼和新加拿大签署金融合作备忘录",
+            "Indonesia and Singapore sign financial cooperation memorandum",
+            "Source",
+        )
+        self.assertIn("新加坡", normalized)
+        self.assertNotIn("新加拿大", normalized)
+
+    def test_singapore_source_metadata_alone_does_not_rewrite_place_name(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize("新加拿大市场更新", "Market update", "Singapore")
+        self.assertEqual(normalized, "新加拿大市场更新")
+        self.assertEqual(changes, [])
 
     def test_ftse_entity_does_not_mutate_to_ftc(self):
         normalizer = translator.TerminologyNormalizer()
@@ -508,6 +534,18 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("FINRA", normalized)
         self.assertIn("日内保证金标准", normalized)
         self.assertNotIn("国际金融基金会", normalized)
+
+    def test_finra_near_miss_normalizes_only_with_original_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize("FINA发布日内保证金标准", "FINRA's Intraday Margin Standard", "FINRA")
+        self.assertIn("FINRA", normalized)
+        self.assertNotIn("FINA", normalized)
+
+    def test_finra_near_miss_without_original_evidence_is_not_rewritten(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize("FINA游泳组织更新", "Aquatics organization update", "Source")
+        self.assertEqual(normalized, "FINA游泳组织更新")
+        self.assertEqual(changes, [])
 
     def test_unrelated_chinese_text_is_not_globally_rewritten_without_original_context(self):
         normalizer = translator.TerminologyNormalizer()
@@ -649,6 +687,35 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertLess(output.index("ICE"), output.index("Cboe"))
         self.assertEqual(output.count("ICE"), 1)
         self.assertEqual(output.count("Cboe"), 1)
+
+    def test_nasdaq_verafin_duplicate_preserves_composite_name(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "Nasdaq NasdaqVerafin宣布欺诈防控合作",
+            "Nasdaq Verafin announces fraud prevention partnership",
+            "Nasdaq",
+        )
+        self.assertIn("Nasdaq Verafin", normalized)
+        self.assertNotIn("Nasdaq NasdaqVerafin", normalized)
+
+    def test_finra_parenthetical_duplicate_collapses_to_single_entity(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "FINRA (FINRA) 发布日内保证金标准",
+            "FINRA's Intraday Margin Standard",
+            "FINRA",
+        )
+        self.assertEqual(normalized.count("FINRA"), 1)
+
+    def test_financial_services_commission_phrase_normalizes_from_original_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "FSC 国际证券交易委员会发布政策路线图",
+            "FSC Introduces Policy Roadmap by the Financial Services Commission",
+            "FSC",
+        )
+        self.assertIn("金融服务委员会", normalized)
+        self.assertNotIn("国际证券交易委员会", normalized)
 
     def test_critical_term_validator_ignores_lowercase_ordinary_six(self):
         result = TranslationSanityValidator.validate_with_reason(
