@@ -12,10 +12,11 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v12"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v13"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
+MIN_TIER2_SOURCE_CHUNK_TOKEN_LIMIT = 8
 MODEL_SOURCE_TOKEN_LIMIT = 512
 DEFAULT_GENERATION_CONFIG = {
     "max_new_tokens": 240,
@@ -718,22 +719,26 @@ class TitleTranslator:
         }
 
     @staticmethod
-    def _effective_recovery_chunk_limit(initial_metadata):
+    def _effective_recovery_chunk_limit(
+        initial_metadata,
+        configured_max=RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
+        min_limit=MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
+    ):
         token_counts = [
             count
             for count in (initial_metadata.get("chunk_token_counts") or [])
             if isinstance(count, int) and count > 0
         ]
         if not token_counts:
-            return RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT
+            return configured_max
 
         largest_failed_chunk = max(token_counts)
         if largest_failed_chunk <= 1:
             return 1
 
         effective = min(
-            RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
-            max(MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT, (largest_failed_chunk + 1) // 2),
+            configured_max,
+            max(min_limit, (largest_failed_chunk + 1) // 2),
         )
         if effective >= largest_failed_chunk:
             effective = largest_failed_chunk - 1
@@ -751,18 +756,33 @@ class TitleTranslator:
         recovery_translation="",
         recovery_validation=None,
         recovery_metadata=None,
+        tier2_attempted=False,
+        tier2_translation="",
+        tier2_validation=None,
+        tier2_metadata=None,
+        initial_raw_translation="",
+        recovery_raw_translation="",
+        tier2_raw_translation="",
     ):
         if not self.logger:
             return
-        final_validation = recovery_validation or initial_validation
+        final_validation = tier2_validation or recovery_validation or initial_validation
+        final_raw_translation = tier2_raw_translation or recovery_raw_translation or initial_raw_translation
+        final_normalized_translation = tier2_translation or recovery_translation or initial_translation
         self.logger.warning(
             "Translation length-ratio recovery diagnostics: "
             "source=%s field=%s text_prefix=%r original_raw_length=%s original_content_length=%s "
             "translated_raw_length=%s translated_content_length=%s raw_ratio=%.3f normalized_content_ratio=%.3f "
+            "pre_normalization_content_length=%s post_normalization_content_length=%s "
             "initial_reason=%s initial_chunk_limit=%s initial_chunk_count=%s "
             "initial_chunk_token_counts=%s initial_chunk_output_lengths=%s "
             "recovery_attempted=%s configured_recovery_chunk_limit=%s effective_recovery_chunk_limit=%s "
-            "recovery_chunk_count=%s recovery_chunk_token_counts=%s initial_output_length=%s "
+            "recovery_chunk_count=%s recovery_chunk_token_counts=%s recovery_chunk_output_lengths=%s "
+            "tier1_effective_chunk_limit=%s tier1_chunk_count=%s tier1_chunk_token_counts=%s "
+            "tier1_chunk_output_lengths=%s tier1_output_length=%s tier1_content_ratio=%.3f tier1_reason=%s "
+            "tier2_attempted=%s tier2_effective_chunk_limit=%s tier2_chunk_count=%s "
+            "tier2_chunk_token_counts=%s tier2_chunk_output_lengths=%s tier2_output_length=%s "
+            "tier2_content_ratio=%.3f tier2_reason=%s initial_output_length=%s "
             "recovery_output_length=%s initial_ratio=%.3f final_normalized_content_ratio=%.3f final_reason=%s",
             source,
             field,
@@ -773,6 +793,8 @@ class TitleTranslator:
             self._content_length(initial_translation),
             self._length_ratio(text, initial_translation),
             self._content_ratio(text, initial_translation),
+            self._content_length(final_raw_translation),
+            self._content_length(final_normalized_translation),
             initial_validation.reason,
             initial_metadata.get("chunk_token_limit"),
             initial_metadata.get("chunk_count"),
@@ -783,10 +805,26 @@ class TitleTranslator:
             (recovery_metadata or {}).get("chunk_token_limit"),
             (recovery_metadata or {}).get("chunk_count"),
             (recovery_metadata or {}).get("chunk_token_counts"),
+            (recovery_metadata or {}).get("chunk_output_lengths"),
+            (recovery_metadata or {}).get("chunk_token_limit"),
+            (recovery_metadata or {}).get("chunk_count"),
+            (recovery_metadata or {}).get("chunk_token_counts"),
+            (recovery_metadata or {}).get("chunk_output_lengths"),
+            len(recovery_translation or ""),
+            self._content_ratio(text, recovery_translation),
+            (recovery_validation or initial_validation).reason,
+            tier2_attempted,
+            (tier2_metadata or {}).get("chunk_token_limit"),
+            (tier2_metadata or {}).get("chunk_count"),
+            (tier2_metadata or {}).get("chunk_token_counts"),
+            (tier2_metadata or {}).get("chunk_output_lengths"),
+            len(tier2_translation or ""),
+            self._content_ratio(text, tier2_translation) if tier2_attempted else 0.0,
+            (tier2_validation or ValidationResult(False, "not_attempted")).reason if tier2_attempted else "not_attempted",
             len(initial_translation or ""),
             len(recovery_translation or ""),
             self._length_ratio(text, initial_translation),
-            self._content_ratio(text, recovery_translation or initial_translation),
+            self._content_ratio(text, final_normalized_translation),
             final_validation.reason,
         )
 
@@ -865,6 +903,23 @@ class TitleTranslator:
                 recovered_validation = TranslationSanityValidator.validate_with_reason(
                     text, recovered_normalized, source, field=field
                 )
+                tier2_raw = ""
+                tier2_normalized = ""
+                tier2_changes = []
+                tier2_validation = None
+                tier2_metadata = None
+                if recovered_validation.reason == "content_ratio_low":
+                    tier2_chunk_limit = self._effective_recovery_chunk_limit(
+                        recovery_metadata,
+                        configured_max=RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
+                        min_limit=MIN_TIER2_SOURCE_CHUNK_TOKEN_LIMIT,
+                    )
+                    tier2_raw = self._provider_translate(provider, text, tier2_chunk_limit)
+                    tier2_metadata = self._provider_metadata(provider)
+                    tier2_normalized, tier2_changes = self.normalizer.normalize(tier2_raw, text, source)
+                    tier2_validation = TranslationSanityValidator.validate_with_reason(
+                        text, tier2_normalized, source, field=field
+                    )
                 self._log_recovery_diagnostics(
                     source,
                     field,
@@ -876,6 +931,13 @@ class TitleTranslator:
                     recovered_normalized,
                     recovered_validation,
                     recovery_metadata,
+                    tier2_validation is not None,
+                    tier2_normalized,
+                    tier2_validation,
+                    tier2_metadata,
+                    raw,
+                    recovered_raw,
+                    tier2_raw,
                 )
                 if recovered_raw and recovered_validation.valid:
                     self.cache[key] = {
@@ -889,10 +951,27 @@ class TitleTranslator:
                     }
                     self.cache_dirty = True
                     return recovered_normalized
+                if tier2_raw and tier2_validation and tier2_validation.valid:
+                    self.cache[key] = {
+                        "translation": tier2_normalized,
+                        "raw_translation": tier2_raw,
+                        "terminology_changes": tier2_changes,
+                        "model": provider.model_name,
+                        "generation_config_version": GENERATION_CONFIG_VERSION,
+                        "glossary_version": self.normalizer.version,
+                        "recovered_from": f"tier2:{recovered_validation.reason}",
+                    }
+                    self.cache_dirty = True
+                    return tier2_normalized
                 validation = recovered_validation
                 raw = recovered_raw
                 normalized = recovered_normalized
                 changes = recovered_changes
+                if tier2_validation is not None:
+                    validation = tier2_validation
+                    raw = tier2_raw
+                    normalized = tier2_normalized
+                    changes = tier2_changes
 
             self._log_rejection_diagnostics(source, field, text, raw, normalized, changes, validation)
             if self.strict:

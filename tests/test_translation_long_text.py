@@ -217,7 +217,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v12", GENERATION_CONFIG_VERSION)
+        self.assertIn("v13", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
 
     def test_length_ratio_recovery_diagnostics_include_chunk_metadata(self):
         logger = Mock()
-        provider = RecordingProvider(["短", "市场基础设施监管政策清算结算跨境资本市场改革持续推进"])
+        provider = RecordingProvider(["短", "市场基础设施监管政策清算结算跨境资本市场改革持续推进", "不应调用"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True, logger=logger)
         title_translator.cache = {}
         with patch.object(
@@ -379,6 +379,30 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("configured_recovery_chunk_limit", warning_args)
         self.assertIn("effective_recovery_chunk_limit", warning_args)
         self.assertIn("recovery_chunk_count", warning_args)
+        self.assertIn("tier1_effective_chunk_limit", warning_args)
+        self.assertIn("tier2_attempted", warning_args)
+
+    def test_tier2_recovery_diagnostics_include_microchunk_metadata(self):
+        logger = Mock()
+        provider = RecordingProvider(["短", "仍然不完整", "完整中文翻译覆盖全部原文信息包括备忘录条款"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True, logger=logger)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(False, "content_ratio_low"),
+                translator.ValidationResult(True),
+            ],
+        ):
+            title_translator._translate_text(" ".join(f"token{i}" for i in range(49)), "SEC", "summary")
+        warning_args = " ".join(str(arg) for call in logger.warning.call_args_list for arg in call.args)
+        self.assertIn("tier2_attempted", warning_args)
+        self.assertIn("tier2_effective_chunk_limit", warning_args)
+        self.assertIn("tier2_chunk_count", warning_args)
+        self.assertIn("tier2_chunk_token_counts", warning_args)
+        self.assertIn("tier2_content_ratio", warning_args)
 
     def test_empty_chunk_output_still_fails_without_cache_poisoning(self):
         provider = fake_provider(FailingSecondChunkModel())
@@ -747,8 +771,135 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(output, "完整中文翻译覆盖全部原文信息并保持顺序")
         self.assertEqual(len(provider.calls), 2)
 
+    def test_tier2_microchunk_recovery_succeeds_after_tier1_content_ratio_low(self):
+        original = " ".join(f"token{i}" for i in range(49))
+        provider = RecordingProvider(["短", "仍然不完整", "完整中文翻译覆盖全部原文信息包括备忘录条款并保持顺序"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(False, "content_ratio_low"),
+                translator.ValidationResult(True),
+            ],
+        ):
+            output = title_translator._translate_text(original, "SEC", "summary")
+        self.assertIn("备忘录条款", output)
+        self.assertEqual([call["chunk_token_limit"] for call in provider.calls], [SOURCE_CHUNK_TOKEN_LIMIT, 25, 13])
+        self.assertEqual(provider.last_translation_metadata["chunk_token_counts"], [13, 13, 13, 10])
+
+    def test_tier2_chunk_plan_differs_from_tier1(self):
+        original = " ".join(f"token{i}" for i in range(49))
+        provider = RecordingProvider(["短", "仍然不完整", "完整中文翻译覆盖全部原文信息"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(False, "content_ratio_low"),
+                translator.ValidationResult(True),
+            ],
+        ):
+            title_translator._translate_text(original, "Source", "summary")
+        self.assertEqual(provider.calls[1]["chunk_token_limit"], 25)
+        self.assertEqual(provider.calls[2]["chunk_token_limit"], 13)
+        self.assertNotEqual(provider.calls[1]["chunk_token_limit"], provider.calls[2]["chunk_token_limit"])
+
+    def test_tier2_retranslates_entire_original_and_preserves_source_order(self):
+        original = "alpha beta gamma delta epsilon zeta eta theta iota kappa"
+        provider = RecordingProvider(["短", "甲 乙", "甲 乙 丙 丁 戊 己 庚 辛 壬 癸"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(False, "content_ratio_low"),
+                translator.ValidationResult(True),
+            ],
+        ):
+            output = title_translator._translate_text(original, "Source", "summary")
+        self.assertEqual(output, "甲 乙 丙 丁 戊 己 庚 辛 壬 癸")
+        self.assertEqual([call["text"] for call in provider.calls], [original, original, original])
+
+    def test_tier2_runs_at_most_once(self):
+        provider = RecordingProvider(["短", "仍短", "依然短", "不应调用"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(False, "content_ratio_low"),
+                translator.ValidationResult(False, "content_ratio_low"),
+            ],
+        ):
+            with self.assertRaises(TranslationUnavailableError):
+                title_translator._translate_text(" ".join(["market"] * 49), "Source", "summary")
+        self.assertEqual(len(provider.calls), 3)
+
+    def test_tier2_does_not_run_for_bad_term_after_tier1(self):
+        provider = RecordingProvider(["短", "外汇清算更新", "不应调用"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=False)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(False, "bad_term:外汇清算"),
+            ],
+        ):
+            output = title_translator._translate_text(" ".join(["market"] * 49), "Source", "summary")
+        self.assertEqual(output, "")
+        self.assertEqual(len(provider.calls), 2)
+
+    def test_tier2_does_not_run_for_critical_term_missing_after_tier1(self):
+        provider = RecordingProvider(["短", "市场规则", "不应调用"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=False)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "length_ratio_low"),
+                translator.ValidationResult(False, "critical_term_missing:CFTC"),
+            ],
+        ):
+            output = title_translator._translate_text(" ".join(["CFTC"] + ["market"] * 48), "Source", "summary")
+        self.assertEqual(output, "")
+        self.assertEqual(len(provider.calls), 2)
+
+    def test_initial_success_never_runs_recovery(self):
+        provider = RecordingProvider(["完整中文翻译"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(TranslationSanityValidator, "validate_with_reason", return_value=translator.ValidationResult(True)):
+            output = title_translator._translate_text("Market infrastructure update", "Source", "title")
+        self.assertEqual(output, "完整中文翻译")
+        self.assertEqual(len(provider.calls), 1)
+
+    def test_tier1_success_never_runs_tier2(self):
+        provider = RecordingProvider(["短", "完整中文翻译", "不应调用"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[translator.ValidationResult(False, "length_ratio_low"), translator.ValidationResult(True)],
+        ):
+            output = title_translator._translate_text(" ".join(["market"] * 49), "Source", "summary")
+        self.assertEqual(output, "完整中文翻译")
+        self.assertEqual(len(provider.calls), 2)
+
     def test_still_collapsed_recovery_fails_strict_mode(self):
-        provider = RecordingProvider(["短", "仍短"])
+        provider = RecordingProvider(["短", "仍短", "依然很短"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
         with patch.object(
@@ -757,11 +908,12 @@ class LongTextTranslationTests(unittest.TestCase):
             side_effect=[
                 translator.ValidationResult(False, "content_ratio_low"),
                 translator.ValidationResult(False, "content_ratio_low"),
+                translator.ValidationResult(False, "content_ratio_low"),
             ],
         ):
             with self.assertRaises(TranslationUnavailableError):
                 title_translator._translate_text(" ".join(["market"] * 60), "Source", "summary")
-        self.assertEqual(len(provider.calls), 2)
+        self.assertEqual(len(provider.calls), 3)
 
     def test_legitimate_shorter_chinese_summary_passes(self):
         original = (
@@ -772,6 +924,27 @@ class LongTextTranslationTests(unittest.TestCase):
         translated = "央行发布最终规则，更新资本市场结算保障，明确操作风险控制、报告要求和实施时间表。"
         result = TranslationSanityValidator.validate_with_reason(original, translated, "Source", field="summary")
         self.assertTrue(result.valid)
+
+    def test_canonical_entity_shortening_alone_does_not_fail_completeness(self):
+        original = (
+            "The Securities and Exchange Commission today entered into a Memorandum of Understanding "
+            "designed to assist the agencies in carrying out their respective missions to ensure "
+            "efficient oversight and resilient market infrastructure for investors."
+        )
+        translated = "SEC今天签署谅解备忘录,旨在协助各机构履行各自使命,确保对投资者和市场基础设施进行有效监督。"
+        result = TranslationSanityValidator.validate_with_reason(original, translated, "SEC", field="summary")
+        self.assertTrue(result.valid)
+
+    def test_incomplete_translation_missing_substantive_clause_still_fails_completeness(self):
+        original = (
+            "The Securities and Exchange Commission today entered into a Memorandum of Understanding "
+            "designed to assist the agencies in carrying out their respective missions to ensure "
+            "efficient oversight and resilient market infrastructure for investors."
+        )
+        translated = "SEC和食品和药物管理局今天宣布,旨在协助各机构履行各自的任务,以确保"
+        result = TranslationSanityValidator.validate_with_reason(original, translated, "SEC", field="summary")
+        self.assertFalse(result.valid)
+        self.assertEqual(result.reason, "content_ratio_low")
 
     def test_very_short_titles_are_not_falsely_rejected(self):
         result = TranslationSanityValidator.validate_with_reason("Market update", "市场更新", "Source", field="title")
