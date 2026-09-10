@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-v10"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v11"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -126,8 +126,15 @@ class TranslationSanityValidator:
         "联邦金融监管局",
     )
 
+    @staticmethod
+    def _content_length(text):
+        cleaned = re.sub(r"https?://\S+", "", text or "", flags=re.I)
+        cleaned = re.sub(r"&[A-Za-z0-9#]+;", "", cleaned)
+        cleaned = re.sub(r"[\s\W_]+", "", cleaned, flags=re.UNICODE)
+        return len(cleaned)
+
     @classmethod
-    def validate_with_reason(cls, original, translated, source=""):
+    def validate_with_reason(cls, original, translated, source="", field="text"):
         if not (translated or "").strip():
             return ValidationResult(False, "empty_translation")
         for term in cls.BAD_GARBAGE_TERMS:
@@ -162,14 +169,66 @@ class TranslationSanityValidator:
             if ratio < 0.08:
                 return ValidationResult(False, "length_ratio_low")
 
+        original_content_len = cls._content_length(original)
+        translated_content_len = cls._content_length(translated)
+        if original_content_len >= 180:
+            content_ratio = translated_content_len / max(original_content_len, 1)
+            min_ratio = 0.16 if field == "summary" else 0.10
+            if content_ratio < min_ratio:
+                return ValidationResult(False, "content_ratio_low")
+
         original_lower = (original or "").lower()
+        original_text = original or ""
+        context_bad_terms = [
+            ("ICE", ("冰岛", "欧元交易所")),
+            ("Intercontinental Exchange", ("冰岛", "欧元交易所")),
+            ("ISS STOXX", ("国际空间站", "国际航天局")),
+            ("ISS-Corporate", ("国际空间站", "国际航天局")),
+            ("SIX", ("六个交易所", "六个")),
+            ("FTSE", ("FTC",)),
+            ("FINRA", ("国际金融基金会",)),
+            ("open interest", ("开放利率",)),
+            ("interest rate swap", ("利率交换",)),
+            ("trading volume", ("月份卷", "报告卷")),
+            ("trading volumes", ("月份卷", "报告卷")),
+            ("intraday margin", ("日内利标准",)),
+            ("stablecoin", ("稳定coin",)),
+        ]
+        for trigger, bad_terms in context_bad_terms:
+            if trigger.lower() in original_lower:
+                for bad in bad_terms:
+                    if bad in translated:
+                        return ValidationResult(False, f"context_bad_term:{trigger}:{bad}")
+
         if "dematerialized" in original_lower and ("物质化" in translated or "非物质化" in translated):
             return ValidationResult(False, "dematerialized_mistranslation")
 
-        critical_terms = ("Clearstream", "Eurex", "HKEX", "CFTC", "SEC", "ECB", "FOMC", "JPX")
+        critical_terms = (
+            "Clearstream",
+            "Eurex",
+            "EEX",
+            "HKEX",
+            "CFTC",
+            "SEC",
+            "ECB",
+            "FOMC",
+            "JPX",
+            "ICE",
+            "ISS STOXX",
+            "STOXX",
+            "SIX",
+            "Nasdaq",
+            "Cboe",
+            "LSEG",
+            "FTSE",
+            "DTCC",
+            "FINRA",
+            "MAS",
+            "FSC",
+        )
         for term in critical_terms:
             term_pattern = r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])"
-            if re.search(term_pattern, original or "", flags=re.I) and term not in translated:
+            if re.search(term_pattern, original_text, flags=re.I) and term not in translated:
                 return ValidationResult(False, f"critical_term_missing:{term}")
 
         for term in cls.BAD_TERMS:
@@ -370,6 +429,43 @@ class LocalNLLBProvider:
 
 
 class TerminologyNormalizer:
+    CANONICAL_ENTITIES = {
+        "Deutsche Börse": {
+            "aliases": ["Deutsche Börse Group"],
+            "bad": ["德意志交易所"],
+        },
+        "Eurex": {"aliases": [], "bad": ["欧莱克斯", "欧雷克斯", "欧元交易所"]},
+        "EEX": {"aliases": ["EEX Group"], "bad": []},
+        "360T": {"aliases": [], "bad": []},
+        "Crypto Finance": {"aliases": [], "bad": []},
+        "Clearstream": {"aliases": [], "bad": ["清流"]},
+        "SimCorp": {"aliases": [], "bad": []},
+        "ISS STOXX": {
+            "aliases": ["ISS-Corporate"],
+            "bad": ["国际空间站STOXX", "国际航天局公司", "国际航天局", "国际空间站", "伊斯斯斯托克斯", "伊斯斯托克斯"],
+        },
+        "STOXX": {"aliases": [], "bad": []},
+        "ICE": {"aliases": ["Intercontinental Exchange"], "bad": ["冰岛", "欧元交易所"]},
+        "SIX": {"aliases": ["SIX Exchanges"], "bad": ["六个交易所", "六个", "六"]},
+        "Nasdaq": {"aliases": [], "bad": ["纳斯达克"]},
+        "Cboe": {"aliases": [], "bad": []},
+        "LSEG": {"aliases": ["London Stock Exchange Group"], "bad": []},
+        "FTSE": {"aliases": ["FTSE Russell"], "bad": ["FTC"]},
+        "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": []},
+        "DTCC": {"aliases": [], "bad": []},
+        "FINRA": {"aliases": [], "bad": ["国际金融基金会"]},
+        "SEC": {"aliases": ["Securities and Exchange Commission"], "bad": ["美国证券交易委员会", "证券交易委员会"]},
+        "CFTC": {
+            "aliases": ["Commodity Futures Trading Commission"],
+            "bad": ["欧盟货币交易委员会", "欧盟CFTC", "欧盟贸易交易委员会", "美国央行", "金融交易委员会", "商品期货交易委员会"],
+        },
+        "MAS": {"aliases": ["Monetary Authority of Singapore"], "bad": []},
+        "HKEX": {"aliases": ["Hong Kong Exchanges and Clearing"], "bad": ["希克克斯", "希克斯"]},
+        "JPX": {"aliases": ["Japan Exchange Group"], "bad": ["日本交流集团", "日本交易所集团"]},
+        "FSC": {"aliases": ["Financial Services Commission"], "bad": ["联邦书商管理局", "国际SEC"]},
+        "ECB": {"aliases": ["European Central Bank"], "bad": ["欧洲央行"]},
+        "FOMC": {"aliases": ["Federal Open Market Committee"], "bad": ["联邦开放市场委员会"]},
+    }
     FALLBACK_SOURCE_EDITS = {
         "Clearstream": {"清流": "Clearstream"},
         "Deutsche Börse": {"德意志交易所": "Deutsche Börse"},
@@ -390,6 +486,11 @@ class TerminologyNormalizer:
         "FOMC": {"联邦开放市场委员会": "FOMC"},
         "HKMA": {"香港货币管理局": "HKMA", "香港金融管理局": "HKMA"},
         "JPX": {"日本交流集团": "JPX", "日本交易所集团": "JPX"},
+        "SIX": {"六个交易所": "SIX Exchanges", "六个": "SIX", "六": "SIX"},
+        "ICE": {"冰岛": "ICE", "欧元交易所": "ICE"},
+        "FINRA": {"国际金融基金会": "FINRA"},
+        "FTSE": {"FTC": "FTSE"},
+        "FSC": {"国际SEC": "FSC", "联邦书商管理局": "FSC"},
     }
     CONTEXT_ALIASES = {
         "Clearstream": ["明讯银行"],
@@ -407,6 +508,12 @@ class TerminologyNormalizer:
         "FOMC": ["federal open market committee", "联邦储备系统"],
         "JPX": ["japan exchange group", "日本交易所集团"],
         "Euronext": ["euronext", "泛欧交易所"],
+        "ICE": ["intercontinental exchange", "洲际交易所"],
+        "SIX": ["six exchanges", "six group"],
+        "FINRA": ["financial industry regulatory authority"],
+        "FTSE": ["ftse russell"],
+        "Nasdaq": ["nasdaq"],
+        "FSC": ["financial services commission"],
     }
     TERM_RULES = [
         ("Commodity Pool Operator", r"商品库运营商", "商品基金运营商"),
@@ -428,7 +535,24 @@ class TerminologyNormalizer:
         ("FDIC", r"联邦银行局|联邦金融监管局", "FDIC"),
         ("FSC", r"联邦书商管理局", "FSC"),
         ("Intercontinental Exchange", r"欧元交易所", "ICE"),
+        ("open interest", r"开放利率", "未平仓量"),
+        ("interest rate swap", r"利率交换", "利率互换"),
+        ("interest rate swaps", r"利率交换", "利率互换"),
+        ("intraday margin", r"日内利标准|日内利润标准", "日内保证金标准"),
+        ("stablecoin", r"稳定coin", "稳定币"),
     ]
+
+    VOLUME_CONTEXT_RE = re.compile(r"\b(?:trading\s+)?volumes?\b|\bmonthly\s+volumes?\b|\bexchange\s+volumes?\b", re.I)
+    INDEX_CONTEXT_RE = re.compile(r"\b(?:market\s+index|index\s+series|benchmark\s+index|indices|indexes|ftse)\b", re.I)
+
+    @staticmethod
+    def _contains_entity(text, entity):
+        flags = 0 if entity.isupper() and len(entity) <= 5 else re.I
+        return bool(re.search(r"(?<![A-Za-z0-9])" + re.escape(entity) + r"(?![A-Za-z0-9])", text or "", flags=flags))
+
+    def _original_has_entity_evidence(self, original, canonical, aliases):
+        original_lower = (original or "").lower()
+        return self._contains_entity(original, canonical) or any(alias.lower() in original_lower for alias in aliases)
 
     def __init__(self):
         glossary = _load_glossary()
@@ -453,20 +577,37 @@ class TerminologyNormalizer:
                 out = new
                 changes.append(label)
 
+        for canonical, spec in self.CANONICAL_ENTITIES.items():
+            aliases = spec.get("aliases", [])
+            has_context = self._original_has_entity_evidence(original, canonical, aliases)
+            if has_context:
+                for bad in spec.get("bad", []):
+                    if canonical == "ICE" and bad == "冰岛" and re.search(r"\bIceland(?:ic)?\b", original or "", flags=re.I):
+                        continue
+                    if canonical == "SIX" and bad in ("六", "六个") and re.search(r"\bsix\b", original or ""):
+                        continue
+                    replace(re.escape(bad), canonical, canonical)
+
         for brand, replacements in self.source_edits.items():
             aliases = self.CONTEXT_ALIASES.get(brand, [])
-            has_context = (
-                brand.lower() in source_lower
-                or brand.lower() in original_lower
-                or any(alias in source_lower or alias in original_lower for alias in aliases)
-            )
+            has_context = self._original_has_entity_evidence(original, brand, aliases)
             if has_context:
                 for bad, good in replacements.items():
+                    if brand == "ICE" and bad == "冰岛" and re.search(r"\bIceland(?:ic)?\b", original or "", flags=re.I):
+                        continue
+                    if brand == "SIX" and bad in ("六", "六个") and re.search(r"\bsix\b", original or ""):
+                        continue
                     replace(re.escape(bad), good, good)
 
         for source_term, bad_pattern, good in self.TERM_RULES:
             if source_term.lower() in original_lower:
                 replace(bad_pattern, good, source_term)
+
+        if self.VOLUME_CONTEXT_RE.search(original or ""):
+            replace(r"月份卷|月份数量|报告卷|(?<![一-龥])卷(?![一-龥])", "交易量", "trading volume")
+
+        if self.INDEX_CONTEXT_RE.search(original or ""):
+            replace(r"索引", "指数", "financial index")
 
         for brand in self.source_edits:
             brand_pattern = r"^\s*" + re.escape(brand) + r"(?:['’]s)?\b"
@@ -496,6 +637,16 @@ class TitleTranslator:
         if original_len <= 0:
             return 0.0
         return translated_len / original_len
+
+    @staticmethod
+    def _content_length(text):
+        return TranslationSanityValidator._content_length(text)
+
+    def _content_ratio(self, original, translated):
+        original_len = self._content_length(original)
+        if original_len <= 0:
+            return 0.0
+        return self._content_length(translated) / original_len
 
     @staticmethod
     def _provider_translate(provider, text, chunk_token_limit):
@@ -556,18 +707,22 @@ class TitleTranslator:
         final_validation = recovery_validation or initial_validation
         self.logger.warning(
             "Translation length-ratio recovery diagnostics: "
-            "source=%s field=%s text_prefix=%r original_length=%s translated_length=%s ratio=%.3f "
+            "source=%s field=%s text_prefix=%r original_raw_length=%s original_content_length=%s "
+            "translated_raw_length=%s translated_content_length=%s raw_ratio=%.3f normalized_content_ratio=%.3f "
             "initial_reason=%s initial_chunk_limit=%s initial_chunk_count=%s "
             "initial_chunk_token_counts=%s initial_chunk_output_lengths=%s "
             "recovery_attempted=%s configured_recovery_chunk_limit=%s effective_recovery_chunk_limit=%s "
             "recovery_chunk_count=%s recovery_chunk_token_counts=%s initial_output_length=%s "
-            "recovery_output_length=%s initial_ratio=%.3f final_ratio=%.3f final_reason=%s",
+            "recovery_output_length=%s initial_ratio=%.3f final_normalized_content_ratio=%.3f final_reason=%s",
             source,
             field,
             (text or "")[:120],
             len(text or ""),
+            self._content_length(text),
             len(initial_translation or ""),
+            self._content_length(initial_translation),
             self._length_ratio(text, initial_translation),
+            self._content_ratio(text, initial_translation),
             initial_validation.reason,
             initial_metadata.get("chunk_token_limit"),
             initial_metadata.get("chunk_count"),
@@ -581,7 +736,7 @@ class TitleTranslator:
             len(initial_translation or ""),
             len(recovery_translation or ""),
             self._length_ratio(text, initial_translation),
-            self._length_ratio(text, recovery_translation or initial_translation),
+            self._content_ratio(text, recovery_translation or initial_translation),
             final_validation.reason,
         )
 
@@ -612,14 +767,16 @@ class TitleTranslator:
             return ""
         initial_metadata = self._provider_metadata(provider)
         normalized, changes = self.normalizer.normalize(raw, text, source)
-        validation = TranslationSanityValidator.validate_with_reason(text, normalized, source)
+        validation = TranslationSanityValidator.validate_with_reason(text, normalized, source, field=field)
         if not validation.valid:
-            if validation.reason == "length_ratio_low":
+            if validation.reason in ("length_ratio_low", "content_ratio_low"):
                 recovery_chunk_limit = self._effective_recovery_chunk_limit(initial_metadata)
                 recovered_raw = self._provider_translate(provider, text, recovery_chunk_limit)
                 recovery_metadata = self._provider_metadata(provider)
                 recovered_normalized, recovered_changes = self.normalizer.normalize(recovered_raw, text, source)
-                recovered_validation = TranslationSanityValidator.validate_with_reason(text, recovered_normalized, source)
+                recovered_validation = TranslationSanityValidator.validate_with_reason(
+                    text, recovered_normalized, source, field=field
+                )
                 self._log_recovery_diagnostics(
                     source,
                     field,
@@ -640,7 +797,7 @@ class TitleTranslator:
                         "model": provider.model_name,
                         "generation_config_version": GENERATION_CONFIG_VERSION,
                         "glossary_version": self.normalizer.version,
-                        "recovered_from": "length_ratio_low",
+                        "recovered_from": validation.reason,
                     }
                     self.cache_dirty = True
                     return recovered_normalized

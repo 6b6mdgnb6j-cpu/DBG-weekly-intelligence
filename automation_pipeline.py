@@ -136,6 +136,30 @@ def summary_highlight_count(weekly_payload, qa_payload):
     return len(highlights) if isinstance(highlights, list) else 0
 
 
+def summary_final_item_count(weekly_payload, qa_payload):
+    qa_summary = qa_payload.get("summary") if isinstance(qa_payload, dict) else {}
+    qa_final_items = qa_summary.get("final_items") if isinstance(qa_summary, dict) else None
+    if isinstance(qa_final_items, int):
+        return qa_final_items
+    return weekly_payload.get("item_count", len(weekly_payload.get("items") or []))
+
+
+def html_report_data_highlight_count(html_text):
+    match = re.search(
+        r'<script[^>]+id=["\']report-data["\'][^>]*>(.*?)</script>',
+        html_text or "",
+        flags=re.I | re.S,
+    )
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(1))
+    except Exception:
+        return None
+    highlights = payload.get("highlights") if isinstance(payload, dict) else None
+    return len(highlights) if isinstance(highlights, list) else None
+
+
 def review_artifact_ready(review_uploaded, validation_code, manifest_code, bundle_validation_code):
     return (
         str(review_uploaded).lower() == "true"
@@ -189,8 +213,8 @@ def write_review_manifest(output_dir, week_start, generation_commit_sha, generat
         "generation_run_id": str(generation_run_id),
         "translation_mode": weekly_payload.get("translation_mode"),
         "qa_status": qa_payload.get("status"),
-        "final_items": weekly_payload.get("item_count", len(weekly_payload.get("items") or [])),
-        "highlights": len(weekly_payload.get("highlights") or []),
+        "final_items": summary_final_item_count(weekly_payload, qa_payload),
+        "highlights": summary_highlight_count(weekly_payload, qa_payload),
         "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
         "artifacts": artifacts,
     }
@@ -280,6 +304,16 @@ def validate_manifest(bundle_dir, week_start, source_run_id=None, generation_sha
     validate_qa_binding(weekly, bundle_dir / artifacts["weekly_data"]["filename"], qa, week_start)
     if qa.get("status") != manifest.get("qa_status"):
         raise AutomationValidationError("manifest QA status does not match QA report")
+    qa_final_items = summary_final_item_count(weekly, qa)
+    qa_highlights = summary_highlight_count(weekly, qa)
+    if manifest.get("final_items") != qa_final_items:
+        raise AutomationValidationError("manifest final_items does not match QA report")
+    if manifest.get("highlights") != qa_highlights:
+        raise AutomationValidationError("manifest highlights does not match QA report")
+    html_path = bundle_dir / artifacts["weekly_report_html"]["filename"]
+    html_highlights = html_report_data_highlight_count(html_path.read_text(encoding="utf-8", errors="replace"))
+    if html_highlights is not None and html_highlights != qa_highlights:
+        raise AutomationValidationError("HTML highlights count does not match QA report")
     return manifest
 
 

@@ -10,9 +10,11 @@ from automation_pipeline import (
     AutomationValidationError,
     artifact_filename,
     artifact_path,
+    html_report_data_highlight_count,
     publish_allowed_by_qa,
     review_artifact_name,
     review_artifact_ready,
+    summary_final_item_count,
     summary_highlight_count,
     translation_preflight,
     validate_bilingual_artifacts,
@@ -95,7 +97,13 @@ def make_bundle(root, weekly_overrides=None, qa_overrides=None):
     qa_payload.update(qa_overrides or {})
     write_json(qa, qa_payload)
     qa_md.write_text("# QA\n", encoding="utf-8")
-    html.write_text("<html>Market infrastructure update</html>\n", encoding="utf-8")
+    html_payload = {"highlights": payload.get("highlights", [])}
+    html.write_text(
+        '<html><script type="application/json" id="report-data">'
+        + json.dumps(html_payload, ensure_ascii=False)
+        + "</script></html>\n",
+        encoding="utf-8",
+    )
     manifest = write_review_manifest(root, WEEK, SHA, RUN_ID)
     return root, manifest
 
@@ -110,6 +118,54 @@ class AutomationPipelineContractTests(unittest.TestCase):
             make_bundle(tmp)
             manifest = validate_manifest(tmp, WEEK, source_run_id=RUN_ID, generation_sha=SHA, current_main_sha=SHA)
             self.assertTrue(publish_allowed_by_qa(manifest["qa_status"]))
+
+    def test_manifest_highlights_use_qa_summary_as_source_of_truth(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_bundle(tmp, weekly_overrides={"highlights": []}, qa_overrides={"summary": {"final_items": 1, "highlights": 5}})
+            manifest = json.loads(artifact_path(tmp, "manifest", WEEK).read_text(encoding="utf-8"))
+            self.assertEqual(manifest["highlights"], 5)
+
+    def test_manifest_highlight_mismatch_blocks_bundle_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_bundle(tmp, weekly_overrides={"highlights": []}, qa_overrides={"summary": {"final_items": 1, "highlights": 5}})
+            manifest_path = artifact_path(tmp, "manifest", WEEK)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["highlights"] = 0
+            write_json(manifest_path, manifest)
+            with self.assertRaisesRegex(AutomationValidationError, "manifest highlights"):
+                validate_manifest(tmp, WEEK, source_run_id=RUN_ID, generation_sha=SHA, current_main_sha=SHA)
+
+    def test_manifest_final_items_mismatch_blocks_bundle_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_bundle(tmp)
+            manifest_path = artifact_path(tmp, "manifest", WEEK)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["final_items"] = 0
+            write_json(manifest_path, manifest)
+            with self.assertRaisesRegex(AutomationValidationError, "manifest final_items"):
+                validate_manifest(tmp, WEEK, source_run_id=RUN_ID, generation_sha=SHA, current_main_sha=SHA)
+
+    def test_html_report_data_highlight_mismatch_blocks_bundle_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_bundle(tmp, qa_overrides={"summary": {"final_items": 1, "highlights": 1}})
+            html = artifact_path(tmp, "html", WEEK)
+            html.write_text(
+                '<html><script type="application/json" id="report-data">{"highlights":[]}</script></html>',
+                encoding="utf-8",
+            )
+            manifest_path = artifact_path(tmp, "manifest", WEEK)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifacts"]["weekly_report_html"]["sha256"] = file_sha256(html)
+            write_json(manifest_path, manifest)
+            with self.assertRaisesRegex(AutomationValidationError, "HTML highlights"):
+                validate_manifest(tmp, WEEK, source_run_id=RUN_ID, generation_sha=SHA, current_main_sha=SHA)
+
+    def test_valid_bundle_with_matching_hashes_and_counts_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_bundle(tmp)
+            manifest = validate_manifest(tmp, WEEK, source_run_id=RUN_ID, generation_sha=SHA, current_main_sha=SHA)
+            self.assertEqual(manifest["final_items"], 1)
+            self.assertEqual(manifest["highlights"], 1)
 
     def test_warning_without_approval_blocks(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -307,6 +363,15 @@ class AutomationPipelineContractTests(unittest.TestCase):
         weekly = {"highlights": []}
         qa = {"summary": {"highlights": 5}}
         self.assertEqual(summary_highlight_count(weekly, qa), 5)
+
+    def test_summary_final_item_count_uses_qa_summary(self):
+        weekly = {"item_count": 0, "items": []}
+        qa = {"summary": {"final_items": 7}}
+        self.assertEqual(summary_final_item_count(weekly, qa), 7)
+
+    def test_html_report_data_highlight_count_reads_embedded_payload(self):
+        html = '<script type="application/json" id="report-data">{"highlights":[{},{}]}</script>'
+        self.assertEqual(html_report_data_highlight_count(html), 2)
 
     def test_review_artifact_ready_requires_full_bilingual_bundle_success(self):
         self.assertTrue(review_artifact_ready("true", "0", "0", "0"))

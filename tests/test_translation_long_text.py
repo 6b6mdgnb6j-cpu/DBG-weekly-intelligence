@@ -171,7 +171,7 @@ class LongTextTranslationTests(unittest.TestCase):
         provider = fake_provider()
         seen = {}
 
-        def fake_validate(original, translated, source=""):
+        def fake_validate(original, translated, source="", field="text"):
             seen["original"] = original
             seen["translated"] = translated
             return translator.ValidationResult(True)
@@ -217,7 +217,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v10", GENERATION_CONFIG_VERSION)
+        self.assertIn("v11", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -373,7 +373,8 @@ class LongTextTranslationTests(unittest.TestCase):
             title_translator._translate_text(" ".join(["market"] * 50), "Source", "summary")
         warning_args = " ".join(str(arg) for call in logger.warning.call_args_list for arg in call.args)
         self.assertIn("length-ratio recovery diagnostics", warning_args)
-        self.assertIn("original_length", warning_args)
+        self.assertIn("original_raw_length", warning_args)
+        self.assertIn("original_content_length", warning_args)
         self.assertIn("initial_chunk_count", warning_args)
         self.assertIn("configured_recovery_chunk_limit", warning_args)
         self.assertIn("effective_recovery_chunk_limit", warning_args)
@@ -409,6 +410,261 @@ class LongTextTranslationTests(unittest.TestCase):
             output = title_translator.translate([item])
         self.assertEqual(output[0]["summary_cn"], "译:alpha_beta_gamma 译:delta_epsilon_zeta 译:eta_theta")
 
+    def test_ice_entity_normalizes_iceland_interpretation(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "冰岛利率期货市场创下创纪录的开放利率",
+            "ICE's Interest Rate Futures Markets Hit Record Open Interest",
+            "洲际交易所",
+        )
+        self.assertIn("ICE", normalized)
+        self.assertIn("未平仓量", normalized)
+        self.assertNotIn("冰岛", normalized)
+        self.assertNotIn("开放利率", normalized)
+        self.assertIn("ICE", changes)
+
+    def test_intercontinental_exchange_entity_normalizes_to_ice(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "欧元交易所报告月度交易量",
+            "Intercontinental Exchange Reports August 2026 Statistics",
+            "洲际交易所",
+        )
+        self.assertIn("ICE", normalized)
+        self.assertNotIn("欧元交易所", normalized)
+
+    def test_iss_stoxx_entity_does_not_become_space_station(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "国际空间站STOXX可持续发展报告发布",
+            "ISS STOXX Sustainability Solutions launches report",
+            "ISS STOXX",
+        )
+        self.assertIn("ISS STOXX", normalized)
+        self.assertNotIn("国际空间站", normalized)
+
+    def test_iss_corporate_entity_does_not_become_space_agency(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "国际航天局公司报告治理风险",
+            "ISS-Corporate Report shows governance risk",
+            "ISS STOXX",
+        )
+        self.assertIn("ISS STOXX", normalized)
+        self.assertNotIn("国际航天局", normalized)
+
+    def test_six_financial_brand_does_not_become_number(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "六个交易所数据:2026年8月",
+            "SIX Exchanges Figures: August 2026",
+            "SIX",
+        )
+        self.assertIn("SIX", normalized)
+        self.assertNotIn("六个交易所", normalized)
+
+    def test_ftse_entity_does_not_mutate_to_ftc(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "FTC100和FTC中国指数调整",
+            "FTSE 100 and FTSE China Index Series quarterly review",
+            "LSEG",
+        )
+        self.assertIn("FTSE100", normalized)
+        self.assertIn("FTSE中国指数", normalized)
+        self.assertNotIn("FTC", normalized)
+
+    def test_finra_entity_does_not_invent_unrelated_institution(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "国际金融基金会 (FINRA) 的日内利标准更新",
+            "FINRA's Intraday Margin Standard",
+            "FINRA",
+        )
+        self.assertIn("FINRA", normalized)
+        self.assertIn("日内保证金标准", normalized)
+        self.assertNotIn("国际金融基金会", normalized)
+
+    def test_unrelated_chinese_text_is_not_globally_rewritten_without_original_context(self):
+        normalizer = translator.TerminologyNormalizer()
+        original = "Tourism update from Iceland"
+        translated = "冰岛旅游更新"
+        normalized, changes = normalizer.normalize(translated, original, "Source")
+        self.assertEqual(normalized, translated)
+        self.assertEqual(changes, [])
+
+    def test_ice_source_alone_does_not_rewrite_genuine_iceland_reference(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "冰岛能源市场活动增加",
+            "Icelandic energy market activity increased",
+            "ICE",
+        )
+        self.assertEqual(normalized, "冰岛能源市场活动增加")
+        self.assertEqual(changes, [])
+
+    def test_six_source_alone_does_not_rewrite_ordinary_number(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "六个市场的交易量上升",
+            "Trading volumes increased across six markets",
+            "SIX",
+        )
+        self.assertEqual(normalized, "六个市场的交易量上升")
+        self.assertEqual(changes, [])
+
+    def test_iss_stoxx_source_alone_does_not_rewrite_space_station_reference(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "国际空间站相关研究更新",
+            "International Space Station research update",
+            "ISS STOXX",
+        )
+        self.assertEqual(normalized, "国际空间站相关研究更新")
+        self.assertEqual(changes, [])
+
+    def test_protected_entity_and_ordinary_ambiguous_words_can_coexist(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "ICE报告六个市场的活动,包括冰岛",
+            "ICE reported activity across six markets, including Iceland.",
+            "ICE",
+        )
+        self.assertIn("ICE", normalized)
+        self.assertIn("六个市场", normalized)
+        self.assertIn("冰岛", normalized)
+        self.assertNotIn("SIX", normalized)
+
+    def test_open_interest_financial_term_normalizes(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize("开放利率创纪录", "Record open interest in futures", "ICE")
+        self.assertIn("未平仓量", normalized)
+        self.assertNotIn("开放利率", normalized)
+
+    def test_interest_rate_swap_financial_term_normalizes(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "利率交换清算规则",
+            "Interest rate swap clearing requirement",
+            "CFTC",
+        )
+        self.assertIn("利率互换", normalized)
+        self.assertNotIn("利率交换", normalized)
+
+    def test_trading_volumes_do_not_translate_as_rolls(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "EEX集团月份卷 2026年8月",
+            "EEX Group Monthly Volumes - August 2026",
+            "EEX",
+        )
+        self.assertIn("交易量", normalized)
+        self.assertNotIn("月份卷", normalized)
+
+    def test_intraday_margin_keeps_financial_margin_meaning(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "FINRA的日内利标准更新",
+            "FINRA's Intraday Margin Standard",
+            "FINRA",
+        )
+        self.assertIn("日内保证金标准", normalized)
+        self.assertNotIn("日内利标准", normalized)
+
+    def test_financial_index_uses_index_not_software_index(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "FTSE英国索引系列季度审查",
+            "FTSE UK Index Series Quarterly Review",
+            "LSEG",
+        )
+        self.assertIn("指数系列", normalized)
+        self.assertNotIn("索引", normalized)
+
+    def test_stablecoin_uses_standard_chinese_term(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "HKD稳定coin合作",
+            "HKD stablecoin partnership",
+            "HashKey",
+        )
+        self.assertIn("稳定币", normalized)
+        self.assertNotIn("稳定coin", normalized)
+
+    def test_collapsed_summary_content_ratio_fails_initial_validation(self):
+        original = (
+            "The Securities and Exchange Commission today proposed to update the rules and forms "
+            "that apply to registered transfer agents. Transfer agents are a key component of the "
+            "national clearance and settlement system. Transfer agents now perform a more diverse "
+            "set of services for issuers and investors across capital markets."
+        )
+        translated = "SEC今天提出更新适用于注册转让代理人的规则和表格。"
+        result = TranslationSanityValidator.validate_with_reason(original, translated, "SEC", field="summary")
+        self.assertFalse(result.valid)
+        self.assertEqual(result.reason, "content_ratio_low")
+
+    def test_content_ratio_failure_triggers_one_adaptive_recovery(self):
+        original = " ".join(["market"] * 60)
+        provider = RecordingProvider(["短译文仍然过短", "市场基础设施监管政策清算结算跨境资本市场改革持续推进并保持交易后服务稳定运行"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[translator.ValidationResult(False, "content_ratio_low"), translator.ValidationResult(True)],
+        ):
+            output = title_translator._translate_text(original, "Source", "summary")
+        self.assertIn("市场基础设施", output)
+        self.assertEqual(len(provider.calls), 2)
+
+    def test_good_recovered_multi_chunk_translation_passes(self):
+        original = " ".join(f"token{i}" for i in range(49))
+        provider = RecordingProvider(["短", "完整中文翻译覆盖全部原文信息并保持顺序"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[translator.ValidationResult(False, "content_ratio_low"), translator.ValidationResult(True)],
+        ):
+            output = title_translator._translate_text(original, "Source", "summary")
+        self.assertEqual(output, "完整中文翻译覆盖全部原文信息并保持顺序")
+        self.assertEqual(len(provider.calls), 2)
+
+    def test_still_collapsed_recovery_fails_strict_mode(self):
+        provider = RecordingProvider(["短", "仍短"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        with patch.object(
+            TranslationSanityValidator,
+            "validate_with_reason",
+            side_effect=[
+                translator.ValidationResult(False, "content_ratio_low"),
+                translator.ValidationResult(False, "content_ratio_low"),
+            ],
+        ):
+            with self.assertRaises(TranslationUnavailableError):
+                title_translator._translate_text(" ".join(["market"] * 60), "Source", "summary")
+        self.assertEqual(len(provider.calls), 2)
+
+    def test_legitimate_shorter_chinese_summary_passes(self):
+        original = (
+            "The central bank announced a final rule updating capital market settlement safeguards, "
+            "with new operational risk controls, clearer reporting requirements, and implementation "
+            "timelines for regulated financial institutions and market infrastructure operators."
+        )
+        translated = "央行发布最终规则，更新资本市场结算保障，明确操作风险控制、报告要求和实施时间表。"
+        result = TranslationSanityValidator.validate_with_reason(original, translated, "Source", field="summary")
+        self.assertTrue(result.valid)
+
+    def test_very_short_titles_are_not_falsely_rejected(self):
+        result = TranslationSanityValidator.validate_with_reason("Market update", "市场更新", "Source", field="title")
+        self.assertTrue(result.valid)
+
+    def test_empty_original_summary_still_has_empty_translation_behavior(self):
+        title_translator = TitleTranslator(enabled=True, provider=RecordingProvider(["unused"]), strict=True)
+        self.assertEqual(title_translator._translate_text("", "Source", "summary"), "")
+
     def test_intercontinental_exchange_bad_translation_normalizes_to_ice(self):
         normalizer = translator.TerminologyNormalizer()
         normalized, changes = normalizer.normalize(
@@ -418,7 +674,7 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         self.assertIn("ICE", normalized)
         self.assertNotIn("欧元交易所", normalized)
-        self.assertIn("Intercontinental Exchange", changes)
+        self.assertIn("ICE", changes)
         self.assertTrue(TranslationSanityValidator.is_valid("Intercontinental Exchange reports market data growth", normalized))
 
     def test_unrelated_euro_exchange_bad_term_still_rejects(self):
