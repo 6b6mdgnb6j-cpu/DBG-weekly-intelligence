@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v15"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v16"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -728,6 +728,13 @@ class TerminologyNormalizer:
 
 
 class TitleTranslator:
+    RECOVERABLE_SEMANTIC_ISSUES = {
+        "translation_title_proposition_missing",
+        "translation_action_direction_missing",
+        "translation_suspicious_compression",
+    }
+    SEMANTIC_SEGMENT_CAP = 6
+
     def __init__(self, enabled=True, logger=None, provider=None, strict=False):
         self.enabled = enabled
         self.logger = logger
@@ -736,6 +743,7 @@ class TitleTranslator:
         self.normalizer = TerminologyNormalizer()
         self.cache = {}
         self.cache_dirty = False
+        self.last_semantic_recovery_metadata = {}
         if self.enabled:
             self.cache = _load_cache(logger)
 
@@ -775,6 +783,123 @@ class TitleTranslator:
             "chunk_token_counts": metadata.get("chunk_token_counts", []),
             "chunk_output_lengths": metadata.get("chunk_output_lengths", []),
         }
+
+    @staticmethod
+    def _semantic_field_issues(text, translated, field, source):
+        from crawler.translation_quality import FAIL, validate_translation_field
+
+        return [
+            issue
+            for issue in validate_translation_field(
+                original=text,
+                translated=translated,
+                field_type=field,
+                source=source,
+                title_original=text if field == "title" else "",
+            )
+            if issue.get("severity") == FAIL
+        ]
+
+    def _recoverable_semantic_issues(self, text, translated, field, source):
+        issues = self._semantic_field_issues(text, translated, field, source)
+        return [issue for issue in issues if issue.get("issue_id") in self.RECOVERABLE_SEMANTIC_ISSUES]
+
+    @staticmethod
+    def _safe_semantic_split(pattern, text):
+        pieces = []
+        for piece in re.split(pattern, text, flags=re.I):
+            stripped = piece.strip()
+            if stripped:
+                pieces.append(stripped)
+        return pieces
+
+    def _merge_semantic_segments_to_cap(self, segments):
+        merged = [segment for segment in segments if segment and segment.strip()]
+        while len(merged) > self.SEMANTIC_SEGMENT_CAP:
+            best_index = min(range(len(merged) - 1), key=lambda index: len(merged[index]) + len(merged[index + 1]))
+            merged[best_index : best_index + 2] = [f"{merged[best_index]} {merged[best_index + 1]}".strip()]
+        return merged
+
+    def _semantic_segments(self, text):
+        normalized = re.sub(r"\s+", " ", text or "").strip()
+        if not normalized:
+            return []
+        boundaries = [
+            r"\s+\|\s+",
+            r"\s+[—–]\s+",
+            r";\s+",
+            r":\s+",
+            r"\s+(?=\b(?:despite|while|although|whereas|but|which|that|including|as part of|and what)\b)",
+            r"\s+(?=\bwith\s+(?:a|an|the)\b)",
+            r"\s+(?=\b(?:launch(?:es|ed|ing)?|introduc(?:es|ed|ing)?|offer(?:s|ed|ing)?)\b)",
+            r"\s+(?=\bbased\s+on\b)",
+        ]
+        segments = [normalized]
+        for boundary in boundaries:
+            next_segments = []
+            for segment in segments:
+                next_segments.extend(self._safe_semantic_split(boundary, segment))
+            segments = next_segments
+        useful = []
+        carry = ""
+        for segment in segments:
+            segment = segment.strip(" ,")
+            if not segment:
+                continue
+            token_count = len(re.findall(r"\S+", segment))
+            if token_count < 2 and useful:
+                useful[-1] = f"{useful[-1]} {segment}".strip()
+            elif token_count < 2:
+                carry = f"{carry} {segment}".strip()
+            elif carry:
+                useful.append(f"{carry} {segment}".strip())
+                carry = ""
+            else:
+                useful.append(segment)
+        if carry:
+            if useful:
+                useful[-1] = f"{useful[-1]} {carry}".strip()
+            else:
+                useful.append(carry)
+        useful = self._merge_semantic_segments_to_cap(useful)
+        if len(useful) <= 1:
+            return []
+        return useful
+
+    def _semantic_recovery(self, provider, text, source, field, initial_translation, initial_issues):
+        segments = self._semantic_segments(text)
+        issue_ids = sorted({issue.get("issue_id") for issue in initial_issues})
+        self.last_semantic_recovery_metadata = {
+            "semantic_recovery_triggered": bool(segments),
+            "triggering_issue_ids": issue_ids,
+            "segment_count": len(segments),
+            "initial_validation_result": "FAIL",
+            "recovery_validation_result": "not_attempted",
+            "recovered_output_selected": False,
+        }
+        if not segments:
+            return initial_translation, False, []
+
+        translated_segments = []
+        try:
+            for segment in segments:
+                translated = self._provider_translate(provider, segment, SOURCE_CHUNK_TOKEN_LIMIT)
+                if not translated:
+                    self.last_semantic_recovery_metadata["recovery_validation_result"] = "provider_error"
+                    return initial_translation, False, initial_issues
+                translated_segments.append(translated)
+        except Exception:
+            self.last_semantic_recovery_metadata["recovery_validation_result"] = "provider_error"
+            return initial_translation, False, initial_issues
+
+        recovered_raw = " ".join(translated_segments).strip()
+        recovered_normalized, _ = self.normalizer.normalize(recovered_raw, text, source)
+        recovered_issues = self._semantic_field_issues(text, recovered_normalized, field, source)
+        self.last_semantic_recovery_metadata["recovery_validation_result"] = "PASS" if not recovered_issues else "FAIL"
+        if not recovered_issues:
+            self.last_semantic_recovery_metadata["recovered_output_selected"] = True
+            return recovered_normalized, True, []
+        return recovered_normalized, False, recovered_issues
 
     @staticmethod
     def _effective_recovery_chunk_limit(
@@ -937,6 +1062,7 @@ class TitleTranslator:
         if isinstance(cached, dict) and "translation" in cached:
             value = cached.get("translation", "")
             if value:
+                self.last_semantic_recovery_metadata = {"semantic_recovery_triggered": False, "cache_hit": True}
                 return value
             if cached.get("invalid") and self.logger:
                 self.logger.info("Ignoring invalid cached translation for source=%s field=%s", source, field)
@@ -1039,6 +1165,40 @@ class TitleTranslator:
                 )
             return ""
 
+        semantic_issues = self._recoverable_semantic_issues(text, normalized, field, source)
+        if semantic_issues:
+            semantic_recovered, selected, final_semantic_issues = self._semantic_recovery(
+                provider,
+                text,
+                source,
+                field,
+                normalized,
+                semantic_issues,
+            )
+            semantic_issue_ids = sorted({issue.get("issue_id") for issue in final_semantic_issues or semantic_issues})
+            cache_value = {
+                "translation": semantic_recovered,
+                "raw_translation": raw,
+                "terminology_changes": changes,
+                "model": provider.model_name,
+                "generation_config_version": GENERATION_CONFIG_VERSION,
+                "glossary_version": self.normalizer.version,
+                "semantic_recovery_triggered": self.last_semantic_recovery_metadata.get("semantic_recovery_triggered", False),
+                "semantic_recovery_selected": selected,
+                "semantic_issue_ids": semantic_issue_ids,
+            }
+            self.cache[key] = cache_value
+            self.cache_dirty = True
+            return semantic_recovered
+
+        self.last_semantic_recovery_metadata = {
+            "semantic_recovery_triggered": False,
+            "triggering_issue_ids": [],
+            "segment_count": 0,
+            "initial_validation_result": "PASS",
+            "recovery_validation_result": "not_attempted",
+            "recovered_output_selected": False,
+        }
         self.cache[key] = {
             "translation": normalized,
             "raw_translation": raw,

@@ -217,7 +217,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v15", GENERATION_CONFIG_VERSION)
+        self.assertIn("v16", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -1105,6 +1105,164 @@ class LongTextTranslationTests(unittest.TestCase):
             "洲际交易所",
         )
         self.assertEqual(normalized, "ICE宣布新的数据服务")
+
+    def test_semantic_recovery_recovers_jj_link_launch_title(self):
+        original = (
+            "JJ-Link Phase 2 Launches Offering Forward Transactions Based on the "
+            "Electricity Futures Market | Japan Exchange Group"
+        )
+        provider = RecordingProvider(
+            [
+                "基于电力期货市场的前行交易",
+                "JJ-Link第二阶段",
+                "推出远期交易",
+                "基于电力期货市场",
+                "JPX",
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "JPX", "title")
+        self.assertIn("第二阶段", output)
+        self.assertIn("推出", output)
+        self.assertIn("远期交易", output)
+        self.assertIn("电力期货市场", output)
+        self.assertEqual(len(provider.calls), 5)
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["semantic_recovery_triggered"])
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+
+    def test_semantic_recovery_recovers_inflow_contrast_title(self):
+        original = "July saw inflows into funds despite domestic political changes and conflict in the Middle East"
+        provider = RecordingProvider(
+            [
+                "尽管国内政治变化和中东冲突",
+                "7月基金出现资金流入",
+                "尽管国内政治发生变化且中东发生冲突",
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "AIMA", "title")
+        self.assertTrue(output.index("资金流入") < output.index("尽管"))
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(len(provider.calls), 3)
+
+    def test_semantic_recovery_recovers_finra_summary_truncation(self):
+        original = (
+            "On this episode of FINRA Unscripted, learn why FINRA replaced the decades-old "
+            "Pattern Day Trader rule — including the $25,000 minimum equity requirement — "
+            "with a modern, risk-based intraday margin standard, and what the change means "
+            "for investors and member firms."
+        )
+        provider = RecordingProvider(
+            [
+                "在FINRA节目中，了解FINRA为何取代旧规则，包括25,000美元的最低股权要求，",
+                "在本期FINRA节目中，了解FINRA为何取代已有数十年历史的模式日交易者规则",
+                "包括25,000美元的最低股权要求",
+                "采用现代、基于风险的日内保证金标准",
+                "以及该变化对投资者和会员公司的影响",
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "FINRA", "summary")
+        self.assertIn("风险", output)
+        self.assertIn("日内保证金标准", output)
+        self.assertIn("投资者", output)
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(len(provider.calls), 5)
+
+    def test_semantic_recovery_recovers_sec_rescission_direction(self):
+        original = (
+            "The Securities and Exchange Commission today issued a proposal to rescind its "
+            "pay-to-play rule that prohibits investment advisers from certain political contributions."
+        )
+        provider = RecordingProvider(
+            [
+                "SEC今天发布了一项提议，禁止投资顾问进行某些政治捐款。",
+                "SEC今天发布一项拟取消其pay-to-play规则的提议",
+                "该规则禁止投资顾问进行某些政治捐款",
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "SEC", "summary")
+        self.assertIn("取消", output)
+        self.assertIn("禁止", output)
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(len(provider.calls), 3)
+
+    def test_semantic_recovery_not_triggered_for_weak_report_title(self):
+        provider = RecordingProvider(["2026年8月Nasdaq交易量"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text("Nasdaq Reports August 2026 Volumes", "Nasdaq", "title")
+        self.assertEqual(output, "2026年8月Nasdaq交易量")
+        self.assertFalse(title_translator.last_semantic_recovery_metadata["semantic_recovery_triggered"])
+        self.assertEqual(len(provider.calls), 1)
+
+    def test_semantic_recovery_not_triggered_for_mas_consultation_modifier(self):
+        original = "MAS published a consultation paper on proposed legislative amendments to implement stablecoin regulation."
+        provider = RecordingProvider(["MAS发布了一份关于实施稳定币监管的立法修正案的咨询文件。"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "MAS", "summary")
+        self.assertIn("咨询", output)
+        self.assertFalse(title_translator.last_semantic_recovery_metadata["semantic_recovery_triggered"])
+        self.assertEqual(len(provider.calls), 1)
+
+    def test_semantic_recovery_not_triggered_for_entity_duplicate_warning(self):
+        provider = RecordingProvider(["FINRA (FINRA) 日内保证金标准"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text("FINRA's Intraday Margin Standard", "FINRA", "title")
+        self.assertEqual(output, "FINRA 日内保证金标准")
+        self.assertFalse(title_translator.last_semantic_recovery_metadata["semantic_recovery_triggered"])
+        self.assertEqual(len(provider.calls), 1)
+
+    def test_semantic_recovery_stops_after_one_failed_stage(self):
+        original = "EEX launches new freight data products based on European market data"
+        provider = RecordingProvider(["EEX新的货运数据产品", "EEX", "新的货运数据产品", "基于欧洲市场数据", "不应调用"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "EEX", "title")
+        self.assertNotIn("推出", output)
+        self.assertEqual(len(provider.calls), 3)
+        self.assertFalse(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
+
+    def test_semantic_recovery_provider_error_preserves_initial_translation(self):
+        original = "EEX launches new freight data products based on European market data"
+        provider = RecordingProvider(["EEX新的货运数据产品"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "EEX", "title")
+        self.assertEqual(output, "EEX新的货运数据产品")
+        self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "provider_error")
+
+    def test_semantic_recovery_segment_cap_limits_provider_calls(self):
+        original = (
+            "Product Phase 2 launches market access improvements | including listed derivatives | "
+            "with a clearing service | despite volatile markets | while settlement remains stable | "
+            "that supports collateral workflows | based on market infrastructure"
+        )
+        provider = RecordingProvider(
+            [
+                "第二阶段市场准入改善包括上市衍生品清算服务结算抵押品市场基础设施",
+                "第二阶段产品",
+                "推出市场准入改善",
+                "包括上市衍生品",
+                "提供清算服务",
+                "尽管市场波动",
+                "同时结算保持稳定，支持抵押品流程，基于市场基础设施",
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "Source", "title")
+        self.assertIn("推出", output)
+        self.assertLessEqual(title_translator.last_semantic_recovery_metadata["segment_count"], 6)
+        self.assertLessEqual(len(provider.calls), 7)
 
 
 if __name__ == "__main__":

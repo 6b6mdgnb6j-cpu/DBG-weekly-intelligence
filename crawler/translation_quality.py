@@ -337,3 +337,28 @@ def audit_translation_quality(items):
         issues.extend(_action_direction_issues(index, item))
         issues.extend(_suspicious_compression_issues(index, item))
     return issues
+
+
+def validate_translation_field(original, translated, field_type="text", source="", title_original=""):
+    item = {
+        "source": source or "",
+        "title_original": title_original or (original if field_type == "title" else ""),
+        "summary_original": original if field_type == "summary" else "",
+        "title_cn": translated if field_type == "title" else "",
+        "summary_cn": translated if field_type == "summary" else "",
+    }
+    if field_type == "title":
+        return (
+            _entity_issues(0, item, TerminologyNormalizer())
+            + _proper_noun_issues(0, item)
+            + _title_proposition_issues(0, item)
+            + _action_direction_issues(0, item)
+        )
+    if field_type == "summary":
+        return (
+            _entity_issues(0, item, TerminologyNormalizer())
+            + _proper_noun_issues(0, item)
+            + _action_direction_issues(0, item)
+            + _suspicious_compression_issues(0, item)
+        )
+    return []
