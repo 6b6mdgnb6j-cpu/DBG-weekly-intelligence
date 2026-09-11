@@ -395,6 +395,35 @@ class QAGateTests(unittest.TestCase):
         self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
         self.assertIn("translation_title_proposition_missing", [issue["issue_id"] for issue in report["content_issues"]])
 
+    def test_translation_quality_launch_accepts_startup_equivalent(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="JJ-Link Phase 2 Launches Offering Forward Transactions Based on the Electricity Futures Market",
+                    title_cn="启动JJ-Link第二阶段 提供远期交易 基于电力期货市场",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_translation_quality_launch_missing_still_fails_for_jj_link(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="JJ-Link Phase 2 Launches Offering Forward Transactions Based on the Electricity Futures Market",
+                    title_cn="基于电力期货市场的交易",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_title_proposition_missing", [issue["issue_id"] for issue in report["content_issues"]])
+
     def test_translation_quality_consultation_on_proposed_amendments_is_not_action_warning(self):
         weekly = payload(
             items=[

@@ -88,6 +88,36 @@ class RecordingProvider:
         return output
 
 
+class ConditionalProvider(RecordingProvider):
+    def __init__(self, rules):
+        super().__init__([])
+        self.rules = list(rules)
+
+    def translate(self, text, source_lang="en", target_lang="zh", chunk_token_limit=None):
+        chunk_token_limit = chunk_token_limit or SOURCE_CHUNK_TOKEN_LIMIT
+        self.calls.append(
+            {
+                "text": text,
+                "source_lang": source_lang,
+                "target_lang": target_lang,
+                "chunk_token_limit": chunk_token_limit,
+            }
+        )
+        token_count = len([token for token in str(text).split() if token])
+        self.last_translation_metadata = {
+            "chunk_token_limit": chunk_token_limit,
+            "chunk_count": 1 if token_count else 0,
+            "chunk_token_counts": [token_count] if token_count else [],
+            "chunk_output_lengths": [],
+        }
+        for needle, output in self.rules:
+            if needle in text:
+                self.last_translation_metadata["chunk_output_lengths"].append(len(output))
+                return output
+        self.last_translation_metadata["chunk_output_lengths"].append(0)
+        return ""
+
+
 def fake_provider(model=None):
     provider = LocalNLLBProvider(local_files_only=True)
     provider.tokenizer = FakeTokenizer()
@@ -217,7 +247,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v16", GENERATION_CONFIG_VERSION)
+        self.assertIn("v17", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -770,6 +800,26 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertNotIn("加拿大美元", normalized)
         self.assertNotIn("墨西哥指", normalized)
 
+    def test_forward_transactions_normalize_with_original_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "提供前期交易",
+            "Launches Offering Forward Transactions Based on the Electricity Futures Market",
+            "JPX",
+        )
+        self.assertIn("远期交易", normalized)
+        self.assertNotIn("前期交易", normalized)
+
+    def test_unrelated_forward_does_not_rewrite_prior_period_text(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "前期工作安排",
+            "forward-looking operational plan",
+            "Source",
+        )
+        self.assertEqual(normalized, "前期工作安排")
+        self.assertEqual(changes, [])
+
     def test_critical_term_validator_ignores_lowercase_ordinary_six(self):
         result = TranslationSanityValidator.validate_with_reason(
             "Trading volumes increased across six markets",
@@ -1180,6 +1230,7 @@ class LongTextTranslationTests(unittest.TestCase):
         provider = RecordingProvider(
             [
                 "SEC今天发布了一项提议，禁止投资顾问进行某些政治捐款。",
+                "SEC今天发布一项提议",
                 "SEC今天发布一项拟取消其pay-to-play规则的提议",
                 "该规则禁止投资顾问进行某些政治捐款",
             ]
@@ -1190,7 +1241,48 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("取消", output)
         self.assertIn("禁止", output)
         self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
-        self.assertEqual(len(provider.calls), 3)
+        self.assertEqual(len(provider.calls), 4)
+
+    def test_semantic_segments_isolate_infinitive_rescission_action(self):
+        original = (
+            "The Securities and Exchange Commission today issued a proposal to rescind its "
+            "pay-to-play rule that prohibits investment advisers from providing compensated services."
+        )
+        title_translator = TitleTranslator(enabled=False)
+        segments = title_translator._semantic_segments(original)
+        self.assertEqual(
+            segments,
+            [
+                "The Securities and Exchange Commission today issued a proposal",
+                "to rescind its pay-to-play rule",
+                "that prohibits investment advisers from providing compensated services.",
+            ],
+        )
+
+    def test_semantic_recovery_recovers_sec_rescission_with_adversarial_provider(self):
+        original = (
+            "The Securities and Exchange Commission today issued a proposal to rescind its "
+            "pay-to-play rule that prohibits investment advisers from providing compensated "
+            "investment advisory services to a government client for two years."
+        )
+        provider = ConditionalProvider(
+            [
+                (
+                    "proposal to rescind",
+                    "SEC今天发布了一项提议，禁止投资顾问为政府客户提供补偿投资咨询服务两年。",
+                ),
+                ("to rescind", "取消其pay-to-play规则"),
+                ("that prohibits", "该规则禁止投资顾问为政府客户提供补偿投资咨询服务两年"),
+                ("issued a proposal", "SEC今天发布一项提议"),
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "SEC", "summary")
+        self.assertIn("取消", output)
+        self.assertIn("禁止", output)
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(len(provider.calls), 4)
 
     def test_semantic_recovery_not_triggered_for_weak_report_title(self):
         provider = RecordingProvider(["2026年8月Nasdaq交易量"])

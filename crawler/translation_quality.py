@@ -21,7 +21,7 @@ PROPER_NOUN_RULES = [
 
 SUBSTANTIVE_TITLE_ANCHORS = [
     ("inflow", (r"\binflows?\b", r"\boutflows?\b"), ("流入", "流出", "资金流")),
-    ("launch", (r"\blaunch(?:es|ed|ing)?\b", r"\bintroduc(?:e|es|ed|ing)\b"), ("推出", "发布", "引入", "发起")),
+    ("launch", (r"\blaunch(?:es|ed|ing)?\b", r"\bintroduc(?:e|es|ed|ing)\b"), ("推出", "正式推出", "启动", "上线", "开始提供", "发布", "引入", "发起")),
     ("acquire", (r"\bacquir(?:e|es|ed|ing)\b", r"\bacquisition\b"), ("收购", "并购")),
     ("propose", (r"\bpropos(?:e|es|ed|al)\b",), ("提议", "拟", "建议", "提出")),
     ("rescind", (r"\brescind(?:s|ed|ing)?\b", r"\brescission\b", r"\brepeal(?:s|ed|ing)?\b", r"\brevok(?:e|es|ed|ing)\b"), ("取消", "撤销", "废除", "撤回")),

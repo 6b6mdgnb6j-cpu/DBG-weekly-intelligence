@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v16"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v17"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -559,6 +559,8 @@ class TerminologyNormalizer:
         ("Financial Services Commission", r"国际证券交易委员会", "金融服务委员会"),
         ("Intercontinental Exchange", r"欧元交易所", "ICE"),
         ("margin efficiency", r"利率效率", "保证金效率"),
+        ("forward transaction", r"前期交易", "远期交易"),
+        ("forward transactions", r"前期交易", "远期交易"),
         ("Canadian Dollar", r"加拿大美元", "加拿大元"),
         ("Canadian dollar", r"加拿大美元", "加拿大元"),
         ("Mexican Peso", r"墨西哥指", "墨西哥比索"),
@@ -831,6 +833,7 @@ class TitleTranslator:
             r":\s+",
             r"\s+(?=\b(?:despite|while|although|whereas|but|which|that|including|as part of|and what)\b)",
             r"\s+(?=\bwith\s+(?:a|an|the)\b)",
+            r"\s+(?=\bto\s+(?:rescind|repeal|revoke|suspend|approve|extend)\b)",
             r"\s+(?=\b(?:launch(?:es|ed|ing)?|introduc(?:es|ed|ing)?|offer(?:s|ed|ing)?)\b)",
             r"\s+(?=\bbased\s+on\b)",
         ]
@@ -866,11 +869,28 @@ class TitleTranslator:
             return []
         return useful
 
+    def _log_semantic_recovery_diagnostics(self):
+        if not self.logger:
+            return
+        metadata = self.last_semantic_recovery_metadata or {}
+        if not metadata.get("semantic_recovery_triggered"):
+            return
+        self.logger.warning(
+            "Translation semantic recovery: field=%s triggering_issue_ids=%s segment_count=%s "
+            "recovery_result=%s selected=%s",
+            metadata.get("field"),
+            metadata.get("triggering_issue_ids"),
+            metadata.get("segment_count"),
+            metadata.get("recovery_validation_result"),
+            metadata.get("recovered_output_selected"),
+        )
+
     def _semantic_recovery(self, provider, text, source, field, initial_translation, initial_issues):
         segments = self._semantic_segments(text)
         issue_ids = sorted({issue.get("issue_id") for issue in initial_issues})
         self.last_semantic_recovery_metadata = {
             "semantic_recovery_triggered": bool(segments),
+            "field": field,
             "triggering_issue_ids": issue_ids,
             "segment_count": len(segments),
             "initial_validation_result": "FAIL",
@@ -878,6 +898,7 @@ class TitleTranslator:
             "recovered_output_selected": False,
         }
         if not segments:
+            self._log_semantic_recovery_diagnostics()
             return initial_translation, False, []
 
         translated_segments = []
@@ -886,10 +907,12 @@ class TitleTranslator:
                 translated = self._provider_translate(provider, segment, SOURCE_CHUNK_TOKEN_LIMIT)
                 if not translated:
                     self.last_semantic_recovery_metadata["recovery_validation_result"] = "provider_error"
+                    self._log_semantic_recovery_diagnostics()
                     return initial_translation, False, initial_issues
                 translated_segments.append(translated)
         except Exception:
             self.last_semantic_recovery_metadata["recovery_validation_result"] = "provider_error"
+            self._log_semantic_recovery_diagnostics()
             return initial_translation, False, initial_issues
 
         recovered_raw = " ".join(translated_segments).strip()
@@ -898,7 +921,9 @@ class TitleTranslator:
         self.last_semantic_recovery_metadata["recovery_validation_result"] = "PASS" if not recovered_issues else "FAIL"
         if not recovered_issues:
             self.last_semantic_recovery_metadata["recovered_output_selected"] = True
+            self._log_semantic_recovery_diagnostics()
             return recovered_normalized, True, []
+        self._log_semantic_recovery_diagnostics()
         return recovered_normalized, False, recovered_issues
 
     @staticmethod
@@ -1193,6 +1218,7 @@ class TitleTranslator:
 
         self.last_semantic_recovery_metadata = {
             "semantic_recovery_triggered": False,
+            "field": field,
             "triggering_issue_ids": [],
             "segment_count": 0,
             "initial_validation_result": "PASS",
