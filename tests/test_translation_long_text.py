@@ -908,18 +908,23 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_editorial_polish_ice_euribor_estr_semantics_exact_summary(self):
         normalizer = translator.TerminologyNormalizer()
         normalized, _ = normalizer.normalize(
-            "ICE是以欧元管理短期利率,以及与欧元区相连的隔夜借款成本的基准,这反映了欧元市场中面临的成本.这些市场为客户提供工具,以表达从隔夜融资成本到中期利率预期的整个欧元利率曲线观点. €STR夜间创下330万合約",
+            "2026年9月2日，ICE利率期货市场未平仓量创1450万份合约新高，同比增长25%；其中Euribor期货未平仓量达580万份，同比增长16%，€STR期货未平仓量达330万份，同比增长109%。ICE是以欧元管理短期利率,以及与欧元区相连的隔夜借款成本的基准,这反映了欧元市场中面临的成本,使欧元地区的银行对ICE的投资工具表现出这些成本的预期.这些市场为客户提供工具,以表达从隔夜融资成本到中期利率预期的整个欧元利率曲线观点.",
             "ICE is home to Euribor, the benchmark for managing short-term euro-related interest rate risk, as well as €STR, which reflects the wholesale euro unsecured overnight borrowing costs of banks located in the euro area. Together, these markets give customers the tools to express views across the euro rates curve, from overnight funding costs to medium-term rate expectations.",
             "ICE",
         )
         self.assertIn("Euribor是管理欧元短期利率风险的基准", normalized)
-        self.assertIn("€STR反映欧元区银行的欧元无担保隔夜批发借款成本", normalized)
+        self.assertIn("€STR反映欧元区银行的欧元无担保批发隔夜借款成本", normalized)
         self.assertIn("欧元利率曲线", normalized)
         self.assertIn("隔夜融资成本", normalized)
         self.assertIn("中期利率预期", normalized)
-        self.assertIn("ICE €STR期货未平仓量达330万合约", normalized)
+        self.assertIn("未平仓量创1450万份合约新高", normalized)
+        self.assertIn("同比增长25%", normalized)
+        self.assertIn("Euribor期货未平仓量达580万份", normalized)
+        self.assertIn("同比增长16%", normalized)
+        self.assertIn("€STR期货未平仓量达330万份", normalized)
+        self.assertIn("同比增长109%", normalized)
         self.assertNotIn("ICE是以欧元管理短期利率", normalized)
-        self.assertNotIn("€STR夜间", normalized)
+        self.assertNotIn("ICE的投资工具表现出这些成本的预期", normalized)
 
     def test_editorial_polish_nyse_korea_exchange_relationship_terms(self):
         normalizer = translator.TerminologyNormalizer()
