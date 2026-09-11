@@ -848,6 +848,17 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("Alloy", alloy)
         self.assertNotIn("合金", alloy)
 
+    def test_editorial_polish_nasdaq_verafin_partner_as_verb_exact_title(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "纳斯达克Verafin和合金合作伙伴将帮助金融机构减轻整个客户生命周期中的欺诈风险",
+            "Nasdaq Verafin and Alloy Partner to Help Financial Institutions Mitigate Fraud Risk Across the Customer Lifecycle",
+            "Nasdaq",
+        )
+        self.assertIn("Nasdaq Verafin与Alloy合作，帮助金融机构", normalized)
+        self.assertNotIn("Alloy合作伙伴", normalized)
+        self.assertNotIn("合金合作伙伴", normalized)
+
     def test_editorial_polish_preserves_crypto_finance_and_trever(self):
         normalizer = translator.TerminologyNormalizer()
         normalized, _ = normalizer.normalize(
@@ -894,6 +905,22 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("欧元利率曲线", normalized)
         self.assertRegex(normalized, r"隔夜.*中期利率预期")
 
+    def test_editorial_polish_ice_euribor_estr_semantics_exact_summary(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "ICE是以欧元管理短期利率,以及与欧元区相连的隔夜借款成本的基准,这反映了欧元市场中面临的成本.这些市场为客户提供工具,以表达从隔夜融资成本到中期利率预期的整个欧元利率曲线观点. €STR夜间创下330万合約",
+            "ICE is home to Euribor, the benchmark for managing short-term euro-related interest rate risk, as well as €STR, which reflects the wholesale euro unsecured overnight borrowing costs of banks located in the euro area. Together, these markets give customers the tools to express views across the euro rates curve, from overnight funding costs to medium-term rate expectations.",
+            "ICE",
+        )
+        self.assertIn("Euribor是管理欧元短期利率风险的基准", normalized)
+        self.assertIn("€STR反映欧元区银行的欧元无担保隔夜批发借款成本", normalized)
+        self.assertIn("欧元利率曲线", normalized)
+        self.assertIn("隔夜融资成本", normalized)
+        self.assertIn("中期利率预期", normalized)
+        self.assertIn("ICE €STR期货未平仓量达330万合约", normalized)
+        self.assertNotIn("ICE是以欧元管理短期利率", normalized)
+        self.assertNotIn("€STR夜间", normalized)
+
     def test_editorial_polish_nyse_korea_exchange_relationship_terms(self):
         normalizer = translator.TerminologyNormalizer()
         normalized, _ = normalizer.normalize(
@@ -901,11 +928,27 @@ class LongTextTranslationTests(unittest.TestCase):
             "The New York Stock Exchange, part of Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and Korea Exchange, the sole securities exchange operator in the Republic of Korea, announced an MOU.",
             "ICE",
         )
-        self.assertIn("隶属于ICE的NYSE", normalized)
+        self.assertIn("纽约证券交易所（NYSE）隶属于ICE", normalized)
+        self.assertIn("NYSE与韩国交易所", normalized)
         self.assertIn("全球资本市场", normalized)
         self.assertIn("韩国唯一证券交易所运营商", normalized)
         self.assertNotIn("NYSE:ICE", normalized)
         self.assertNotIn("全球资产市场", normalized)
+
+    def test_editorial_polish_nyse_krx_ice_description_ownership_exact_output(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "纽约证券交易所 (NYSE:ICE),是全球金融市场技术和数据驱动全球资本市场的全球领先供应商之一,以及韩国交易所,是韩国共和国唯一证券交换运营商,今天宣布签署了一份谅解备忘录,旨在合作扩大全球资产市场的关键业务活动.合作利用交易所的专业知识来推动美国和韩国市场的创新.交易所可能会建立一个NYSE-KRX联合合作委员会,以支持有效执行该协议的目标. \"韩国的市场在将与全球一些最具创新性的投资者进行合作,反映了我们今天的共同承诺.",
+            "The New York Stock Exchange, part of Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and Korea Exchange, the sole securities exchange operator in the Republic of Korea, announced an MOU. Korea's capital markets connect global investors to some of the world's most innovative companies.",
+            "ICE",
+        )
+        self.assertIn("纽约证券交易所（NYSE）隶属于ICE", normalized)
+        self.assertIn("NYSE与韩国交易所", normalized)
+        self.assertIn("全球资本市场", normalized)
+        self.assertIn("连接全球投资者与一些最具创新性的公司", normalized)
+        self.assertNotIn("隶属于ICE的NYSE,是全球金融市场技术", normalized)
+        self.assertNotIn("NYSE:ICE", normalized)
+        self.assertNotIn("创新性的投资者", normalized)
 
     def test_editorial_polish_nyse_krx_investor_company_relationship(self):
         normalizer = translator.TerminologyNormalizer()
@@ -973,6 +1016,26 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         self.assertIn("法兰克福证券交易所监管市场", normalized)
         self.assertNotIn("监管机构", normalized)
+
+    def test_editorial_polish_regulated_market_exact_summary(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "DAX,MdaX,SDAX和TECDAX代表了监管机构中最大的公司 (按自由浮动市场资本化).",
+            "DAX, MDAX, SDAX and TecDAX represent the largest companies on the Regulated Market of Frankfurt Stock Exchange by free-float market capitalization.",
+            "ISS STOXX",
+        )
+        self.assertIn("法兰克福证券交易所监管市场", normalized)
+        self.assertNotIn("监管机构中最大的公司", normalized)
+
+    def test_editorial_polish_regulated_market_truncated_source_summary(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "DAX,MdaX,SDAX和TECDAX代表了监管机构中最大的公司 (按自由浮动市场资本化).",
+            "DAX, MDAX, SDAX and TecDAX represent the largest companies (by free float market capitalization) on the Regulated […]",
+            "ISS STOXX",
+        )
+        self.assertIn("法兰克福证券交易所监管市场中最大的公司", normalized)
+        self.assertNotIn("监管机构中最大的公司", normalized)
 
     def test_editorial_polish_cftc_sec_joint_rule_identity_order(self):
         normalizer = translator.TerminologyNormalizer()
@@ -1048,6 +1111,27 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("中东地区冲突", normalized)
         self.assertIn("2.78亿英镑", normalized)
         self.assertNotIn("中东地区的国内政治变化和冲突", normalized)
+
+    def test_editorial_polish_investment_association_exact_title_relationship(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "7月出现资金流入 尽管中东的国内政治变化和冲突",
+            "July saw inflows into funds despite domestic political changes and conflict in the Middle East",
+            "Investment Association",
+        )
+        self.assertIn("尽管国内政治发生变化且中东地区存在冲突，7月基金仍录得资金流入", normalized)
+        self.assertNotIn("中东的国内政治变化和冲突", normalized)
+
+    def test_editorial_polish_korean_fsc_tokenization_exact_title(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "国际SEC推出数字化转型和证券发行与流通的标记化政策路线图",
+            "FSC Introduces Policy Roadmap on Digital Transformation and Tokenization of Securities Issuance and Circulation",
+            "韩国金融监督委员会",
+        )
+        self.assertIn("FSC", normalized)
+        self.assertIn("证券发行与流通的代币化", normalized)
+        self.assertNotIn("标记化", normalized)
 
     def test_editorial_polish_safe_minor_terms(self):
         normalizer = translator.TerminologyNormalizer()

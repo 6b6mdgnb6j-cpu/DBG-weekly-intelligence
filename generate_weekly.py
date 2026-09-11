@@ -1,4 +1,3 @@
-import html
 import json
 from pathlib import Path
 
@@ -67,6 +66,16 @@ def build_group_config(items):
     return config
 
 
+def json_for_script(data):
+    payload = json.dumps(data, ensure_ascii=False)
+    return (
+        payload
+        .replace("</", "<\\/")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
 def render_report(start_arg=None, output_dir=OUTPUT_DIR):
     week_start, _ = parse_week_start(start_arg)
     output_dir = Path(output_dir)
@@ -90,7 +99,7 @@ def render_report(start_arg=None, output_dir=OUTPUT_DIR):
 
     rendered = template.replace(
         "__REPORT_DATA__",
-        html.escape(json.dumps(report_data, ensure_ascii=False), quote=False),
+        json_for_script(report_data),
     )
 
     output_path = output_dir / f"weekly_report_{week_file_key(week_start)}.html"
