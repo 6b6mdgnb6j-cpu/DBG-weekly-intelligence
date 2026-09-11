@@ -1356,6 +1356,70 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertLessEqual(title_translator.last_semantic_recovery_metadata["segment_count"], 6)
         self.assertLessEqual(len(provider.calls), 7)
 
+    def test_item_level_safe_fallback_uses_validated_title_for_bad_rescind_summary(self):
+        item = {
+            "source": "证券交易委员会",
+            "title_original": "SEC Proposes Rescission of Political Contribution Rule for Investment Advisers",
+            "summary_original": (
+                "The Securities and Exchange Commission today issued a proposal to rescind its "
+                "pay-to-play rule that prohibits investment advisers from providing compensated "
+                "investment advisory services to a government client for two years."
+            ),
+        }
+        provider = ConditionalProvider(
+            [
+                ("SEC Proposes Rescission", "SEC拟取消投资顾问政治贡献规则"),
+                (
+                    "proposal to rescind",
+                    "SEC今天发布了一项提议，禁止投资顾问为政府客户提供补偿投资咨询服务两年。",
+                ),
+                ("to rescind", "其pay-to-play规则"),
+                ("that prohibits", "该规则禁止投资顾问为政府客户提供补偿投资咨询服务两年"),
+                ("issued a proposal", "SEC今天发布一项提议"),
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator.translate([item])[0]
+        self.assertEqual(output["title_cn"], "SEC拟取消投资顾问政治贡献规则")
+        self.assertEqual(output["summary_cn"], output["title_cn"])
+
+    def test_item_level_safe_fallback_supports_repeal_and_revoke_families(self):
+        repeal = {
+            "title_original": "Agency Proposes Repeal of Legacy Rule",
+            "title_cn": "机构拟废除旧规则",
+            "summary_original": "The agency issued a proposal to repeal the legacy rule that prohibits activity.",
+            "summary_cn": "机构发布一项提议，禁止相关活动。",
+            "source": "Regulator",
+        }
+        revoke = {
+            "title_original": "Agency Proposes Revocation of Legacy Rule",
+            "title_cn": "机构拟撤销旧规则",
+            "summary_original": "The agency issued a proposal to revoke the legacy rule that prohibits activity.",
+            "summary_cn": "机构发布一项提议，禁止相关活动。",
+            "source": "Regulator",
+        }
+        from crawler.translation_quality import apply_critical_action_safe_fallback
+
+        repeal_fixed, _ = apply_critical_action_safe_fallback(repeal)
+        revoke_fixed, _ = apply_critical_action_safe_fallback(revoke)
+        self.assertEqual(repeal_fixed["summary_cn"], "机构拟废除旧规则")
+        self.assertEqual(revoke_fixed["summary_cn"], "机构拟撤销旧规则")
+
+    def test_item_level_safe_fallback_fails_closed_without_safe_title(self):
+        item = {
+            "title_original": "Agency Proposes Rescission of Legacy Rule",
+            "title_cn": "机构提议旧规则",
+            "summary_original": "The agency issued a proposal to rescind the legacy rule that prohibits activity.",
+            "summary_cn": "机构发布一项提议，禁止相关活动。",
+            "source": "Regulator",
+        }
+        from crawler.translation_quality import apply_critical_action_safe_fallback
+
+        fixed, warning = apply_critical_action_safe_fallback(item)
+        self.assertEqual(fixed["summary_cn"], item["summary_cn"])
+        self.assertIsNone(warning)
+
 
 if __name__ == "__main__":
     unittest.main()

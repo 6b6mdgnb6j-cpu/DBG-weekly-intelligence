@@ -24,7 +24,7 @@ SUBSTANTIVE_TITLE_ANCHORS = [
     ("launch", (r"\blaunch(?:es|ed|ing)?\b", r"\bintroduc(?:e|es|ed|ing)\b"), ("推出", "正式推出", "启动", "上线", "开始提供", "发布", "引入", "发起")),
     ("acquire", (r"\bacquir(?:e|es|ed|ing)\b", r"\bacquisition\b"), ("收购", "并购")),
     ("propose", (r"\bpropos(?:e|es|ed|al)\b",), ("提议", "拟", "建议", "提出")),
-    ("rescind", (r"\brescind(?:s|ed|ing)?\b", r"\brescission\b", r"\brepeal(?:s|ed|ing)?\b", r"\brevok(?:e|es|ed|ing)\b"), ("取消", "撤销", "废除", "撤回")),
+    ("rescind", (r"\brescind(?:s|ed|ing)?\b", r"\brescission\b", r"\brepeal(?:s|ed|ing)?\b", r"\brevok(?:e|es|ed|ing)\b", r"\brevocation\b"), ("取消", "撤销", "废除", "撤回")),
     ("approve", (r"\bapprov(?:e|es|ed|ing|al)\b",), ("批准", "核准")),
     ("suspend", (r"\bsuspend(?:s|ed|ing)?\b",), ("暂停", "中止")),
     ("extend", (r"\bextend(?:s|ed|ing)?\b",), ("延长", "延期", "扩大", "扩展")),
@@ -45,6 +45,19 @@ ACTION_DIRECTION_RULES = [
     ("increase", (r"\bincreas(?:e|es|ed|ing)\b",), ("增加", "上升", "提高")),
     ("decrease", (r"\bdecreas(?:e|es|ed|ing)\b", r"\breduc(?:e|es|ed|ing)\b"), ("减少", "下降", "降低")),
 ]
+
+CRITICAL_ACTION_FALLBACK_FAMILIES = {
+    "rescind": {
+        "patterns": (
+            r"\brescind(?:s|ed|ing)?\b",
+            r"\brescission\b",
+            r"\brepeal(?:s|ed|ing)?\b",
+            r"\brevok(?:e|es|ed|ing)\b",
+            r"\brevocation\b",
+        ),
+        "signals": ("取消", "撤销", "废除", "撤回"),
+    }
+}
 
 DANGEROUS_ENTITY_VARIANTS = {
     "ISS STOXX": ("国际空间站STOXX", "国际航天站STOXX", "国际航天局公司", "国际航天局", "国际空间站", "国际航天站"),
@@ -96,6 +109,13 @@ def _issue(index, item, field, issue_id, severity, evidence, reason):
         "evidence": evidence,
         "reason": reason,
     }
+
+
+def _critical_action_family(original):
+    for family, spec in CRITICAL_ACTION_FALLBACK_FAMILIES.items():
+        if _contains_english(original, spec["patterns"]):
+            return family
+    return ""
 
 
 def _translated_fields(item):
@@ -223,7 +243,7 @@ def _action_direction_issues(index, item):
         for action_id, original_patterns, translated_signals in ACTION_DIRECTION_RULES:
             if action_id == "ban" and _contains_english(
                 original,
-                (r"\brescind(?:s|ed|ing)?\b", r"\brescission\b", r"\brepeal(?:s|ed|ing)?\b", r"\brevok(?:e|es|ed|ing)\b"),
+                (r"\brescind(?:s|ed|ing)?\b", r"\brescission\b", r"\brepeal(?:s|ed|ing)?\b", r"\brevok(?:e|es|ed|ing)\b", r"\brevocation\b"),
             ):
                 continue
             if not _contains_english(original, original_patterns):
@@ -336,6 +356,9 @@ def audit_translation_quality(items):
         issues.extend(_title_proposition_issues(index, item))
         issues.extend(_action_direction_issues(index, item))
         issues.extend(_suspicious_compression_issues(index, item))
+        fallback_warning = safe_fallback_warning(item, index)
+        if fallback_warning:
+            issues.append(fallback_warning)
     return issues
 
 
@@ -362,3 +385,76 @@ def validate_translation_field(original, translated, field_type="text", source="
             + _suspicious_compression_issues(0, item)
         )
     return []
+
+
+def _summary_has_high_risk_action_failure(item):
+    issues = validate_translation_field(
+        original=item.get("summary_original") or item.get("summary") or "",
+        translated=item.get("summary_cn") or "",
+        field_type="summary",
+        source=item.get("source") or "",
+        title_original=item.get("title_original") or item.get("title") or "",
+    )
+    for issue in issues:
+        if (
+            issue.get("severity") == FAIL
+            and issue.get("issue_id") == "translation_action_direction_missing"
+            and issue.get("evidence", {}).get("action") in CRITICAL_ACTION_FALLBACK_FAMILIES
+        ):
+            return issue.get("evidence", {}).get("action")
+    return ""
+
+
+def _title_provides_safe_action_fallback(item, family):
+    if family not in CRITICAL_ACTION_FALLBACK_FAMILIES:
+        return False
+    title_original = item.get("title_original") or item.get("title") or ""
+    title_cn = item.get("title_cn") or ""
+    if not title_original or not title_cn:
+        return False
+    if _critical_action_family(title_original) != family:
+        return False
+    if not _contains_any(title_cn, CRITICAL_ACTION_FALLBACK_FAMILIES[family]["signals"]):
+        return False
+    title_issues = validate_translation_field(
+        original=title_original,
+        translated=title_cn,
+        field_type="title",
+        source=item.get("source") or "",
+        title_original=title_original,
+    )
+    return not any(issue.get("severity") == FAIL for issue in title_issues)
+
+
+def safe_fallback_warning(item, index=0):
+    family = _critical_action_family(item.get("summary_original") or item.get("summary") or "")
+    if not family:
+        return None
+    if (item.get("summary_cn") or "").strip() != (item.get("title_cn") or "").strip():
+        return None
+    if not _title_provides_safe_action_fallback(item, family):
+        return None
+    return _issue(
+        index,
+        item,
+        "summary",
+        "translation_safe_fallback_used",
+        WARNING,
+        {
+            "action_family": family,
+            "title_original": item.get("title_original") or item.get("title") or "",
+            "reason": "validated title used because summary remained semantically unsafe",
+        },
+        "A validated title was used as a safe fallback for a semantically unsafe translated summary.",
+    )
+
+
+def apply_critical_action_safe_fallback(item):
+    clean = dict(item)
+    family = _summary_has_high_risk_action_failure(clean)
+    if not family:
+        return clean, None
+    if not _title_provides_safe_action_fallback(clean, family):
+        return clean, None
+    clean["summary_cn"] = clean.get("title_cn") or ""
+    return clean, safe_fallback_warning(clean, 0)

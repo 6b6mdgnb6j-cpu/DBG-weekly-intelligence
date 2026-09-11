@@ -877,10 +877,11 @@ class TitleTranslator:
             return
         self.logger.warning(
             "Translation semantic recovery: field=%s triggering_issue_ids=%s segment_count=%s "
-            "recovery_result=%s selected=%s",
+            "original_hash=%s recovery_result=%s selected=%s",
             metadata.get("field"),
             metadata.get("triggering_issue_ids"),
             metadata.get("segment_count"),
+            metadata.get("original_hash"),
             metadata.get("recovery_validation_result"),
             metadata.get("recovered_output_selected"),
         )
@@ -891,6 +892,7 @@ class TitleTranslator:
         self.last_semantic_recovery_metadata = {
             "semantic_recovery_triggered": bool(segments),
             "field": field,
+            "original_hash": hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:12],
             "triggering_issue_ids": issue_ids,
             "segment_count": len(segments),
             "initial_validation_result": "FAIL",
@@ -1277,6 +1279,10 @@ class TitleTranslator:
                 clean["summary_en"] = ""
                 clean["summary_cn"] = ""
 
+            if self.enabled:
+                from crawler.translation_quality import apply_critical_action_safe_fallback
+
+                clean, _ = apply_critical_action_safe_fallback(clean)
             translated.append(clean)
 
         if self.enabled and self.cache_dirty:

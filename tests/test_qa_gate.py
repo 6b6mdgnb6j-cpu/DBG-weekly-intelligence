@@ -518,6 +518,79 @@ class QAGateTests(unittest.TestCase):
         report = self.evaluate(weekly=weekly)
         self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
 
+    def test_translation_safe_fallback_warning_when_title_replaces_bad_rescind_summary(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="证券交易委员会",
+                    title_original="SEC Proposes Rescission of Political Contribution Rule for Investment Advisers",
+                    title_cn="SEC拟取消投资顾问政治贡献规则",
+                    summary_original="The Securities and Exchange Commission today issued a proposal to rescind its pay-to-play rule that prohibits investment advisers.",
+                    summary_cn="SEC拟取消投资顾问政治贡献规则",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+        self.assertEqual(self.check(report, "translation_quality_warnings")["result"], WARNING)
+        self.assertIn("translation_safe_fallback_used", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_safe_fallback_not_used_when_title_also_omits_action(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="Regulator",
+                    title_original="Agency Proposes Rescission of Market Rule",
+                    title_cn="机构提议市场规则",
+                    summary_original="The agency issued a proposal to rescind the market rule that prohibits activity.",
+                    summary_cn="机构提议市场规则",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertNotIn("translation_safe_fallback_used", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_safe_fallback_not_used_for_different_title_action(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="Regulator",
+                    title_original="Agency Approves Market Rule",
+                    title_cn="机构批准市场规则",
+                    summary_original="The agency issued a proposal to rescind the market rule that prohibits activity.",
+                    summary_cn="机构批准市场规则",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertNotIn("translation_safe_fallback_used", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_translation_safe_fallback_not_used_for_good_summary(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="Regulator",
+                    title_original="Agency Proposes Rescission of Market Rule",
+                    title_cn="机构拟取消市场规则",
+                    summary_original="The agency issued a proposal to rescind the market rule that prohibits activity.",
+                    summary_cn="机构发布一项拟取消该市场规则的提议，该规则禁止相关活动。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+        self.assertEqual(self.check(report, "translation_quality_warnings")["result"], PASS)
+
     def test_translation_quality_short_simple_summary_does_not_trigger_compression(self):
         weekly = payload(
             items=[
