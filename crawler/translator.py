@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v17"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v18"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -445,12 +445,12 @@ class TerminologyNormalizer:
     CANONICAL_ENTITIES = {
         "Deutsche Börse": {
             "aliases": ["Deutsche Börse Group"],
-            "bad": ["德意志交易所"],
+            "bad": ["德意志交易所", "德意志 Börse"],
         },
         "Eurex": {"aliases": [], "bad": ["欧莱克斯", "欧雷克斯", "欧元交易所"]},
         "EEX": {"aliases": ["EEX Group"], "bad": []},
         "360T": {"aliases": [], "bad": []},
-        "Crypto Finance": {"aliases": [], "bad": []},
+        "Crypto Finance": {"aliases": [], "bad": ["加密金融"]},
         "Clearstream": {"aliases": [], "bad": ["清流"]},
         "SimCorp": {"aliases": [], "bad": []},
         "ISS STOXX": {
@@ -468,12 +468,17 @@ class TerminologyNormalizer:
         },
         "STOXX": {"aliases": [], "bad": [r"STTOXX", r"(?<![A-Za-z0-9])STOX(?![A-Za-z0-9])", "斯托克斯"]},
         "ICE": {"aliases": ["Intercontinental Exchange"], "bad": ["冰岛", "欧元交易所", "国际大陆交易所", "跨大陆交易"]},
-        "SIX": {"aliases": ["SIX Exchanges"], "bad": ["六个交易所", "六个", "六"]},
+        "SIX": {"aliases": ["SIX Exchanges"], "bad": ["六个交易所", "六个", "六", "西克斯"]},
         "Nasdaq": {"aliases": [], "bad": ["纳斯达克"]},
+        "Nasdaq eVestment": {"aliases": [], "bad": ["纳思达克电子投资", "纳斯达克电子投资"]},
+        "Nasdaq Verafin": {"aliases": [], "bad": ["纳斯达克Verafin", "纳思达克Verafin", "NasdaqVerafin"]},
+        "Alloy": {"aliases": [], "bad": ["合金"]},
+        "Trever": {"aliases": [], "bad": ["特雷弗", "雷弗"]},
         "Cboe": {"aliases": [], "bad": []},
         "LSEG": {"aliases": ["London Stock Exchange Group"], "bad": []},
         "FTSE": {"aliases": ["FTSE Russell"], "bad": ["FTC"]},
-        "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": []},
+        "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": ["斯安普道斯指数"]},
+        "Kaiko": {"aliases": [], "bad": ["凯科"]},
         "DTCC": {"aliases": [], "bad": []},
         "FINRA": {"aliases": [], "bad": ["国际金融基金会", "FINA"]},
         "SEC": {"aliases": ["Securities and Exchange Commission"], "bad": ["美国证券交易委员会", "证券交易委员会"]},
@@ -481,7 +486,9 @@ class TerminologyNormalizer:
             "aliases": ["Commodity Futures Trading Commission"],
             "bad": ["欧盟货币交易委员会", "欧盟CFTC", "欧盟贸易交易委员会", "美国央行", "金融交易委员会", "商品期货交易委员会"],
         },
-        "MAS": {"aliases": ["Monetary Authority of Singapore"], "bad": []},
+        "MAS": {"aliases": ["Monetary Authority of Singapore"], "bad": ["马斯"]},
+        "Euribor": {"aliases": [], "bad": []},
+        "€STR": {"aliases": [], "bad": []},
         "HKEX": {"aliases": ["Hong Kong Exchanges and Clearing"], "bad": ["希克克斯", "希克斯"]},
         "JPX": {"aliases": ["Japan Exchange Group"], "bad": ["日本交流集团", "日本交易所集团"]},
         "FSC": {"aliases": ["Financial Services Commission"], "bad": ["联邦书商管理局", "国际SEC", "国际证券交易委员会"]},
@@ -490,11 +497,13 @@ class TerminologyNormalizer:
     }
     FALLBACK_SOURCE_EDITS = {
         "Clearstream": {"清流": "Clearstream"},
-        "Deutsche Börse": {"德意志交易所": "Deutsche Börse"},
+        "Deutsche Börse": {"德意志交易所": "Deutsche Börse", "德意志 Börse": "Deutsche Börse"},
         "ISS STOXX": {"伊斯斯斯托克斯": "ISS STOXX", "伊斯斯托克斯": "ISS STOXX"},
         "HashKey": {"哈希基": "HashKey", "HachKey": "HashKey"},
         "HKEX": {"希克克斯": "HKEX", "希克斯": "HKEX"},
         "Eurex": {"欧莱克斯": "Eurex", "欧雷克斯": "Eurex", "欧元交易所": "Eurex"},
+        "Crypto Finance": {"加密金融": "Crypto Finance"},
+        "Trever": {"特雷弗": "Trever", "雷弗": "Trever"},
         "CFTC": {
             "欧盟货币交易委员会": "CFTC",
             "欧盟贸易交易委员会": "CFTC",
@@ -508,10 +517,11 @@ class TerminologyNormalizer:
         "FOMC": {"联邦开放市场委员会": "FOMC"},
         "HKMA": {"香港货币管理局": "HKMA", "香港金融管理局": "HKMA"},
         "JPX": {"日本交流集团": "JPX", "日本交易所集团": "JPX"},
-        "SIX": {"六个交易所": "SIX Exchanges", "六个": "SIX", "六": "SIX"},
+        "SIX": {"六个交易所": "SIX Exchanges", "六个": "SIX", "六": "SIX", "西克斯": "SIX"},
         "ICE": {"冰岛": "ICE", "欧元交易所": "ICE", "国际大陆交易所": "ICE", "跨大陆交易": "ICE"},
         "FINRA": {"国际金融基金会": "FINRA"},
         "FTSE": {"FTC": "FTSE"},
+        "MAS": {"马斯": "MAS"},
         "FSC": {"国际SEC": "FSC", "联邦书商管理局": "FSC", "国际证券交易委员会": "FSC"},
     }
     CONTEXT_ALIASES = {
@@ -535,6 +545,13 @@ class TerminologyNormalizer:
         "FINRA": ["financial industry regulatory authority"],
         "FTSE": ["ftse russell"],
         "Nasdaq": ["nasdaq"],
+        "Nasdaq eVestment": ["nasdaq evestment"],
+        "Nasdaq Verafin": ["nasdaq verafin"],
+        "Alloy": ["alloy"],
+        "Trever": ["trever"],
+        "Kaiko": ["kaiko"],
+        "Euribor": ["euribor"],
+        "€STR": ["€str"],
         "FSC": ["financial services commission"],
     }
     TERM_RULES = [
@@ -558,17 +575,63 @@ class TerminologyNormalizer:
         ("FSC", r"联邦书商管理局", "FSC"),
         ("Financial Services Commission", r"国际证券交易委员会", "金融服务委员会"),
         ("Intercontinental Exchange", r"欧元交易所", "ICE"),
+        ("Deutsche Börse", r"Deutsche Börse\s*德国\s*Börse", "Deutsche Börse"),
+        ("Trading Overview", r"贸易概况", "交易概况"),
         ("margin efficiency", r"利率效率", "保证金效率"),
         ("forward transaction", r"前期交易", "远期交易"),
         ("forward transactions", r"前期交易", "远期交易"),
+        ("Multi-Dealer FX", r"多经销商外汇", "多交易商外汇"),
+        ("Best Asia Multi-Dealer FX Trading Venue", r"亚洲最佳多交易商外汇交易场所", "亚洲最佳多交易商外汇交易平台"),
         ("Canadian Dollar", r"加拿大美元", "加拿大元"),
         ("Canadian dollar", r"加拿大美元", "加拿大元"),
         ("Mexican Peso", r"墨西哥指", "墨西哥比索"),
         ("Mexican peso", r"墨西哥指", "墨西哥比索"),
+        ("million contracts", r"万合同", "万合约"),
+        ("contracts", r"(?<=\d)合同", "合约"),
+        ("€STR", r"ICESTR", "€STR"),
+        ("overnight borrowing costs", r"借贷风险率|夜间借款成本|隔夜借贷成本", "隔夜借款成本"),
+        ("global capital markets", r"全球资产市场", "全球资本市场"),
+        (
+            "global investors to some of the world's most innovative companies",
+            r"与全球一些最具创新性的投资者进行合作",
+            "连接全球投资者与一些最具创新性的公司",
+        ),
+        ("New York Stock Exchange, part of Intercontinental Exchange", r"纽约证券交易所\s*\(NYSE\s*:\s*ICE\)", "隶属于ICE的NYSE"),
+        ("securities exchange operator", r"证券交换运营商", "证券交易所运营商"),
+        ("announced in April 2026", r"希腊股票将在2026年4月重新归类为发达市场", "希腊股票重新归类为发达市场的决定于2026年4月宣布"),
+        ("CEO compensation", r"首席执行官补偿|CEO补偿", "CEO薪酬"),
+        ("CEO pay", r"首席执行官薪水|CEO薪水", "CEO薪酬"),
+        ("executive pay", r"执行官薪酬", "高管薪酬"),
+        ("proxy season", r"代理季度", "委托投票季"),
+        ("Regulated Market of Frankfurt Stock Exchange", r"法兰克福证券交易所监管机构|监管机构中最大的公司", "法兰克福证券交易所监管市场"),
+        ("Regulated Market", r"监管机构", "监管市场"),
+        ("Joint Final Rule with the SEC", r"SEC\s*\(CFTC\)\s*发布了与SEC的联合最终规则", "CFTC与SEC联合发布最终规则"),
+        ("registered transfer agents", r"注册转账代理|注册转让代理人|注册转移代理", "注册过户代理机构"),
+        ("transfer agents", r"转账代理|转让代理人|转移代理", "过户代理机构"),
+        ("national clearance and settlement system", r"国家核准和结算系统|国家清算和结算系统", "全国性证券清算结算体系"),
+        ("clearance and settlement", r"核准和结算", "清算与结算"),
+        ("member firms", r"成员国公司|成员公司", "会员公司"),
+        ("Members Need to Know", r"成员需要知道", "会员需要知道"),
+        ("£278 million", r"2\.78亿英(?!镑)", "2.78亿英镑"),
+        (
+            "domestic political changes and conflict in the Middle East",
+            r"中东地区的国内政治变化和冲突",
+            "国内政治变化和中东地区冲突",
+        ),
+        ("up 12%", r"下升12%", "上升12%"),
+        ("S&P Kaiko", r"S&PKaiko", "S&P Kaiko"),
+        ("blue-chip index", r"蓝芯片指数", "蓝筹指数"),
+        ("asset manager", r"资产经理", "资产管理机构"),
+        ("asset managers", r"资产经理", "资产管理机构"),
+        ("digital asset firms", r"数字资本公司", "数字资产公司"),
+        ("consultation paper", r"协商文件", "征求意见文件"),
+        ("asset-level insights", r"资产级洞察|资产水平洞察", "资产层面的洞察"),
         ("open interest", r"开放利率", "未平仓量"),
         ("interest rate swap", r"利率交换", "利率互换"),
         ("interest rate swaps", r"利率交换", "利率互换"),
-        ("intraday margin", r"日内利标准|日内利润标准", "日内保证金标准"),
+        ("intraday margin standard", r"日内利标准|日内利润标准|intraday\s*利标准", "日内保证金标准"),
+        ("intraday margin", r"日内利(?=要求|规定|规则|安排|计算|管理|模型|框架|更新|适用|$)", "日内保证金"),
+        ("intraday margin", r"日内利润(?=要求|规定|规则|安排|计算|管理|模型|框架|更新|适用|$)", "日内保证金"),
         ("stablecoin", r"稳定coin", "稳定币"),
     ]
 
@@ -631,6 +694,7 @@ class TerminologyNormalizer:
         for canonical in self._protected_entities_in_original_order(original):
             pattern = self._entity_pattern(canonical)
             new = re.sub(pattern + r"\s*\(\s*" + pattern + r"\s*\)", canonical, out, flags=self._entity_flags(canonical))
+            new = re.sub(pattern + r"\s*（\s*" + pattern + r"\s*）", canonical, new, flags=self._entity_flags(canonical))
             new = re.sub(pattern + r"\s+" + pattern, canonical, new, flags=self._entity_flags(canonical))
             if canonical in {"Nasdaq", "Cboe", "FINRA", "FTSE", "STOXX", "ICE", "SIX", "Eurex", "EEX"}:
                 new = re.sub(pattern + r"\s+" + re.escape(canonical) + r"(?=[A-Za-z])", canonical + " ", new, flags=self._entity_flags(canonical))

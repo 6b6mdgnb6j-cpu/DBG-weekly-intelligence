@@ -247,7 +247,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v17", GENERATION_CONFIG_VERSION)
+        self.assertIn("v18", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -818,6 +818,283 @@ class LongTextTranslationTests(unittest.TestCase):
             "Source",
         )
         self.assertEqual(normalized, "前期工作安排")
+        self.assertEqual(changes, [])
+
+    def test_editorial_polish_trading_overview_uses_exchange_trading(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "2026年8月的贸易概况",
+            "Trading Overview in August 2026",
+            "JPX",
+        )
+        self.assertIn("交易概况", normalized)
+        self.assertNotIn("贸易概况", normalized)
+
+    def test_editorial_polish_preserves_nasdaq_evestment_and_alloy(self):
+        normalizer = translator.TerminologyNormalizer()
+        title, _ = normalizer.normalize(
+            "纳斯达克完成收购,深化纳思达克电子投资能力",
+            "Nasdaq Completes Acquisition of Dasseti, Deepening Nasdaq eVestment's AI Capabilities",
+            "Nasdaq",
+        )
+        alloy, _ = normalizer.normalize(
+            "纳斯达克Verafin和合金合作",
+            "Nasdaq Verafin and Alloy Partner to Help Financial Institutions Mitigate Fraud Risk",
+            "Nasdaq",
+        )
+        self.assertIn("Nasdaq eVestment", title)
+        self.assertNotIn("电子投资", title)
+        self.assertIn("Nasdaq Verafin", alloy)
+        self.assertIn("Alloy", alloy)
+        self.assertNotIn("合金", alloy)
+
+    def test_editorial_polish_preserves_crypto_finance_and_trever(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "雷弗集成加密金融,使金融机构能够访问受监管的数字资产交易和结算.",
+            "Trever integrates Crypto Finance, enabling financial institutions to access regulated digital asset trading and settlement.",
+            "Crypto Finance",
+        )
+        self.assertIn("Trever", normalized)
+        self.assertIn("Crypto Finance", normalized)
+        self.assertNotIn("加密金融", normalized)
+        self.assertNotIn("雷弗", normalized)
+
+    def test_editorial_polish_multi_dealer_fx_uses_dealer_not_distributor(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "360T 赢得亚洲最佳多经销商外汇交易场所",
+            "360T Wins Best Asia Multi-Dealer FX Trading Venue",
+            "360T",
+        )
+        self.assertIn("多交易商外汇", normalized)
+        self.assertNotIn("多经销商外汇", normalized)
+
+    def test_editorial_polish_ice_rates_terms(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "冰岛Euribor和ICESTR期货开放利率达1450万合同,隔夜借贷成本影响欧元利率曲线",
+            "ICE interest rate futures open interest in Euribor and €STR futures hit 14.5 million contracts; €STR reflects euro-area banks' wholesale unsecured overnight borrowing costs across the euro rates curve.",
+            "ICE",
+        )
+        self.assertIn("ICE", normalized)
+        self.assertIn("Euribor", normalized)
+        self.assertIn("€STR", normalized)
+        self.assertIn("未平仓量", normalized)
+        self.assertIn("1450万合约", normalized)
+        self.assertIn("隔夜借款成本", normalized)
+
+    def test_editorial_polish_ice_euro_rates_curve_sentence(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "这些市场为客户提供工具,以表达从隔夜融资成本到中期利率预期的整个欧元利率曲线观点.",
+            "Together, these markets give customers the tools to express views across the euro rates curve, from overnight funding costs to medium-term rate expectations.",
+            "ICE",
+        )
+        self.assertIn("欧元利率曲线", normalized)
+        self.assertRegex(normalized, r"隔夜.*中期利率预期")
+
+    def test_editorial_polish_nyse_korea_exchange_relationship_terms(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "纽约证券交易所 (NYSE:ICE),是全球金融市场技术和数据驱动全球资本市场的全球领先供应商之一,以及韩国交易所,是韩国共和国唯一证券交换运营商,合作扩大全球资产市场.",
+            "The New York Stock Exchange, part of Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and Korea Exchange, the sole securities exchange operator in the Republic of Korea, announced an MOU.",
+            "ICE",
+        )
+        self.assertIn("隶属于ICE的NYSE", normalized)
+        self.assertIn("全球资本市场", normalized)
+        self.assertIn("韩国唯一证券交易所运营商", normalized)
+        self.assertNotIn("NYSE:ICE", normalized)
+        self.assertNotIn("全球资产市场", normalized)
+
+    def test_editorial_polish_nyse_krx_investor_company_relationship(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "韩国的资本市场将与全球一些最具创新性的投资者进行合作.",
+            "Korea's capital markets connect global investors to some of the world's most innovative companies.",
+            "ICE",
+        )
+        self.assertIn("全球投资者", normalized)
+        self.assertIn("创新", normalized)
+        self.assertIn("公司", normalized)
+        self.assertRegex(normalized, r"全球投资者.*创新.*公司")
+        self.assertNotIn("创新性的投资者", normalized)
+
+    def test_editorial_polish_nyse_ticker_context_does_not_restore_nyse_entity(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "ICE宣布其利率期货市场未平仓合约达到纪录水平。",
+            "Intercontinental Exchange, Inc. (NYSE: ICE) announced record open interest in interest rate futures.",
+            "ICE",
+        )
+        self.assertNotIn("NYSE ICE宣布", normalized)
+
+    def test_editorial_polish_preserves_sp_dji_and_kaiko_without_duplicate(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "斯安普道斯指数和凯科引入S&P凯科数字资产指数",
+            "S&P Dow Jones Indices and Kaiko Introduce S&P Kaiko Digital Asset Indices",
+            "S&P Dow Jones Indices",
+        )
+        self.assertIn("S&P Dow Jones Indices", normalized)
+        self.assertIn("Kaiko", normalized)
+        self.assertNotIn("斯安普道斯指数", normalized)
+        self.assertNotIn("凯科", normalized)
+
+    def test_editorial_polish_greek_equities_announcement_timing(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "希腊股票将在2026年4月重新归类为发达市场.",
+            "The reclassification of Greek equities to Developed Market status, announced in April 2026, will take effect later.",
+            "ISS STOXX",
+        )
+        self.assertIn("于2026年4月宣布", normalized)
+        self.assertNotIn("将在2026年4月重新归类", normalized)
+
+    def test_editorial_polish_proxy_and_compensation_terms(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "创纪录的首席执行官补偿和2026年代理季度执行官薪酬的股东支持.",
+            "CEO compensation and shareholder support for executive pay during the 2026 proxy season.",
+            "ISS-Corporate",
+        )
+        self.assertIn("CEO薪酬", normalized)
+        self.assertIn("高管薪酬", normalized)
+        self.assertIn("委托投票季", normalized)
+        self.assertNotIn("补偿", normalized)
+        self.assertNotIn("代理季度", normalized)
+
+    def test_editorial_polish_regulated_market_term(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "监管机构中最大的公司",
+            "on the Regulated Market of Frankfurt Stock Exchange",
+            "Deutsche Börse",
+        )
+        self.assertIn("法兰克福证券交易所监管市场", normalized)
+        self.assertNotIn("监管机构", normalized)
+
+    def test_editorial_polish_cftc_sec_joint_rule_identity_order(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "SEC (CFTC) 发布了与SEC的联合最终规则",
+            "The CFTC published a Joint Final Rule with the SEC further extending the compliance date for the amendments to Form PF.",
+            "CFTC",
+        )
+        self.assertIn("CFTC与SEC联合发布最终规则", normalized)
+        self.assertNotIn("SEC (CFTC)", normalized)
+
+    def test_editorial_polish_dedupes_full_width_entity_parentheses(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "SEC（SEC）和FDA签署谅解备忘录。",
+            "SEC and FDA announce MOU to ensure market integrity.",
+            "SEC",
+        )
+        self.assertIn("SEC和FDA", normalized)
+        self.assertNotIn("SEC（SEC）", normalized)
+
+    def test_editorial_polish_transfer_agent_and_clearance_settlement_terms(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "SEC拟更新注册转账代理规则. 转移代理是国家核准和结算系统的关键组成部分.",
+            "SEC proposed rules for registered transfer agents. Transfer agents are a key component of the national clearance and settlement system.",
+            "SEC",
+        )
+        self.assertIn("注册过户代理机构", normalized)
+        self.assertIn("过户代理机构", normalized)
+        self.assertIn("全国性证券清算结算体系", normalized)
+        self.assertNotIn("转账代理", normalized)
+        self.assertNotIn("核准和结算", normalized)
+
+    def test_editorial_polish_finra_member_firms_and_intraday_margin(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "FINRA的intraday 利标准:投资者和成员国公司需要知道的",
+            "FINRA's Intraday Margin Standard: What Investors and Members Need to Know for member firms.",
+            "FINRA",
+        )
+        self.assertIn("日内保证金标准", normalized)
+        self.assertIn("会员公司", normalized)
+        self.assertNotIn("成员国公司", normalized)
+
+    def test_editorial_polish_intraday_margin_plain_does_not_add_standard(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "FINRA的日内利要求适用于会员公司",
+            "FINRA issued intraday margin requirements for member firms.",
+            "FINRA",
+        )
+        self.assertIn("日内保证金要求", normalized)
+        self.assertNotIn("日内保证金标准", normalized)
+
+    def test_editorial_polish_gbp_amount_keeps_currency(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "7月份的净零售销售额增长了2.78亿英",
+            "Net retail sales recorded inflows of £278 million in July.",
+            "Investment Association",
+        )
+        self.assertIn("2.78亿英镑", normalized)
+
+    def test_editorial_polish_investment_association_two_factor_relationship(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "7月份资金流入,尽管中东地区的国内政治变化和冲突,净零售销售额增长了2.78亿英.",
+            "July saw inflows into funds despite domestic political changes and conflict in the Middle East, with net retail sales of £278 million.",
+            "Investment Association",
+        )
+        self.assertIn("国内政治变化", normalized)
+        self.assertIn("中东地区冲突", normalized)
+        self.assertIn("2.78亿英镑", normalized)
+        self.assertNotIn("中东地区的国内政治变化和冲突", normalized)
+
+    def test_editorial_polish_safe_minor_terms(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "蓝芯片指数的资产经理获得资产级洞察,数字资本公司下升12%",
+            "blue-chip index asset managers receive asset-level insights, digital asset firms up 12%",
+            "Source",
+        )
+        self.assertIn("蓝筹指数", normalized)
+        self.assertIn("资产管理机构", normalized)
+        self.assertIn("资产层面的洞察", normalized)
+        self.assertIn("数字资产公司", normalized)
+        self.assertIn("上升12%", normalized)
+
+    def test_editorial_polish_sp_kaiko_spacing(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "S&PKaiko数字资产指数",
+            "S&P Dow Jones Indices and Kaiko introduce S&P Kaiko Digital Asset Indices.",
+            "S&P Dow Jones Indices",
+        )
+        self.assertIn("S&P Kaiko", normalized)
+        self.assertNotIn("S&PKaiko", normalized)
+
+    def test_editorial_polish_safe_entity_terms(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "Deutsche Börse 德国 Börse和西克斯市场更新，马斯发布稳定币规则。",
+            "Deutsche Börse, SIX and MAS published market updates.",
+            "Deutsche Börse",
+        )
+        self.assertIn("Deutsche Börse", normalized)
+        self.assertIn("SIX", normalized)
+        self.assertIn("MAS", normalized)
+        self.assertNotIn("Deutsche Börse 德国 Börse", normalized)
+        self.assertNotIn("德意志 Börse", normalized)
+        self.assertNotIn("西克斯", normalized)
+        self.assertNotIn("马斯", normalized)
+
+    def test_editorial_polish_mas_source_alone_does_not_rewrite_mars(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, changes = normalizer.normalize(
+            "马斯任务进入轨道",
+            "Mars mission enters orbit",
+            "MAS",
+        )
+        self.assertEqual(normalized, "马斯任务进入轨道")
         self.assertEqual(changes, [])
 
     def test_critical_term_validator_ignores_lowercase_ordinary_six(self):
