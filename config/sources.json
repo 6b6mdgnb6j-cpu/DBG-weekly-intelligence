@@ -1668,7 +1668,7 @@
     "max_candidates": 8,
     "registry_source": "周报信息来源清单_副本.docx",
     "registry_raw": "76.上海期货交易所(SHFE)—https://www.shfe.com.cn",
-    "crawl_url": "https://www.shfe.com.cn/news/notice/"
+    "crawl_url": "https://www.shfe.com.cn/publicnotice/notice/"
   },
   {
     "id": "SRC-077",

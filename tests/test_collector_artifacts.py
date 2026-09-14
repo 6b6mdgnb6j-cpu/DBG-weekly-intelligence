@@ -59,6 +59,69 @@ class CollectorArtifactModeTests(unittest.TestCase):
             self.assertEqual(production.read_text(encoding="utf-8"), "production artifact")
             self.assertEqual(Path(result["weekly_data_path"]).parent, root / "output" / "ci" / "20200106")
 
+    def test_web_source_max_items_still_caps_retained_items_after_scan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            legacy = root / "data" / "news.json"
+            log_dir = root / "logs"
+            raw_dir = root / "raw"
+            source = {
+                "id": "SRC-TEST",
+                "name": "Mock Web",
+                "url": "https://example.test/news",
+                "method": "web",
+                "enabled": True,
+                "max_items": 1,
+            }
+            filtered = [
+                {"source": "Mock Web", "title_original": "Item 1", "url": "https://example.test/1", "date": "2020-01-06"},
+                {"source": "Mock Web", "title_original": "Item 2", "url": "https://example.test/2", "date": "2020-01-07"},
+                {"source": "Mock Web", "title_original": "Item 3", "url": "https://example.test/3", "date": "2020-01-08"},
+            ]
+            meta = {
+                "candidates": 3,
+                "candidates_discovered": 3,
+                "candidates_scanned": 3,
+                "list_items_with_date": 3,
+                "dated_candidates": 3,
+                "target_period_reached": True,
+                "stopped_reason": "passed_target_start",
+            }
+
+            def capture_relevance(items):
+                captured.extend(items)
+                return items, items
+
+            captured = []
+            with patch.object(collector, "load_sources", return_value=[source]), patch.object(
+                collector, "LOG_DIR", log_dir
+            ), patch.object(collector, "RAW_DIR", raw_dir), patch.object(
+                collector, "LEGACY_DATA_FILE", legacy
+            ), patch.object(
+                collector, "collect_web", return_value=(filtered, filtered, meta)
+            ), patch.object(
+                collector, "apply_relevance", side_effect=capture_relevance
+            ), patch.object(
+                collector, "dedupe_news", side_effect=lambda items: items
+            ), patch.object(
+                collector, "cluster_same_event_items", side_effect=lambda items: (items, [])
+            ), patch.object(
+                collector, "apply_competitor_mapping", side_effect=lambda items: items
+            ):
+                result = collector.collect_week(
+                    start_arg="2020-01-06",
+                    translate=False,
+                    output_dir=root / "output",
+                )
+
+            payload = json.loads(Path(result["weekly_data_path"]).read_text(encoding="utf-8"))
+            self.assertEqual([item["title_original"] for item in captured], ["Item 1"])
+            self.assertEqual(payload["item_count"], 1)
+            status = json.loads(Path(result["source_status_path"]).read_text(encoding="utf-8"))[0]
+            self.assertEqual(status["candidates_scanned"], 3)
+            self.assertEqual(status["within_period"], 3)
+            self.assertEqual(status["final_items"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

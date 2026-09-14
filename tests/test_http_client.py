@@ -314,6 +314,183 @@ class HttpClientRetryTests(unittest.TestCase):
         self.assertEqual(meta["last_status_code"], 200)
         self.assertEqual(meta["error"], "")
 
+    def test_generic_web_max_scan_limit_does_not_claim_target_boundary(self):
+        source = {
+            "name": "Mock Web",
+            "url": "https://example.test/news",
+            "method": "web",
+            "max_pages": 1,
+            "max_scan_candidates": 1,
+            "max_items": 5,
+        }
+        list_html = """
+        <html><body>
+          <article>
+            <a href="/news/2026/market-infrastructure-rule-update">
+              Market infrastructure rule update 2026-09-11
+            </a>
+          </article>
+          <article>
+            <a href="/news/2026/older-market-infrastructure-rule-update">
+              Older market infrastructure rule update 2026-09-06
+            </a>
+          </article>
+        </body></html>
+        """
+        detail_html = """
+        <html>
+          <head><meta name="description" content="Relevant market infrastructure news."></head>
+          <body><h1>Market infrastructure rule update</h1><time>2026-09-11</time></body>
+        </html>
+        """
+        with patch.object(
+            http_client.SESSION,
+            "request",
+            side_effect=[FakeResponse(200, text=list_html), FakeResponse(200, text=detail_html)],
+        ):
+            raw, filtered, meta = collect_web(
+                source,
+                date(2026, 9, 7),
+                date(2026, 9, 13),
+                logging.getLogger("test"),
+            )
+
+        self.assertEqual(meta["candidates_discovered"], 2)
+        self.assertEqual(meta["candidates_scanned"], 1)
+        self.assertEqual(meta["stopped_reason"], "max_scan_candidates")
+        self.assertFalse(meta["target_period_reached"])
+        self.assertEqual(len(filtered), 1)
+
+    def test_shfe_web_adapter_reaches_historical_target_week(self):
+        source = {
+            "id": "SRC-076",
+            "name": "上海期货交易所",
+            "url": "https://www.shfe.com.cn",
+            "crawl_url": "https://www.shfe.com.cn/publicnotice/notice/",
+            "method": "web",
+            "category": "Competitor",
+            "subcategory": "交易与清算",
+            "brand": "Eurex",
+            "max_pages": 1,
+            "max_items": 5,
+        }
+        list_html = """
+        <html><body>
+          <div class="table_item_info">
+            <div class="info_item_title">
+              <a href="./202609/t20260911_833384.html" title="关于做好市场风险控制工作的通知">
+                关于做好市场风险控制工作的通知
+              </a>
+            </div>
+            <div class="info_item_date">2026-09-11</div>
+          </div>
+          <div class="table_item_info">
+            <div class="info_item_title">
+              <a href="./202609/t20260906_833100.html" title="早于目标周的公告">
+                早于目标周的公告
+              </a>
+            </div>
+            <div class="info_item_date">2026-09-06</div>
+          </div>
+          <a href="/publicnotice/notice/">公告通知</a>
+        </body></html>
+        """
+        detail_html = """
+        <html><body>
+          <h1>关于做好市场风险控制工作的通知</h1>
+          <div class="content">发布日期：2026-09-11</div>
+          <div class="TRS_Editor">请各有关单位关注市场动态，采取有力措施。</div>
+        </body></html>
+        """
+        with patch.object(
+            http_client.SESSION,
+            "request",
+            side_effect=[FakeResponse(200, text=list_html), FakeResponse(200, text=detail_html)],
+        ):
+            raw, filtered, meta = collect_web(
+                source,
+                date(2026, 9, 7),
+                date(2026, 9, 13),
+                logging.getLogger("test"),
+            )
+
+        self.assertEqual(meta["error"], "")
+        self.assertEqual(meta["candidates_discovered"], 2)
+        self.assertEqual(meta["candidates_scanned"], 2)
+        self.assertEqual(meta["list_items_with_date"], 2)
+        self.assertEqual(meta["dated_candidates"], 2)
+        self.assertEqual(meta["newest_date_seen"], "2026-09-11")
+        self.assertEqual(meta["oldest_date_seen"], "2026-09-06")
+        self.assertTrue(meta["target_period_reached"])
+        self.assertEqual(meta["stopped_reason"], "passed_target_start")
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["date"], "2026-09-11")
+
+    def test_shfe_max_items_does_not_hide_target_week_candidates(self):
+        source = {
+            "id": "SRC-076",
+            "name": "上海期货交易所",
+            "url": "https://www.shfe.com.cn",
+            "crawl_url": "https://www.shfe.com.cn/publicnotice/notice/",
+            "method": "web",
+            "category": "Competitor",
+            "subcategory": "交易与清算",
+            "brand": "Eurex",
+            "max_pages": 1,
+            "max_items": 1,
+        }
+        list_html = """
+        <html><body>
+          <div class="table_item_info">
+            <div class="info_item_title">
+              <a href="./202609/t20260911_833384.html" title="9月11日公告">9月11日公告</a>
+            </div>
+            <div class="info_item_date">2026-09-11</div>
+          </div>
+          <div class="table_item_info">
+            <div class="info_item_title">
+              <a href="./202609/t20260908_833288.html" title="9月8日公告">9月8日公告</a>
+            </div>
+            <div class="info_item_date">2026-09-08</div>
+          </div>
+          <div class="table_item_info">
+            <div class="info_item_title">
+              <a href="./202609/t20260906_833100.html" title="早于目标周的公告">早于目标周的公告</a>
+            </div>
+            <div class="info_item_date">2026-09-06</div>
+          </div>
+        </body></html>
+        """
+        detail_html = """
+        <html><body>
+          <h1>SHFE 公告</h1>
+          <div class="content">发布日期：2026-09-11</div>
+          <div class="TRS_Editor">市场公告正文。</div>
+        </body></html>
+        """
+        with patch.object(
+            http_client.SESSION,
+            "request",
+            side_effect=[
+                FakeResponse(200, text=list_html),
+                FakeResponse(200, text=detail_html),
+                FakeResponse(200, text=detail_html),
+            ],
+        ):
+            raw, filtered, meta = collect_web(
+                source,
+                date(2026, 9, 7),
+                date(2026, 9, 13),
+                logging.getLogger("test"),
+            )
+
+        self.assertEqual(meta["error"], "")
+        self.assertEqual(meta["candidates_scanned"], 3)
+        self.assertEqual(meta["detail_pages_requested"], 2)
+        self.assertEqual(meta["oldest_date_seen"], "2026-09-06")
+        self.assertEqual(meta["stopped_reason"], "passed_target_start")
+        self.assertEqual(len(filtered), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ from .hkex import parse_hkex_list
 from .jpx import parse_jpx_list
 from .osc import parse_osc_list
 from .sfc import parse_sfc_list
+from .shfe import parse_shfe_notice_list
 from .expansion import (
     parse_adgm_list,
     parse_360t_press_list,
@@ -47,6 +48,7 @@ ADAPTERS = {
     "SRC-050": parse_korea_fsc_list,
     "SRC-052": parse_adgm_list,
     "SRC-070": parse_six_list,
+    "SRC-076": parse_shfe_notice_list,
     "SRC-087": parse_b3_list,
     "SRC-123": parse_naic_list,
     "SRC-025": parse_bafin_press_list,

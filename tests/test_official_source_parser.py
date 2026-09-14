@@ -8,6 +8,7 @@ from crawler.official_source_parser import (
     parse_sp_dji_archive_entry,
     sp_dji_source_filter,
 )
+from crawler.adapters.shfe import parse_shfe_notice_list
 
 
 class OfficialSourceParserRegressionTests(unittest.TestCase):
@@ -96,6 +97,39 @@ class OfficialSourceParserRegressionTests(unittest.TestCase):
             kept, reason = sp_dji_source_filter(title)
             self.assertTrue(kept, title)
             self.assertEqual(reason, "kept")
+
+    def test_shfe_notice_list_extracts_canonical_article_candidate(self):
+        html = """
+        <div class="table_item_info">
+          <div class="info_item_title">
+            <a href="./202609/t20260911_833384.html" title="关于做好市场风险控制工作的通知">
+              关于做好市场风险控制工作的通知
+            </a>
+          </div>
+          <div class="info_item_date">2026-09-11</div>
+        </div>
+        <div class="table_item_info">
+          <div class="info_item_title">
+            <a href="/products/futures/index_f/">指数</a>
+          </div>
+          <div class="info_item_date">2026-09-11</div>
+        </div>
+        <a href="/publicnotice/notice/">公告通知</a>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        items = parse_shfe_notice_list(
+            soup,
+            "https://www.shfe.com.cn/publicnotice/notice/",
+            {"id": "SRC-076", "name": "上海期货交易所"},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "关于做好市场风险控制工作的通知")
+        self.assertEqual(items[0]["date"], "2026-09-11")
+        self.assertEqual(
+            items[0]["url"],
+            "https://www.shfe.com.cn/publicnotice/notice/202609/t20260911_833384.html",
+        )
 
 
 if __name__ == "__main__":

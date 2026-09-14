@@ -327,6 +327,7 @@ def collect_web(source, week_start, week_end, logger):
     sample_candidates = []
     newest_date_seen = None
     oldest_date_seen = None
+    entered_target_period = False
     target_period_reached = False
     stopped_reason = ""
     network_meta = {}
@@ -340,7 +341,6 @@ def collect_web(source, week_start, week_end, logger):
         seen_candidates = set()
         max_pages = int(source.get("max_pages") or 3)
         max_scan_candidates = int(source.get("max_scan_candidates") or max(int(source.get("max_candidates") or 10) * 8, 40))
-        max_items = int(source.get("max_items") or 10)
         adapter = get_adapter(source)
 
         while current_url and pages_scanned < max_pages and candidates_scanned < max_scan_candidates:
@@ -405,8 +405,9 @@ def collect_web(source, week_start, week_end, logger):
                     oldest_date_seen = min(oldest_date_seen, parsed) if oldest_date_seen else parsed
                     drop_reason = date_drop_reason(parsed, week_start, week_end)
                     if parsed <= week_end:
-                        target_period_reached = True
+                        entered_target_period = True
                     if parsed < week_start:
+                        target_period_reached = True
                         page_has_before_target = True
 
                     if drop_reason != "within_period":
@@ -436,8 +437,9 @@ def collect_web(source, week_start, week_end, logger):
                     newest_date_seen = max(newest_date_seen, article_date) if newest_date_seen else article_date
                     oldest_date_seen = min(oldest_date_seen, article_date) if oldest_date_seen else article_date
                     if article_date <= week_end:
-                        target_period_reached = True
+                        entered_target_period = True
                     if article_date < week_start:
+                        target_period_reached = True
                         page_has_before_target = True
                 elif not article_date:
                     date_parse_failed += 1
@@ -445,22 +447,21 @@ def collect_web(source, week_start, week_end, logger):
                 if len(sample_candidates) < 3:
                     sample_candidates.append(diagnostic)
                 if filtered_item:
-                    target_period_reached = True
+                    entered_target_period = True
                     results.append(filtered_item)
-                if len(results) >= max_items:
-                    stopped_reason = "max_items"
-                    break
 
-            if stopped_reason in ("max_items", "max_scan_candidates"):
+            if stopped_reason == "max_scan_candidates":
                 break
             if page_has_before_target:
                 stopped_reason = "passed_target_start"
                 break
             next_url = find_next_page(soup, current_url, seen_pages)
             if not next_url:
+                if entered_target_period:
+                    target_period_reached = True
                 stopped_reason = (
                     "no_next_page_after_reaching_target_period"
-                    if target_period_reached
+                    if entered_target_period
                     else "no_next_page_before_target_period"
                 )
                 break
