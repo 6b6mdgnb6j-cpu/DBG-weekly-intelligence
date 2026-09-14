@@ -114,6 +114,19 @@ HIGH_VALUE_BUSINESS_TERMS = [
 ]
 
 
+CORPORATE_BOILERPLATE_MARKERS = [
+    "forward-looking statements",
+    "cautionary note regarding forward-looking statements",
+    "media contacts",
+    "investor relations",
+]
+
+
+CORPORATE_BOILERPLATE_HEADING_RE = re.compile(
+    r"(?:^|[\n\r.?!]\s+)(?:About|ABOUT)\s+[A-Z][A-Za-z0-9&.,'’ -]{2,100}"
+)
+
+
 ACQUISITION_EVENT_TERMS = [
     "acquires",
     "acquired",
@@ -324,6 +337,64 @@ FINANCIAL_MARKET_OBJECT_TERMS = [
 ]
 
 
+MARKET_INFRASTRUCTURE_TERMS = [
+    "central counterparty",
+    "central counterparties",
+    "ccp",
+    "ccps",
+    "clearing house",
+    "clearing houses",
+    "clearinghouse",
+    "clearinghouses",
+    "clearing",
+    "financial market infrastructure",
+    "financial market infrastructures",
+    "fmi",
+    "fmis",
+    "market infrastructure",
+]
+
+
+CCP_RESOLUTION_TERMS = [
+    "central counterparty resolution",
+    "central counterparties resolution",
+    "central counterparties’ resolution",
+    "central counterparties' resolution",
+    "ccp resolution",
+    "ccps resolution",
+    "clearing house resolution",
+    "clearinghouse resolution",
+]
+
+
+FINANCIAL_MARKET_CONNECTIVITY_TERMS = [
+    "financial market connectivity",
+    "capital market connectivity",
+    "market connectivity",
+    "cross-market connectivity",
+    "cross market connectivity",
+]
+
+
+MARKET_CONNECTIVITY_CONTEXT_TERMS = [
+    "exchange",
+    "exchanges",
+    "securities",
+    "capital market",
+    "capital markets",
+    "financial market",
+    "financial markets",
+    "market infrastructure",
+    "trading",
+    "clearing",
+    "settlement",
+    "hkex",
+    "nasdaq",
+    "dfsa",
+    "hkma",
+]
+
+
 GENERIC_ACTION_TERMS = [
     "consultation", "public consultation", "proposed rule",
     "proposed regulation", "proposed regulations", "final rule",
@@ -343,6 +414,9 @@ LOW_VALUE_EVENT_TERMS = [
     "award nomination", "awards nomination", "conference participation",
     "conference agenda", "webinar", "podcast", "podcasts", "diversity speech",
     "diversity at the european central bank",
+    "to present at", "will present at", "present at the",
+    "fireside chat", "will speak at", "to attend investor conference",
+    "management to attend", "executives will speak",
 ]
 
 
@@ -449,6 +523,20 @@ def contains_all_phrases(text, terms):
     return all(term in text for term in terms)
 
 
+def strip_corporate_boilerplate(text):
+    raw = text or ""
+    heading_match = CORPORATE_BOILERPLATE_HEADING_RE.search(raw)
+    cut_at = heading_match.start() if heading_match and heading_match.start() > 0 else None
+    lowered = raw.lower()
+    for marker in CORPORATE_BOILERPLATE_MARKERS:
+        index = lowered.find(marker)
+        if index > 0 and (cut_at is None or index < cut_at):
+            cut_at = index
+    if cut_at is None:
+        return raw
+    return raw[:cut_at]
+
+
 def contains_individual_enforcement_term(text, term):
     if term == "fine":
         return re.search(r"(?<![\w-])fine(?![\w-])", text) is not None
@@ -520,6 +608,20 @@ def build_relevance_text(item):
         item.get("title_cn"),
         item.get("title_en"),
         item.get("summary"),
+        item.get("relevance_context"),
+        item.get("source"),
+        item.get("subcategory"),
+        item.get("brand"),
+    )
+
+
+def build_scoring_text(item):
+    summary = strip_corporate_boilerplate(item.get("summary"))
+    return normalize_text(
+        item.get("title_original"),
+        item.get("title_cn"),
+        item.get("title_en"),
+        summary,
         item.get("relevance_context"),
         item.get("source"),
         item.get("subcategory"),
@@ -724,6 +826,34 @@ def is_consumer_scam_alert_without_material_impact(text):
     return contains_any_phrase(text, CONSUMER_SCAM_CONTEXT_TERMS)
 
 
+def has_ccp_resolution_signal(text):
+    if contains_any_phrase(text, CCP_RESOLUTION_TERMS):
+        return True
+    return "resolution" in text and contains_any_phrase(text, MARKET_INFRASTRUCTURE_TERMS)
+
+
+def has_financial_market_connectivity_signal(text):
+    if "financial market connectivity" in text or "capital market connectivity" in text:
+        return True
+    if not contains_any_phrase(text, FINANCIAL_MARKET_CONNECTIVITY_TERMS):
+        return False
+    if not contains_any_phrase(text, MARKET_CONNECTIVITY_CONTEXT_TERMS):
+        return False
+    return contains_any_phrase(
+        text,
+        (
+            "strategic working group",
+            "form strategic working group",
+            "forms strategic working group",
+            "cooperation",
+            "connect",
+            "strengthen",
+            "cross-border",
+            "cross border",
+        ),
+    )
+
+
 # Scoring
 
 def score_item(item):
@@ -734,7 +864,7 @@ def score_item(item):
     elif category == "competitor":
         bucket = "competitor"
 
-    text = build_relevance_text(item)
+    text = build_scoring_text(item)
 
     score = 0
     reasons = []
@@ -805,6 +935,14 @@ def score_item(item):
     if is_lch_ois_clearing_signal(item, text):
         score += 8
         reasons.append("source_signal:lch_ois_clearing")
+
+    if has_ccp_resolution_signal(text):
+        score += 8
+        reasons.append("hard_signal:ccp_resolution")
+
+    if has_financial_market_connectivity_signal(text):
+        score += 6
+        reasons.append("hard_signal:financial_market_connectivity")
 
     if is_regulatory_final_rule_signal(item, text):
         score += 8

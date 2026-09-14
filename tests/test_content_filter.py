@@ -334,6 +334,107 @@ class ContentFilterRegressionTests(unittest.TestCase):
                 else:
                     self.assertLess(score, MIN_SCORE)
 
+    def test_cboe_conference_boilerplate_does_not_create_relevance(self):
+        item = make_item(
+            "Cboe Global Markets to Present at the Barclays Global Financial Services Conference on September 16",
+            (
+                "Cboe executives will present at the Barclays Global Financial Services Conference. "
+                "About Cboe Global Markets Cboe is a leading derivatives exchange. "
+                "Since launching the world's first listed options exchange in 1973, "
+                "Cboe has pursued a global strategy across equity and index derivatives."
+            ),
+            source="Cboe",
+            category="Competitor",
+            subcategory="Trading / Clearing",
+            brand="Cboe",
+        )
+        score, reason = relevance(item)
+        self.assertLess(score, MIN_SCORE, reason)
+        self.assertIn("downrank:conference", reason)
+
+    def test_real_product_launch_stays_relevant(self):
+        item = make_item(
+            "Cboe launches new index options product",
+            "The exchange launched new index options to expand listed derivatives trading.",
+            source="Cboe",
+            category="Competitor",
+            subcategory="Trading / Clearing",
+            brand="Cboe",
+        )
+        score, reason = relevance(item)
+        self.assertGreaterEqual(score, MIN_SCORE, reason)
+        self.assertIn("hard_signal:launches", reason)
+
+    def test_ccp_resolution_meeting_survives_meeting_downrank(self):
+        item = make_item(
+            "Joint Readout of Principals’ Meeting of U.S. and UK Authorities Regarding Central Counterparty Resolution",
+            "Authorities discussed central counterparty resolution and clearing-house resilience.",
+            source="证券交易委员会",
+            category="Macro",
+            subcategory="美国",
+        )
+        score, reason = relevance(item)
+        self.assertGreaterEqual(score, MIN_SCORE, reason)
+        self.assertIn("hard_signal:ccp_resolution", reason)
+        self.assertIn("downrank:meeting", reason)
+
+    def test_ordinary_conference_agenda_remains_rejected(self):
+        item = make_item(
+            "CFTC Chairman Selig and Kansas State University Announce Agenda for October 22-23 AgCon Conference in Overland Park",
+            "The announcement lists speakers and agenda items for the conference.",
+            source="商品期货交易委员会",
+            category="Macro",
+            subcategory="美国",
+        )
+        score, reason = relevance(item)
+        self.assertLess(score, MIN_SCORE, reason)
+        self.assertIn("downrank:agenda", reason)
+
+    def test_financial_market_connectivity_working_group_is_relevant(self):
+        item = make_item(
+            "HKEX, HKMA, DFSA and Nasdaq Dubai Form Strategic Working Group to Strengthen Hong Kong-Dubai Financial Market Connectivity",
+            "The group aims to strengthen cross-market connectivity between financial markets.",
+            source="香港交易所",
+            category="Competitor",
+            subcategory="Trading / Clearing",
+            brand="HKEX",
+        )
+        score, reason = relevance(item)
+        self.assertGreaterEqual(score, MIN_SCORE, reason)
+        self.assertIn("hard_signal:financial_market_connectivity", reason)
+
+    def test_generic_working_group_without_market_connectivity_remains_rejected(self):
+        item = make_item(
+            "Agency forms strategic working group for internal communications",
+            "The working group will coordinate routine internal communications.",
+            source="测试源",
+            category="Macro",
+            subcategory="美国",
+        )
+        score, reason = relevance(item)
+        self.assertLess(score, MIN_SCORE, reason)
+        self.assertNotIn("hard_signal:financial_market_connectivity", reason)
+
+    def test_routine_executive_event_wording_remains_rejected(self):
+        cases = [
+            "CEO participates in a fireside chat at Barclays Global Financial Services Conference",
+            "Executives will speak at Barclays Global Financial Services Conference",
+            "Company management to attend investor conference",
+        ]
+        for title in cases:
+            with self.subTest(title=title):
+                item = make_item(
+                    title,
+                    "Routine executive event announcement.",
+                    source="Cboe",
+                    category="Competitor",
+                    subcategory="Trading / Clearing",
+                    brand="Cboe",
+                )
+                score, reason = relevance(item)
+                self.assertLess(score, MIN_SCORE, reason)
+                self.assertIn("downrank:low_value_event", reason)
+
 
 if __name__ == "__main__":
     unittest.main()
