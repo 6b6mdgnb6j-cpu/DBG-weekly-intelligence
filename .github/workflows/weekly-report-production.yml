@@ -46,16 +46,15 @@ jobs:
           python3 -m pip install -r requirements-crawler.txt
           python3 -m pip install -r requirements-translation.txt
 
-      - name: Resolve reporting week
-        id: week
+      - name: Prepare manual week input
+        id: requested_week
         env:
-          RAW_WEEK_START: ${{ github.event.inputs.week_start || '' }}
+          RAW_WEEK_START: ${{ github.event_name == 'workflow_dispatch' && inputs.week_start || '' }}
         run: |
           python3 - <<'PY'
           import os
           import re
           from datetime import datetime, timedelta
-          from zoneinfo import ZoneInfo
 
           raw = os.environ.get("RAW_WEEK_START", "").strip()
           if raw:
@@ -67,20 +66,24 @@ jobs:
                   raise SystemExit(f"week_start is not a valid date: {exc}") from exc
               if start.weekday() != 0:
                   raise SystemExit("week_start must be Monday")
+              end = start + timedelta(days=6)
+              compact = start.strftime("%Y%m%d")
+              output_dir = f"output/production/{compact}"
           else:
-              today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
-              this_monday = today - timedelta(days=today.weekday())
-              start = this_monday - timedelta(days=7)
-
-          end = start + timedelta(days=6)
-          compact = start.strftime("%Y%m%d")
+              start = ""
+              end = ""
+              compact = ""
+              output_dir = "output"
           output_path = os.environ["GITHUB_OUTPUT"]
           with open(output_path, "a", encoding="utf-8") as f:
-              f.write(f"week_start={start.isoformat()}\n")
-              f.write(f"week_end={end.isoformat()}\n")
+              f.write(f"week_start={start.isoformat() if start else ''}\n")
+              f.write(f"week_end={end.isoformat() if end else ''}\n")
               f.write(f"compact_week_start={compact}\n")
-              f.write(f"output_dir=output/production/{compact}\n")
-          print(f"Resolved week: {start.isoformat()} to {end.isoformat()}")
+              f.write(f"output_dir={output_dir}\n")
+          if start:
+              print(f"Manual week requested: {start.isoformat()} to {end.isoformat()}")
+          else:
+              print("No manual week requested; run_weekly.py will resolve the previous natural week.")
           PY
 
       - name: Run permanent tests
@@ -121,11 +124,54 @@ jobs:
       - name: Generate bilingual weekly report and QA
         id: weekly
         if: steps.translation_preflight.outcome == 'success' && steps.translation_preflight.outputs.exit_code == '0'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_WEEK_START: ${{ steps.requested_week.outputs.week_start }}
+          MANUAL_OUTPUT_DIR: ${{ steps.requested_week.outputs.output_dir }}
         run: |
           set +e
-          python3 run_weekly.py --start "${{ steps.week.outputs.week_start }}" --output-dir "${{ steps.week.outputs.output_dir }}" --require-translation
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$MANUAL_WEEK_START" ]; then
+            python3 run_weekly.py --start "$MANUAL_WEEK_START" --output-dir "$MANUAL_OUTPUT_DIR" --require-translation
+          else
+            python3 run_weekly.py --require-translation
+          fi
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" = "0" ]; then
+            python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          search_roots = []
+          manual_dir = os.environ.get("MANUAL_OUTPUT_DIR", "").strip()
+          if manual_dir:
+              search_roots.append(Path(manual_dir))
+          search_roots.append(Path("output"))
+
+          weekly_files = []
+          for root in search_roots:
+              if root.exists():
+                  weekly_files.extend(root.glob("weekly_data_*.json"))
+          if not weekly_files:
+              raise SystemExit("No weekly_data artifact found after generation")
+
+          weekly_path = max(weekly_files, key=lambda path: path.stat().st_mtime)
+          payload = json.loads(weekly_path.read_text(encoding="utf-8"))
+          week_start = str(payload["week_start"])
+          week_end = str(payload["week_end"])
+          compact = week_start.replace("-", "")
+          output_dir = str(weekly_path.parent)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"week_start={week_start}\n")
+              f.write(f"week_end={week_end}\n")
+              f.write(f"compact_week_start={compact}\n")
+              f.write(f"output_dir={output_dir}\n")
+          print(f"Generated week: {week_start} to {week_end}")
+          print(f"Output directory: {output_dir}")
+          PY
+          fi
           exit 0
 
       - name: Validate bilingual artifacts before manifest
@@ -134,8 +180,8 @@ jobs:
         run: |
           set +e
           python3 automation_pipeline.py validate-bilingual \
-            --output-dir "${{ steps.week.outputs.output_dir }}" \
-            --week-start "${{ steps.week.outputs.week_start }}"
+            --output-dir "${{ steps.weekly.outputs.output_dir }}" \
+            --week-start "${{ steps.weekly.outputs.week_start }}"
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
@@ -146,8 +192,8 @@ jobs:
         run: |
           set +e
           python3 automation_pipeline.py manifest \
-            --output-dir "${{ steps.week.outputs.output_dir }}" \
-            --week-start "${{ steps.week.outputs.week_start }}" \
+            --output-dir "${{ steps.weekly.outputs.output_dir }}" \
+            --week-start "${{ steps.weekly.outputs.week_start }}" \
             --generation-sha "${{ github.sha }}" \
             --generation-run-id "${{ github.run_id }}"
           code=$?
@@ -160,8 +206,8 @@ jobs:
         run: |
           set +e
           python3 automation_pipeline.py validate-bundle \
-            --bundle-dir "${{ steps.week.outputs.output_dir }}" \
-            --week-start "${{ steps.week.outputs.week_start }}" \
+            --bundle-dir "${{ steps.weekly.outputs.output_dir }}" \
+            --week-start "${{ steps.weekly.outputs.week_start }}" \
             --source-run-id "${{ github.run_id }}" \
             --generation-sha "${{ github.sha }}" \
             --current-main-sha "${{ github.sha }}" \
@@ -188,36 +234,36 @@ jobs:
         if: steps.bundle_validation.outcome == 'success' && steps.bundle_validation.outputs.exit_code == '0'
         uses: actions/upload-artifact@v7
         with:
-          name: weekly-report-review-${{ steps.week.outputs.week_start }}
+          name: weekly-report-review-${{ steps.weekly.outputs.week_start }}
           retention-days: 14
           if-no-files-found: warn
           path: |
-            ${{ steps.week.outputs.output_dir }}/weekly_data_${{ steps.week.outputs.compact_week_start }}.json
-            ${{ steps.week.outputs.output_dir }}/source_status_${{ steps.week.outputs.compact_week_start }}.json
-            ${{ steps.week.outputs.output_dir }}/weekly_report_${{ steps.week.outputs.compact_week_start }}.html
-            ${{ steps.week.outputs.output_dir }}/qa_report_${{ steps.week.outputs.compact_week_start }}.json
-            ${{ steps.week.outputs.output_dir }}/qa_report_${{ steps.week.outputs.compact_week_start }}.md
-            ${{ steps.week.outputs.output_dir }}/review_manifest_${{ steps.week.outputs.compact_week_start }}.json
+            ${{ steps.weekly.outputs.output_dir }}/weekly_data_${{ steps.weekly.outputs.compact_week_start }}.json
+            ${{ steps.weekly.outputs.output_dir }}/source_status_${{ steps.weekly.outputs.compact_week_start }}.json
+            ${{ steps.weekly.outputs.output_dir }}/weekly_report_${{ steps.weekly.outputs.compact_week_start }}.html
+            ${{ steps.weekly.outputs.output_dir }}/qa_report_${{ steps.weekly.outputs.compact_week_start }}.json
+            ${{ steps.weekly.outputs.output_dir }}/qa_report_${{ steps.weekly.outputs.compact_week_start }}.md
+            ${{ steps.weekly.outputs.output_dir }}/review_manifest_${{ steps.weekly.outputs.compact_week_start }}.json
 
       - name: Upload debug artifacts
         if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.translation_preflight.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.bilingual_validation.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
         uses: actions/upload-artifact@v7
         with:
-          name: weekly-report-debug-${{ steps.week.outputs.week_start }}
+          name: weekly-report-debug-${{ steps.weekly.outputs.week_start }}
           retention-days: 7
           if-no-files-found: warn
           path: |
-            raw/**/*${{ steps.week.outputs.compact_week_start }}*
-            logs/**/*${{ steps.week.outputs.compact_week_start }}*
-            ${{ steps.week.outputs.output_dir }}/*${{ steps.week.outputs.compact_week_start }}*
+            raw/**/*${{ steps.weekly.outputs.compact_week_start }}*
+            logs/**/*${{ steps.weekly.outputs.compact_week_start }}*
+            ${{ steps.weekly.outputs.output_dir }}/*${{ steps.weekly.outputs.compact_week_start }}*
 
       - name: Write job summary
         if: always()
         env:
-          WEEK_START: ${{ steps.week.outputs.week_start }}
-          WEEK_END: ${{ steps.week.outputs.week_end }}
-          COMPACT_WEEK_START: ${{ steps.week.outputs.compact_week_start }}
-          PROD_OUTPUT_DIR: ${{ steps.week.outputs.output_dir }}
+          WEEK_START: ${{ steps.weekly.outputs.week_start }}
+          WEEK_END: ${{ steps.weekly.outputs.week_end }}
+          COMPACT_WEEK_START: ${{ steps.weekly.outputs.compact_week_start }}
+          PROD_OUTPUT_DIR: ${{ steps.weekly.outputs.output_dir }}
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
           COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
           PREFLIGHT_EXIT_CODE: ${{ steps.translation_preflight.outputs.exit_code }}

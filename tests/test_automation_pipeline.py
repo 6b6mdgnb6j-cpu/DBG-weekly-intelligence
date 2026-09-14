@@ -400,6 +400,24 @@ class AutomationPipelineContractTests(unittest.TestCase):
             with self.subTest(gate=gate):
                 self.assertIn(gate, workflow)
 
+    def test_production_workflow_scheduled_generation_never_publishes(self):
+        workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("schedule:", workflow)
+        self.assertIn("cron: '0 0 * * 1'", workflow)
+        self.assertIn('github.event_name == \'workflow_dispatch\' && inputs.week_start || \'\'', workflow)
+        self.assertIn('python3 run_weekly.py --start "$MANUAL_WEEK_START"', workflow)
+        self.assertIn("python3 run_weekly.py --require-translation", workflow)
+        self.assertIn("No manual week requested; run_weekly.py will resolve the previous natural week.", workflow)
+        self.assertNotIn("ZoneInfo", workflow)
+        self.assertNotIn("this_monday", workflow)
+        self.assertNotIn("publish_weekly.py", workflow)
+        self.assertNotIn("git add", workflow)
+        self.assertNotIn("git commit", workflow)
+        self.assertNotIn("git push", workflow)
+        self.assertIn("git diff --exit-code -- published/", workflow)
+
     def test_review_upload_requires_bundle_validation_success_and_exit_zero(self):
         workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
         self.assertIn(
