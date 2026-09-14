@@ -95,6 +95,20 @@ def write_exact_archive_state(archive, payload=None):
     archive.write_bytes(publish_weekly.serialize_published_payload(published))
 
 
+def published_bytes(payload=None):
+    published = publish_weekly.build_published_payload(payload or weekly_payload())
+    return publish_weekly.serialize_published_payload(published)
+
+
+def write_exact_published_state(archive, latest, payload=None):
+    data = published_bytes(payload)
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    archive.write_bytes(data)
+    latest.write_bytes(data)
+    return data
+
+
 def temp_publish_files(published_dir):
     return list(Path(published_dir).glob("**/*.tmp"))
 
@@ -469,6 +483,188 @@ class PublishWeeklyGuardTests(unittest.TestCase):
                 publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
 
             self.assertIn("archive", str(ctx.exception))
+
+    def test_same_week_differs_without_replace_flag_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            incoming = weekly_payload(item_count=2)
+            incoming["items"] = incoming["items"] + [{"title_original": "Second item", "date": "2020-01-02"}]
+            weekly = write_weekly(tmp, incoming)
+            qa = write_qa(tmp, weekly, "PASS", summary={"final_items": 2, "highlights": 1})
+            published_dir, archive, latest = published_paths(tmp)
+            old_data = write_exact_published_state(archive, latest, weekly_payload(item_count=1))
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(weekly, qa_report_path=qa, published_dir=published_dir)
+
+            self.assertIn("differs from artifact", str(ctx.exception))
+            self.assertEqual(archive.read_bytes(), old_data)
+            self.assertEqual(latest.read_bytes(), old_data)
+
+    def test_same_week_differs_with_replace_flag_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            incoming = weekly_payload(item_count=2)
+            incoming["items"] = incoming["items"] + [{"title_original": "Second item", "date": "2020-01-02"}]
+            weekly = write_weekly(tmp, incoming)
+            qa = write_qa(tmp, weekly, "PASS", summary={"final_items": 2, "highlights": 1})
+            published_dir, archive, latest = published_paths(tmp)
+            write_exact_published_state(archive, latest, weekly_payload(item_count=1))
+            expected = published_bytes(incoming)
+
+            _, _, _, _, wrote = publish_weekly.publish_weekly(
+                weekly,
+                qa_report_path=qa,
+                published_dir=published_dir,
+                replace_same_week=True,
+            )
+
+            self.assertTrue(wrote)
+            self.assertEqual(archive.read_bytes(), expected)
+            self.assertEqual(latest.read_bytes(), expected)
+
+    def test_replace_same_week_blocks_when_archive_and_latest_disagree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            incoming = weekly_payload(item_count=2)
+            incoming["items"] = incoming["items"] + [{"title_original": "Second item", "date": "2020-01-02"}]
+            weekly = write_weekly(tmp, incoming)
+            qa = write_qa(tmp, weekly, "PASS", summary={"final_items": 2, "highlights": 1})
+            published_dir, archive, latest = published_paths(tmp)
+            old_archive = published_bytes(weekly_payload(item_count=1))
+            old_latest = published_bytes(weekly_payload(item_count=3))
+            archive.parent.mkdir(parents=True, exist_ok=True)
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            archive.write_bytes(old_archive)
+            latest.write_bytes(old_latest)
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    replace_same_week=True,
+                )
+
+            self.assertIn("archive and latest disagree", str(ctx.exception))
+            self.assertEqual(archive.read_bytes(), old_archive)
+            self.assertEqual(latest.read_bytes(), old_latest)
+
+    def test_replace_same_week_blocks_when_latest_is_newer_week(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            incoming = weekly_payload(item_count=2)
+            incoming["items"] = incoming["items"] + [{"title_original": "Second item", "date": "2020-01-02"}]
+            weekly = write_weekly(tmp, incoming)
+            qa = write_qa(tmp, weekly, "PASS", summary={"final_items": 2, "highlights": 1})
+            published_dir, archive, latest = published_paths(tmp)
+            old_archive = published_bytes(weekly_payload(item_count=1))
+            archive.parent.mkdir(parents=True, exist_ok=True)
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            archive.write_bytes(old_archive)
+            latest.write_bytes(
+                published_bytes(weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            )
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    replace_same_week=True,
+                )
+
+            self.assertIn("older than published latest", str(ctx.exception))
+            self.assertEqual(archive.read_bytes(), old_archive)
+
+    def test_replace_same_week_identical_artifact_noop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            existing = write_exact_published_state(archive, latest, weekly_payload())
+
+            _, _, _, _, wrote = publish_weekly.publish_weekly(
+                weekly,
+                qa_report_path=qa,
+                published_dir=published_dir,
+                replace_same_week=True,
+            )
+
+            self.assertFalse(wrote)
+            self.assertEqual(archive.read_bytes(), existing)
+            self.assertEqual(latest.read_bytes(), existing)
+
+    def test_replace_same_week_warning_without_approval_blocks_before_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            incoming = weekly_payload(item_count=2)
+            incoming["items"] = incoming["items"] + [{"title_original": "Second item", "date": "2020-01-02"}]
+            weekly = write_weekly(tmp, incoming)
+            qa = write_qa(tmp, weekly, "WARNING", summary={"final_items": 2, "highlights": 1})
+            published_dir, archive, latest = published_paths(tmp)
+            old_data = write_exact_published_state(archive, latest, weekly_payload(item_count=1))
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    replace_same_week=True,
+                )
+
+            self.assertEqual(ctx.exception.exit_code, 2)
+            self.assertEqual(archive.read_bytes(), old_data)
+            self.assertEqual(latest.read_bytes(), old_data)
+
+    def test_replace_same_week_fail_artifact_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            incoming = weekly_payload(item_count=2)
+            incoming["items"] = incoming["items"] + [{"title_original": "Second item", "date": "2020-01-02"}]
+            weekly = write_weekly(tmp, incoming)
+            qa = write_qa(tmp, weekly, "FAIL", summary={"final_items": 2, "highlights": 1})
+            published_dir, archive, latest = published_paths(tmp)
+            old_data = write_exact_published_state(archive, latest, weekly_payload(item_count=1))
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    replace_same_week=True,
+                    approve_warning=True,
+                )
+
+            self.assertEqual(ctx.exception.exit_code, 3)
+            self.assertEqual(archive.read_bytes(), old_data)
+            self.assertEqual(latest.read_bytes(), old_data)
+
+    def test_replace_same_week_modifies_only_target_archive_and_latest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            incoming = weekly_payload(item_count=2)
+            incoming["items"] = incoming["items"] + [{"title_original": "Second item", "date": "2020-01-02"}]
+            weekly = write_weekly(tmp, incoming)
+            qa = write_qa(tmp, weekly, "PASS", summary={"final_items": 2, "highlights": 1})
+            published_dir, archive, latest = published_paths(tmp)
+            write_exact_published_state(archive, latest, weekly_payload(item_count=1))
+            other_archive = Path(published_dir) / "archive" / "weekly_20191225.json"
+            other_archive.write_bytes(
+                published_bytes(weekly_payload(week_start="2019-12-25", week_end="2019-12-31"))
+            )
+            before = {
+                path.relative_to(published_dir): path.read_bytes()
+                for path in Path(published_dir).glob("**/*.json")
+            }
+
+            publish_weekly.publish_weekly(
+                weekly,
+                qa_report_path=qa,
+                published_dir=published_dir,
+                replace_same_week=True,
+            )
+            after = {
+                path.relative_to(published_dir): path.read_bytes()
+                for path in Path(published_dir).glob("**/*.json")
+            }
+            changed = {path for path, old in before.items() if after[path] != old}
+
+            self.assertEqual(changed, {Path("archive/weekly_20200101.json"), Path("latest.json")})
+            self.assertEqual(after[Path("archive/weekly_20191225.json")], before[Path("archive/weekly_20191225.json")])
 
     def test_existing_archive_and_latest_identical_noop(self):
         with tempfile.TemporaryDirectory() as tmp:

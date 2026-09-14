@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      replace_same_week:
+        description: Explicitly replace an already published report for the same week.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -161,16 +166,22 @@ jobs:
           APPROVE_WARNING: ${{ github.event.inputs.approve_warning }}
           WEEK_START: ${{ steps.inputs.outputs.week_start }}
           COMPACT_WEEK_START: ${{ steps.inputs.outputs.compact_week_start }}
+          REPLACE_SAME_WEEK: ${{ github.event.inputs.replace_same_week }}
         run: |
           set +e
           approve_args=""
           if [ "$APPROVE_WARNING" = "true" ]; then
             approve_args="--approve-warning"
           fi
+          replace_args=""
+          if [ "$REPLACE_SAME_WEEK" = "true" ]; then
+            replace_args="--replace-same-week"
+          fi
           python3 publish_weekly.py \
             "review-bundle/weekly_data_${COMPACT_WEEK_START}.json" \
             --qa-report "review-bundle/qa_report_${COMPACT_WEEK_START}.json" \
-            $approve_args
+            $approve_args \
+            $replace_args
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           if [ "$code" -ne 0 ]; then

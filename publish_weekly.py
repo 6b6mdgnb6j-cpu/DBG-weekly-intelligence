@@ -151,6 +151,10 @@ def parse_payload_week(payload):
         raise PublishBlockedError("published payload week_start is malformed", 4) from exc
 
 
+def payload_same_week(left, right):
+    return left.get("week_start") == right.get("week_start") and left.get("week_end") == right.get("week_end")
+
+
 def read_existing_payload(path):
     data = read_existing_bytes(path)
     if data is None:
@@ -164,7 +168,21 @@ def read_existing_payload(path):
     return data, payload
 
 
-def ensure_publish_idempotency(archive_path, latest_path, serialized, published):
+def validate_same_week_replacement(old_archive, old_archive_payload, old_latest, old_latest_payload, serialized, published):
+    if old_archive is None or old_archive_payload is None or old_latest is None or old_latest_payload is None:
+        raise PublishBlockedError("same-week replacement requires existing archive and latest", 4)
+    if not payload_same_week(old_archive_payload, published):
+        raise PublishBlockedError("published archive week differs from artifact; refusing replacement", 4)
+    if not payload_same_week(old_latest_payload, published):
+        raise PublishBlockedError("published latest is not the same week; refusing replacement", 4)
+    if old_archive != old_latest:
+        raise PublishBlockedError("published archive and latest disagree; refusing replacement", 4)
+    if old_archive == serialized:
+        return "noop_identical"
+    return "replace_same_week"
+
+
+def ensure_publish_idempotency(archive_path, latest_path, serialized, published, replace_same_week=False):
     old_archive, old_archive_payload = read_existing_payload(archive_path)
     old_latest, old_latest_payload = read_existing_payload(latest_path)
     target_week = parse_payload_week(published)
@@ -174,10 +192,30 @@ def ensure_publish_idempotency(archive_path, latest_path, serialized, published)
         if target_week < latest_week:
             raise PublishBlockedError("artifact week is older than published latest; refusing to roll back latest", 4)
         if target_week == latest_week and old_latest != serialized:
+            if replace_same_week:
+                plan = validate_same_week_replacement(
+                    old_archive,
+                    old_archive_payload,
+                    old_latest,
+                    old_latest_payload,
+                    serialized,
+                    published,
+                )
+                return plan, old_archive, old_archive_payload
             raise PublishBlockedError("published latest for this week differs from artifact; refusing overwrite", 4)
 
     if old_archive is not None:
         if old_archive != serialized:
+            if replace_same_week:
+                plan = validate_same_week_replacement(
+                    old_archive,
+                    old_archive_payload,
+                    old_latest,
+                    old_latest_payload,
+                    serialized,
+                    published,
+                )
+                return plan, old_archive, old_archive_payload
             raise PublishBlockedError("published archive for this week differs from artifact; refusing overwrite", 4)
         if old_latest == serialized:
             return "noop_identical", old_archive, old_archive_payload
@@ -241,7 +279,15 @@ def validate_qa_guard(payload, source_path, approve_warning=False, qa_report_pat
     return report_path, report
 
 
-def publish_weekly(source_path, approve_warning=False, dry_run=False, qa_report_path=None, published_dir=PUBLISHED_DIR):
+def publish_weekly(
+    source_path,
+    approve_warning=False,
+    dry_run=False,
+    qa_report_path=None,
+    published_dir=PUBLISHED_DIR,
+    replace_same_week=False,
+    return_plan=False,
+):
     payload = load_json(source_path)
     validate_source_payload(payload)
     published = build_published_payload(payload)
@@ -259,14 +305,22 @@ def publish_weekly(source_path, approve_warning=False, dry_run=False, qa_report_
     archive_path = archive_dir / f"weekly_{week_key}.json"
 
     if dry_run:
-        return archive_path, latest_path, qa_report_path, qa_report, False
+        result = (archive_path, latest_path, qa_report_path, qa_report, False)
+        return result + ("dry_run",) if return_plan else result
 
     serialized = serialize_published_payload(published)
     validate_published_bytes(serialized, published)
 
-    plan, old_archive, old_archive_payload = ensure_publish_idempotency(archive_path, latest_path, serialized, published)
+    plan, old_archive, old_archive_payload = ensure_publish_idempotency(
+        archive_path,
+        latest_path,
+        serialized,
+        published,
+        replace_same_week=replace_same_week,
+    )
     if plan == "noop_identical":
-        return archive_path, latest_path, qa_report_path, qa_report, False
+        result = (archive_path, latest_path, qa_report_path, qa_report, False)
+        return result + (plan,) if return_plan else result
 
     archive_written = False
     try:
@@ -286,7 +340,8 @@ def publish_weekly(source_path, approve_warning=False, dry_run=False, qa_report_
                     rollback_status="failed",
                 ) from rollback_exc
         raise
-    return archive_path, latest_path, qa_report_path, qa_report, True
+    result = (archive_path, latest_path, qa_report_path, qa_report, True)
+    return result + (plan,) if return_plan else result
 
 
 def parse_args(argv=None):
@@ -295,6 +350,7 @@ def parse_args(argv=None):
     parser.add_argument("--approve-warning", action="store_true", help="Allow publishing a WARNING QA report after manual review.")
     parser.add_argument("--dry-run", action="store_true", help="Run QA guard without writing published files.")
     parser.add_argument("--qa-report", help="Override QA report path for testing or review.")
+    parser.add_argument("--replace-same-week", action="store_true", help="Explicitly replace an already published report for the same week.")
     return parser.parse_args(argv)
 
 
@@ -309,11 +365,13 @@ def print_guard_summary(report, report_path, approved_warning=False):
 def main(argv=None):
     args = parse_args(argv)
     try:
-        archive_path, latest_path, qa_path, qa_report, wrote = publish_weekly(
+        archive_path, latest_path, qa_path, qa_report, wrote, plan = publish_weekly(
             Path(args.weekly_json),
             approve_warning=args.approve_warning,
             dry_run=args.dry_run,
             qa_report_path=args.qa_report,
+            replace_same_week=args.replace_same_week,
+            return_plan=True,
         )
     except PublishBlockedError as exc:
         print("PUBLISH BLOCKED")
@@ -350,10 +408,15 @@ def main(argv=None):
         print("Published archive/latest already match reviewed artifact.")
         return 0
 
+    if plan == "replace_same_week":
+        print("PUBLISH REPLACEMENT ALLOWED: explicit same-week replacement")
     print("Publishing...")
     print(f"Archive: updated ({archive_path})")
     print("Latest: updated")
-    print("PUBLISH SUCCESS")
+    if plan == "replace_same_week":
+        print("PUBLISH SUCCESS: replaced previously published report for same week")
+    else:
+        print("PUBLISH SUCCESS")
     return 0
 
 
