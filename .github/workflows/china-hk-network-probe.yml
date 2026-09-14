@@ -1,0 +1,43 @@
+name: China/HK Network Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe official China/HK source connectivity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-crawler.txt
+
+      - name: Install diagnostic dependencies
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+          python3 -m pip install -r requirements-crawler.txt
+
+      - name: Run China/HK network probe
+        run: |
+          python3 scripts/china_hk_network_probe.py --output-dir network_probe
+          cat network_probe/network_probe_summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload network probe artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: china-hk-network-probe
+          path: |
+            network_probe/network_probe_results.json
+            network_probe/network_probe_summary.md
+          if-no-files-found: error

@@ -418,6 +418,24 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertNotIn("git push", workflow)
         self.assertIn("git diff --exit-code -- published/", workflow)
 
+    def test_china_hk_network_probe_workflow_is_manual_and_diagnostic_only(self):
+        workflow = Path(".github/workflows/china-hk-network-probe.yml").read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("schedule:", workflow)
+        self.assertNotIn("push:", workflow)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertNotIn("run_weekly.py", workflow)
+        self.assertNotIn("publish_weekly.py", workflow)
+        self.assertNotIn("published/", workflow)
+        self.assertNotIn("git add", workflow)
+        self.assertNotIn("git commit", workflow)
+        self.assertNotIn("git push", workflow)
+        self.assertNotIn("--insecure", workflow)
+        self.assertNotIn(" -k", workflow)
+        self.assertIn("python3 scripts/china_hk_network_probe.py", workflow)
+        self.assertIn("china-hk-network-probe", workflow)
+
     def test_review_upload_requires_bundle_validation_success_and_exit_zero(self):
         workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
         self.assertIn(
