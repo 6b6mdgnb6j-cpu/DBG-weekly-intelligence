@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v18"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v19"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -475,6 +475,7 @@ class TerminologyNormalizer:
         "Alloy": {"aliases": [], "bad": ["合金"]},
         "Trever": {"aliases": [], "bad": ["特雷弗", "雷弗"]},
         "Cboe": {"aliases": [], "bad": []},
+        "Euronext": {"aliases": [], "bad": ["欧联网", "欧元联网", "欧元集团"]},
         "LSEG": {"aliases": ["London Stock Exchange Group"], "bad": []},
         "FTSE": {"aliases": ["FTSE Russell"], "bad": ["FTC"]},
         "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": ["斯安普道斯指数"]},
@@ -492,6 +493,8 @@ class TerminologyNormalizer:
         "HKEX": {"aliases": ["Hong Kong Exchanges and Clearing"], "bad": ["希克克斯", "希克斯"]},
         "JPX": {"aliases": ["Japan Exchange Group"], "bad": ["日本交流集团", "日本交易所集团"]},
         "FSC": {"aliases": ["Financial Services Commission"], "bad": ["联邦书商管理局", "国际SEC", "国际证券交易委员会"]},
+        "IOSCO": {"aliases": ["International Organization of Securities Commissions"], "bad": ["国际证券委员会组织", "国际证券交易委员会组织"]},
+        "OCC": {"aliases": ["Office of the Comptroller of the Currency"], "bad": ["欧盟委员会", "欧盟银行"]},
         "ECB": {"aliases": ["European Central Bank"], "bad": ["欧洲央行"]},
         "FOMC": {"aliases": ["Federal Open Market Committee"], "bad": ["联邦开放市场委员会"]},
     }
@@ -517,6 +520,9 @@ class TerminologyNormalizer:
         "FOMC": {"联邦开放市场委员会": "FOMC"},
         "HKMA": {"香港货币管理局": "HKMA", "香港金融管理局": "HKMA"},
         "JPX": {"日本交流集团": "JPX", "日本交易所集团": "JPX"},
+        "Euronext": {"欧联网": "Euronext", "欧元联网": "Euronext", "欧元集团": "Euronext"},
+        "IOSCO": {"国际证券委员会组织": "国际证监会组织", "国际证券交易委员会组织": "国际证监会组织"},
+        "OCC": {"欧盟委员会": "OCC", "欧盟银行": "OCC"},
         "SIX": {"六个交易所": "SIX Exchanges", "六个": "SIX", "六": "SIX", "西克斯": "SIX"},
         "ICE": {"冰岛": "ICE", "欧元交易所": "ICE", "国际大陆交易所": "ICE", "跨大陆交易": "ICE"},
         "FINRA": {"国际金融基金会": "FINRA"},
@@ -540,6 +546,8 @@ class TerminologyNormalizer:
         "FOMC": ["federal open market committee", "联邦储备系统"],
         "JPX": ["japan exchange group", "日本交易所集团"],
         "Euronext": ["euronext", "泛欧交易所"],
+        "IOSCO": ["iosco", "international organization of securities commissions", "国际证监会组织"],
+        "OCC": ["occ", "office of the comptroller of the currency", "货币监理署"],
         "ICE": ["intercontinental exchange", "洲际交易所"],
         "SIX": ["six exchanges", "six group"],
         "FINRA": ["financial industry regulatory authority"],
@@ -570,7 +578,17 @@ class TerminologyNormalizer:
         ("EBA, EIOPA and ESMA", r"欧洲央行,欧盟人工智能署和欧盟证券监管局", "EBA、EIOPA和ESMA"),
         ("EBA, EIOPA and ESMA", r"欧洲央行,欧盟人工智能署和欧盟证券管理局", "EBA、EIOPA和ESMA"),
         ("Euronext", r"欧元联网", "Euronext"),
+        ("Euronext", r"欧联网", "Euronext"),
         ("Euronext", r"欧元集团", "Euronext"),
+        ("Financial Market Infrastructures", r"国际货币基金组织", "金融市场基础设施"),
+        ("FMIs", r"国际货币基金组织", "金融市场基础设施"),
+        ("IOSCO", r"国际证券委员会组织|国际证券交易委员会组织", "国际证监会组织"),
+        ("Office of the Comptroller of the Currency", r"欧盟委员会|欧盟银行", "OCC"),
+        ("OCC", r"欧盟委员会|欧盟银行", "OCC"),
+        ("portfolio margining", r"投资组合的利率|投资组合利率", "投资组合保证金"),
+        ("market maker", r"市场制造商", "做市商"),
+        ("market makers", r"市场制造商", "做市商"),
+        ("interest rate options", r"利率选项", "利率期权"),
         ("FDIC", r"联邦银行局|联邦金融监管局", "FDIC"),
         ("FSC", r"联邦书商管理局", "FSC"),
         ("Financial Services Commission", r"国际证券交易委员会", "金融服务委员会"),

@@ -243,6 +243,95 @@ class QAGateTests(unittest.TestCase):
         self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
         self.assertIn("translation_proper_noun_mismatch", [issue["issue_id"] for issue in report["content_issues"]])
 
+    def test_translation_quality_material_entity_and_term_errors_fail(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="Euronext",
+                    title_original="Euronext announces volumes for August 2026",
+                    title_cn="欧联网宣布2026年8月份的交易量",
+                ),
+                item(
+                    2,
+                    title_original="Financial Market Infrastructures (FMIs) need robust risk management",
+                    title_cn="国际货币基金组织需要稳健的风险管理",
+                ),
+                item(
+                    3,
+                    source="国际证监会组织",
+                    title_original="IOSCO published a market report",
+                    title_cn="国际证券委员会组织发布市场报告",
+                ),
+                item(
+                    4,
+                    source="货币监理署",
+                    title_original="The Office of the Comptroller of the Currency issued a supervisory update",
+                    title_cn="欧盟委员会发布监管更新",
+                ),
+                item(
+                    5,
+                    title_original="CFTC proposed portfolio margining rules",
+                    title_cn="CFTC提出投资组合的利率规则",
+                ),
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_entity_conflict", issue_ids)
+        self.assertIn("translation_material_term_conflict", issue_ids)
+
+    def test_bilingual_summary_original_requires_summary_cn(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Ontario Securities Commission brings together capital markets leaders to advise on future priorities",
+                    title_cn="安大略省证券委员会召集资本市场领导者就未来优先事项提供建议",
+                    summary_original="The Ontario Securities Commission announced the membership of its newly established Capital Markets Advisory Council.",
+                    summary_cn="",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], FAIL)
+        self.assertIn("translation_summary_missing", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_empty_original_summary_allows_empty_summary_cn_in_bilingual_qa(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="Clearstream monthly figures",
+                    title_cn="Clearstream月度数据",
+                    summary_original="",
+                    summary_cn="",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_minor_awkward_translation_remains_non_blocking(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    title_original="EEX introduces freight data products in its market data portfolio",
+                    title_cn="EEX在其市场数据组合中引入货运数据产品",
+                    summary_original="EEX expanded its market data offering with freight data products.",
+                    summary_cn="EEX扩大其市场数据服务，加入货运数据产品。",
+                )
+            ],
+            highlights=[],
+        )
+        report = self.evaluate(weekly=weekly)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
     def test_translation_quality_short_title_proposition_missing_fails(self):
         weekly = payload(
             items=[

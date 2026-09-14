@@ -333,7 +333,7 @@ def evaluate_content(payload, week_start, week_end):
         {"issues": competitor_mapping_warnings[:10], "count": len(competitor_mapping_warnings)},
     )
 
-    translation_issues = audit_translation_quality(items)
+    translation_issues = audit_translation_quality(items, payload.get("translation_mode", ""))
     translation_failures = [issue for issue in translation_issues if issue.get("severity") == FAIL]
     translation_warnings = [issue for issue in translation_issues if issue.get("severity") == WARNING]
     check_result(

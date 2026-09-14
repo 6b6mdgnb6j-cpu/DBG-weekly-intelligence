@@ -247,7 +247,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v18", GENERATION_CONFIG_VERSION)
+        self.assertIn("v19", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -1236,6 +1236,57 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         self.assertIn("交易量", normalized)
         self.assertNotIn("月份卷", normalized)
+
+    def test_material_entity_and_financial_terms_normalize(self):
+        normalizer = translator.TerminologyNormalizer()
+
+        euronext, _ = normalizer.normalize(
+            "欧联网宣布2026年8月份的交易量",
+            "Euronext announces volumes for August 2026",
+            "Euronext",
+        )
+        self.assertIn("Euronext", euronext)
+        self.assertNotIn("欧联网", euronext)
+
+        fmi, _ = normalizer.normalize(
+            "国际货币基金组织需要稳健的风险管理。",
+            "Financial Market Infrastructures (FMIs) need robust risk management.",
+            "Source",
+        )
+        self.assertIn("金融市场基础设施", fmi)
+        self.assertNotIn("国际货币基金组织", fmi)
+
+        iosco, _ = normalizer.normalize(
+            "国际证券委员会组织发布市场报告。",
+            "IOSCO published a market report.",
+            "国际证监会组织",
+        )
+        self.assertTrue("IOSCO" in iosco or "国际证监会组织" in iosco)
+        self.assertNotIn("国际证券委员会组织", iosco)
+
+        occ, _ = normalizer.normalize(
+            "欧盟委员会发布资本市场监管更新。",
+            "The Office of the Comptroller of the Currency issued a supervisory update.",
+            "货币监理署",
+        )
+        self.assertIn("OCC", occ)
+        self.assertNotIn("欧盟委员会", occ)
+
+        margining, _ = normalizer.normalize(
+            "CFTC提出投资组合的利率规则。",
+            "CFTC proposed portfolio margining rules.",
+            "CFTC",
+        )
+        self.assertIn("投资组合保证金", margining)
+        self.assertNotIn("投资组合的利率", margining)
+
+        maker, _ = normalizer.normalize("市场制造商规则", "market maker rules", "CFTC")
+        self.assertIn("做市商", maker)
+        self.assertNotIn("市场制造商", maker)
+
+        options, _ = normalizer.normalize("利率选项交易量上升", "interest rate options trading increased", "Eurex")
+        self.assertIn("利率期权", options)
+        self.assertNotIn("利率选项", options)
 
     def test_intraday_margin_keeps_financial_margin_meaning(self):
         normalizer = translator.TerminologyNormalizer()

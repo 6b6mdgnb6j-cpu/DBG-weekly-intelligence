@@ -64,10 +64,13 @@ DANGEROUS_ENTITY_VARIANTS = {
     "STOXX": ("STTOXX", "STOX", "斯托克斯"),
     "ICE": ("冰岛", "欧元交易所", "国际大陆交易所", "跨大陆交易"),
     "SIX": ("六个交易所",),
+    "Euronext": ("欧联网", "欧元联网", "欧元集团"),
     "FTSE": ("FTC",),
     "FINRA": ("国际金融基金会", "FINA"),
     "FSC": ("联邦书商管理局", "国际SEC", "国际证券交易委员会"),
     "CFTC": ("欧盟货币交易委员会", "欧盟CFTC", "欧盟贸易交易委员会", "美国央行", "金融交易委员会"),
+    "IOSCO": ("国际证券委员会组织", "国际证券交易委员会组织"),
+    "OCC": ("欧盟委员会", "欧盟银行"),
 }
 
 ACCEPTABLE_ENTITY_RENDERINGS = {
@@ -79,7 +82,29 @@ ACCEPTABLE_ENTITY_RENDERINGS = {
     "MAS": ("MAS", "新加坡金融管理局", "新加坡货币管理局", "马斯"),
     "ECB": ("ECB", "欧洲央行", "欧洲中央银行"),
     "FOMC": ("FOMC", "联邦公开市场委员会", "联邦开放市场委员会"),
+    "Euronext": ("Euronext", "泛欧交易所"),
+    "IOSCO": ("IOSCO", "国际证监会组织"),
+    "OCC": ("OCC", "货币监理署"),
 }
+
+MATERIAL_TERM_RULES = [
+    {
+        "issue_id": "translation_material_term_conflict",
+        "trigger_patterns": (r"\bFMIs?\b", r"\bFinancial Market Infrastructures?\b"),
+        "bad_terms": ("国际货币基金组织",),
+        "expected_terms": ("金融市场基础设施", "FMI", "FMIs"),
+        "term": "Financial Market Infrastructures",
+        "reason": "Financial Market Infrastructures/FMI was translated as IMF.",
+    },
+    {
+        "issue_id": "translation_material_term_conflict",
+        "trigger_patterns": (r"\bportfolio margining\b",),
+        "bad_terms": ("投资组合的利率", "投资组合利率"),
+        "expected_terms": ("投资组合保证金", "组合保证金"),
+        "term": "portfolio margining",
+        "reason": "Portfolio margining was translated as an interest-rate concept.",
+    },
+]
 
 
 def _contains_english(text, patterns):
@@ -123,6 +148,13 @@ def _translated_fields(item):
         ("title", item.get("title_original") or item.get("title") or "", item.get("title_cn") or ""),
         ("summary", item.get("summary_original") or item.get("summary") or "", item.get("summary_cn") or ""),
     ]
+
+
+def _meaningful_text(text):
+    normalized = re.sub(r"\s+", " ", text or "").strip()
+    if not normalized:
+        return False
+    return bool(re.search(r"[A-Za-z\u4e00-\u9fff]{8,}", normalized))
 
 
 def _entity_issues(index, item, normalizer):
@@ -177,6 +209,75 @@ def _entity_issues(index, item, normalizer):
                     )
                 )
     return issues
+
+
+def _material_term_issues(index, item):
+    issues = []
+    source = item.get("source") or ""
+    for field, original, translated in _translated_fields(item):
+        if not original or not translated:
+            continue
+        for rule in MATERIAL_TERM_RULES:
+            if not _contains_english(original, rule["trigger_patterns"]):
+                continue
+            if not _contains_any(translated, rule["bad_terms"]):
+                continue
+            issues.append(
+                _issue(
+                    index,
+                    item,
+                    field,
+                    rule["issue_id"],
+                    FAIL,
+                    {
+                        "term": rule["term"],
+                        "bad_terms": list(rule["bad_terms"]),
+                        "expected_terms": list(rule["expected_terms"]),
+                        "translated_prefix": translated[:160],
+                    },
+                    rule["reason"],
+                )
+            )
+        occ_context = (
+            re.search(r"\bOCC\b|\bOffice of the Comptroller of the Currency\b", original or "", flags=re.I)
+            or "货币监理署" in source
+        )
+        if occ_context and _contains_any(translated, ("欧盟委员会", "欧盟银行")):
+            issues.append(
+                _issue(
+                    index,
+                    item,
+                    field,
+                    "translation_entity_conflict",
+                    FAIL,
+                    {"entity": "OCC", "bad_terms": ["欧盟委员会", "欧盟银行"], "translated_prefix": translated[:160]},
+                    "OCC context was translated as an unrelated European institution.",
+                )
+            )
+    return issues
+
+
+def _bilingual_completeness_issues(index, item, translation_mode):
+    if translation_mode != "bilingual":
+        return []
+    summary_original = item.get("summary_original")
+    if summary_original is None:
+        summary_original = item.get("summary") or ""
+    if not _meaningful_text(summary_original):
+        return []
+    if (item.get("summary_cn") or "").strip():
+        return []
+    return [
+        _issue(
+            index,
+            item,
+            "summary",
+            "translation_summary_missing",
+            FAIL,
+            {"summary_original_prefix": str(summary_original)[:160]},
+            "Bilingual artifact has a meaningful original summary but an empty Chinese summary.",
+        )
+    ]
 
 
 def _proper_noun_issues(index, item):
@@ -347,11 +448,13 @@ def _suspicious_compression_issues(index, item):
     return issues
 
 
-def audit_translation_quality(items):
+def audit_translation_quality(items, translation_mode=""):
     normalizer = TerminologyNormalizer()
     issues = []
     for index, item in enumerate(items or []):
+        issues.extend(_bilingual_completeness_issues(index, item, translation_mode))
         issues.extend(_entity_issues(index, item, normalizer))
+        issues.extend(_material_term_issues(index, item))
         issues.extend(_proper_noun_issues(index, item))
         issues.extend(_title_proposition_issues(index, item))
         issues.extend(_action_direction_issues(index, item))
