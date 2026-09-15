@@ -161,7 +161,31 @@ REGULATORY_SOURCES = [
     "澳大利亚审慎监管局",
     "韩国金融监督委员会",
     "香港金融管理局",
+    "中国人民银行",
+    "中国证券监督管理委员会",
+    "国家金融监督管理总局",
+    "国家外汇管理局",
 ]
+
+
+FINANCIAL_INFRASTRUCTURE_REGULATORY_TERMS = (
+    "支付清算",
+    "资金清算",
+    "清算市场",
+    "金融基础设施",
+    "跨境支付",
+    "跨境资金",
+)
+
+
+FINANCIAL_INFRASTRUCTURE_RULE_TERMS = (
+    "监督管理办法",
+    "管理办法",
+    "监管规则",
+    "监管制度",
+    "现行相关管理制度",
+    "监督管理",
+)
 
 
 MATERIAL_DEVELOPMENT_TERMS = [
@@ -854,6 +878,20 @@ def has_financial_market_connectivity_signal(text):
     )
 
 
+def is_official_financial_infrastructure_regulatory_signal(item, text):
+    if not item.get("official"):
+        return False
+    if (item.get("category") or "").lower() != "macro":
+        return False
+    source = item.get("source") or ""
+    if source not in REGULATORY_SOURCES:
+        return False
+    return contains_any_phrase(text, FINANCIAL_INFRASTRUCTURE_REGULATORY_TERMS) and contains_any_phrase(
+        text,
+        FINANCIAL_INFRASTRUCTURE_RULE_TERMS,
+    )
+
+
 # Scoring
 
 def score_item(item):
@@ -943,6 +981,10 @@ def score_item(item):
     if has_financial_market_connectivity_signal(text):
         score += 6
         reasons.append("hard_signal:financial_market_connectivity")
+
+    if is_official_financial_infrastructure_regulatory_signal(item, text):
+        score += 6
+        reasons.append("hard_signal:financial_infrastructure_regulation")
 
     if is_regulatory_final_rule_signal(item, text):
         score += 8

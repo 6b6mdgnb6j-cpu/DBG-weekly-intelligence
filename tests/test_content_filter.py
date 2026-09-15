@@ -415,6 +415,67 @@ class ContentFilterRegressionTests(unittest.TestCase):
         self.assertLess(score, MIN_SCORE, reason)
         self.assertNotIn("hard_signal:financial_market_connectivity", reason)
 
+    def test_pboc_financial_infrastructure_supervision_measures_are_relevant(self):
+        item = make_item(
+            "中国人民银行公告〔2026〕第24号",
+            (
+                "为顺应我国支付清算市场发展变化，《中国人民银行关于印发"
+                "〈农信银资金清算中心有限责任公司监督管理办法〉的通知》"
+                "自本公告发布之日起废止。相关事项按照《金融基础设施监督管理办法》"
+                "等现行相关管理制度执行。"
+            ),
+            source="中国人民银行",
+            category="Macro",
+            subcategory="中国",
+            official=True,
+            priority=1,
+        )
+        score, reason = relevance(item)
+        self.assertGreaterEqual(score, MIN_SCORE, reason)
+        self.assertIn("hard_signal:financial_infrastructure_regulation", reason)
+
+    def test_routine_pboc_meeting_remains_rejected(self):
+        item = make_item(
+            "中国人民银行副行长宣昌能会见新加坡金融管理局副行长梁新松",
+            "双方就当前经济金融形势和中新金融合作等议题进行了交流。",
+            source="中国人民银行",
+            category="Macro",
+            subcategory="中国",
+            official=True,
+            priority=1,
+        )
+        score, reason = relevance(item)
+        self.assertLess(score, MIN_SCORE, reason)
+        self.assertNotIn("hard_signal:financial_infrastructure_regulation", reason)
+
+    def test_general_pboc_announcement_without_infrastructure_rule_is_not_automatic(self):
+        item = make_item(
+            "中国人民银行公告〔2026〕第25号",
+            "中国人民银行发布一般工作安排公告。",
+            source="中国人民银行",
+            category="Macro",
+            subcategory="中国",
+            official=True,
+            priority=1,
+        )
+        score, reason = relevance(item)
+        self.assertLess(score, MIN_SCORE, reason)
+        self.assertNotIn("hard_signal:financial_infrastructure_regulation", reason)
+
+    def test_safe_meeting_unchanged_by_financial_infrastructure_signal(self):
+        item = make_item(
+            "朱鹤新局长会见新加坡金管局副行长梁新松",
+            "双方就全球经济金融形势、深化中新金融领域合作等议题进行了交流。",
+            source="国家外汇管理局",
+            category="Macro",
+            subcategory="中国",
+            official=True,
+            priority=1,
+        )
+        score, reason = relevance(item)
+        self.assertLess(score, MIN_SCORE, reason)
+        self.assertNotIn("hard_signal:financial_infrastructure_regulation", reason)
+
     def test_routine_executive_event_wording_remains_rejected(self):
         cases = [
             "CEO participates in a fireside chat at Barclays Global Financial Services Conference",
