@@ -30,7 +30,8 @@ jobs:
 
       - name: Run China/HK network probe
         run: |
-          python3 scripts/china_hk_network_probe.py --output-dir network_probe
+          PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" \
+            python3 scripts/china_hk_network_probe.py --output-dir network_probe
           cat network_probe/network_probe_summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload network probe artifact

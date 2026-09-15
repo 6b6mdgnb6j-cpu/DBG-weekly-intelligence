@@ -433,6 +433,7 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertNotIn("git push", workflow)
         self.assertNotIn("--insecure", workflow)
         self.assertNotIn(" -k", workflow)
+        self.assertIn('PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}"', workflow)
         self.assertIn("python3 scripts/china_hk_network_probe.py", workflow)
         self.assertIn("china-hk-network-probe", workflow)
 
