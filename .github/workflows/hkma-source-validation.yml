@@ -1,0 +1,215 @@
+name: HKMA Source Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate HKMA collector path
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-crawler.txt
+
+      - name: Install crawler dependencies
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+          python3 -m pip install -r requirements-crawler.txt
+
+      - name: Run HKMA source validation
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}" \
+            python3 - <<'PY'
+          import json
+          import logging
+          import os
+          import platform
+          from datetime import date
+          from pathlib import Path
+
+          from crawler.collector import classify_empty_status, empty_status, load_sources
+          from crawler.content_filter import apply_relevance
+          from crawler.web_parser import collect_web
+
+          week_start = date(2026, 9, 7)
+          week_end = date(2026, 9, 13)
+          output_dir = Path("hkma_source_validation")
+          output_dir.mkdir(parents=True, exist_ok=True)
+
+          logger = logging.getLogger("hkma_source_validation")
+          logger.setLevel(logging.INFO)
+          logger.handlers.clear()
+          handler = logging.StreamHandler()
+          handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+          logger.addHandler(handler)
+
+          source = next(source for source in load_sources() if source.get("id") == "SRC-006")
+          status = empty_status(source)
+          raw_items = []
+          filtered_items = []
+          retained_items = []
+          rejected_items = []
+          diagnosis = "not run"
+
+          try:
+              raw_items, filtered_items, meta = collect_web(source, week_start, week_end, logger)
+              relevant, reviewed = apply_relevance(filtered_items)
+              retained_items = relevant
+              retained_keys = {
+                  (item.get("source", ""), item.get("url", ""), item.get("title_original", ""))
+                  for item in relevant
+              }
+              rejected_items = [
+                  item for item in reviewed
+                  if (item.get("source", ""), item.get("url", ""), item.get("title_original", "")) not in retained_keys
+              ]
+
+              status["candidates"] = int(meta.get("candidates") or len(raw_items))
+              status["candidates_discovered"] = int(meta.get("candidates_discovered") or status["candidates"])
+              status["candidates_scanned"] = int(meta.get("candidates_scanned") or status["candidates"])
+              status["pages_scanned"] = int(meta.get("pages_scanned") or 0)
+              status["list_items_with_date"] = int(meta.get("list_items_with_date") or 0)
+              status["detail_pages_requested"] = int(meta.get("detail_pages_requested") or 0)
+              status["dated_candidates"] = int(meta.get("dated_candidates") or 0)
+              status["date_parse_failed"] = int(meta.get("date_parse_failed") or 0)
+              status["newest_date_seen"] = meta.get("newest_date_seen", "")
+              status["oldest_date_seen"] = meta.get("oldest_date_seen", "")
+              status["target_period_reached"] = bool(meta.get("target_period_reached"))
+              status["stopped_reason"] = meta.get("stopped_reason", "")
+              status["within_period"] = len(filtered_items)
+              status["after_relevance"] = len(relevant)
+              status["final_items"] = len(relevant)
+              status["sample_candidates"] = meta.get("sample_candidates", [])[:3]
+              status["list_url"] = meta.get("list_url", status["list_url"])
+              status["requests_total"] = int(meta.get("requests_total") or 0)
+              status["request_attempts_total"] = int(meta.get("request_attempts_total") or 0)
+              status["retried_requests"] = int(meta.get("retried_requests") or 0)
+              status["last_retry_error"] = meta.get("last_retry_error", "")
+              status["last_request_error"] = meta.get("last_request_error", "")
+              status["last_network_error"] = meta.get("last_network_error", "")
+              status["final_network_error"] = meta.get("final_network_error", meta.get("last_network_error", ""))
+              status["last_status_code"] = meta.get("last_status_code", "")
+              status["error"] = meta.get("error", "")
+              status["status"] = classify_empty_status(status, source)
+
+              if status["last_network_error"] or status["final_network_error"]:
+                  diagnosis = "network/TLS failure before parser or during detail fetch"
+              elif not status["candidates_discovered"]:
+                  diagnosis = "candidate discovery failure"
+              elif not status["dated_candidates"]:
+                  diagnosis = "date extraction failure"
+              elif not status["within_period"]:
+                  diagnosis = "no target-week items discovered"
+              elif not status["after_relevance"]:
+                  diagnosis = "target-week items filtered by relevance"
+              else:
+                  diagnosis = "collector, parser, date extraction, and relevance path produced retained items"
+          except Exception as exc:
+              status["status"] = "parser_failed"
+              status["error"] = str(exc)
+              diagnosis = f"collector exception: {exc}"
+
+          payload = {
+              "environment": {
+                  "runner_os": os.environ.get("RUNNER_OS", ""),
+                  "github_runner": bool(os.environ.get("GITHUB_ACTIONS")),
+                  "python_version": platform.python_version(),
+                  "platform": platform.platform(),
+              },
+              "source_id": source.get("id"),
+              "source_name": source.get("name"),
+              "week_start": week_start.isoformat(),
+              "week_end": week_end.isoformat(),
+              "status": status,
+              "retained_items": [
+                  {
+                      "title": item.get("title_original", ""),
+                      "date": item.get("date", ""),
+                      "url": item.get("url", ""),
+                      "relevance_score": item.get("relevance_score", ""),
+                      "relevance_reason": item.get("relevance_reason", ""),
+                  }
+                  for item in retained_items
+              ],
+              "rejected_items": [
+                  {
+                      "title": item.get("title_original", ""),
+                      "date": item.get("date", ""),
+                      "url": item.get("url", ""),
+                      "relevance_score": item.get("relevance_score", ""),
+                      "relevance_reason": item.get("relevance_reason", ""),
+                  }
+                  for item in rejected_items[:10]
+              ],
+              "diagnosis": diagnosis,
+          }
+
+          json_path = output_dir / "hkma_source_validation_runner.json"
+          json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+          rows = [
+              "# HKMA Source Validation - GitHub Runner",
+              "",
+              f"- Environment: runner_os={payload['environment']['runner_os']} python={payload['environment']['python_version']}",
+              f"- Source: {payload['source_id']} {payload['source_name']}",
+              f"- Target week: {payload['week_start']} -> {payload['week_end']}",
+              f"- HTTP status: {status.get('last_status_code', '')}",
+              f"- Collector status: {status.get('status', '')}",
+              f"- Candidates discovered: {status.get('candidates_discovered', 0)}",
+              f"- Candidates scanned: {status.get('candidates_scanned', 0)}",
+              f"- Dated candidates: {status.get('dated_candidates', 0)}",
+              f"- Newest date seen: {status.get('newest_date_seen', '')}",
+              f"- Oldest date seen: {status.get('oldest_date_seen', '')}",
+              f"- target_period_reached: {status.get('target_period_reached', False)}",
+              f"- within_period: {status.get('within_period', 0)}",
+              f"- after_relevance: {status.get('after_relevance', 0)}",
+              f"- final_items: {status.get('final_items', 0)}",
+              f"- stopped_reason: {status.get('stopped_reason', '')}",
+              f"- last_network_error: {status.get('last_network_error', '')}",
+              f"- final_network_error: {status.get('final_network_error', '')}",
+              f"- diagnosis: {diagnosis}",
+              "",
+              "## Retained Items",
+          ]
+          if retained_items:
+              rows.extend(
+                  f"- {item.get('date', '')} | {item.get('title_original', '')} | {item.get('url', '')}"
+                  for item in retained_items
+              )
+          else:
+              rows.append("- None")
+
+          rows.extend(["", "## Relevance Filtered Sample"])
+          if rejected_items:
+              rows.extend(
+                  f"- {item.get('date', '')} | score={item.get('relevance_score', '')} | {item.get('title_original', '')} | {item.get('relevance_reason', '')}"
+                  for item in rejected_items[:10]
+              )
+          else:
+              rows.append("- None")
+
+          md_path = output_dir / "hkma_source_validation_runner.md"
+          md_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+          print(md_path.read_text(encoding="utf-8"))
+          PY
+
+      - name: Upload HKMA validation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: hkma-source-validation
+          path: |
+            hkma_source_validation/hkma_source_validation_runner.md
+            hkma_source_validation/hkma_source_validation_runner.json
+          if-no-files-found: error

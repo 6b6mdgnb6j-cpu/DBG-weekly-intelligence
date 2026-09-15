@@ -437,6 +437,26 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertIn("python3 scripts/china_hk_network_probe.py", workflow)
         self.assertIn("china-hk-network-probe", workflow)
 
+    def test_hkma_source_validation_workflow_is_manual_and_diagnostic_only(self):
+        workflow = Path(".github/workflows/hkma-source-validation.yml").read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("schedule:", workflow)
+        self.assertNotIn("push:", workflow)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertNotIn("run_weekly.py", workflow)
+        self.assertNotIn("publish_weekly.py", workflow)
+        self.assertNotIn("published/", workflow)
+        self.assertNotIn("git add", workflow)
+        self.assertNotIn("git commit", workflow)
+        self.assertNotIn("git push", workflow)
+        self.assertNotIn("--insecure", workflow)
+        self.assertNotIn(" -k", workflow)
+        self.assertIn('PYTHONPATH="$GITHUB_WORKSPACE${PYTHONPATH:+:$PYTHONPATH}"', workflow)
+        self.assertIn('"SRC-006"', workflow)
+        self.assertIn("collect_web(source, week_start, week_end, logger)", workflow)
+        self.assertIn("hkma-source-validation", workflow)
+
     def test_review_upload_requires_bundle_validation_success_and_exit_zero(self):
         workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
         self.assertIn(
