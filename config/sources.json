@@ -61,7 +61,8 @@
     "technical_status": "network_probe_failed",
     "max_candidates": 8,
     "registry_source": "周报信息来源清单_副本.docx",
-    "registry_raw": "3.中国证券监督管理委员会—http://www.csrc.gov.cn"
+    "registry_raw": "3.中国证券监督管理委员会—http://www.csrc.gov.cn",
+    "crawl_url": "https://www.csrc.gov.cn/searchList/a1a078ee0bc54721ab6b148884c784a8"
   },
   {
     "id": "SRC-004",

@@ -8,6 +8,7 @@ from crawler.official_source_parser import (
     parse_sp_dji_archive_entry,
     sp_dji_source_filter,
 )
+from crawler.adapters.csrc import parse_csrc_search_json
 from crawler.adapters.nfra import parse_nfra_docinfo_json
 from crawler.adapters.shfe import parse_shfe_notice_list
 
@@ -208,6 +209,75 @@ class OfficialSourceParserRegressionTests(unittest.TestCase):
 
         self.assertEqual(parse_nfra_docinfo_json(invalid, "https://www.nfra.gov.cn", {}), [])
         self.assertEqual(parse_nfra_docinfo_json(empty, "https://www.nfra.gov.cn", {}), [])
+
+    def test_csrc_search_json_extracts_title_date_url_and_category(self):
+        payload = """
+        {
+          "data": {
+            "results": [
+              {
+                "title": "证监会发布资本市场监管规则",
+                "publishedTime": "2026-09-11",
+                "url": "/csrc/c100028/c7424382/content.shtml?from=search",
+                "channelName": "证监会要闻",
+                "summary": "完善资本市场基础制度。"
+              }
+            ]
+          }
+        }
+        """
+        soup = BeautifulSoup(payload, "html.parser")
+        items = parse_csrc_search_json(
+            soup,
+            "https://www.csrc.gov.cn/searchList/a1a078ee0bc54721ab6b148884c784a8",
+            {"id": "SRC-003", "name": "中国证券监督管理委员会"},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "证监会发布资本市场监管规则")
+        self.assertEqual(items[0]["date"], "2026-09-11")
+        self.assertEqual(
+            items[0]["url"],
+            "https://www.csrc.gov.cn/csrc/c100028/c7424382/content.shtml?from=search",
+        )
+        self.assertEqual(items[0]["summary"], "完善资本市场基础制度。")
+        self.assertEqual(items[0]["content_type"], "csrc_search")
+        self.assertEqual(items[0]["category"], "证监会要闻")
+
+    def test_csrc_search_json_ignores_malformed_and_duplicate_records(self):
+        payload = """
+        {
+          "result": {
+            "list": [
+              {"title": "", "publishedTime": "2026-09-11", "url": "/csrc/a.shtml"},
+              {"title": "Missing date", "url": "/csrc/b.shtml"},
+              {"title": "Missing URL", "publishedTime": "2026-09-11"},
+              {"title": "Valid CSRC item", "pubDate": "2026-09-11", "link": "/csrc/c.shtml"},
+              {"title": "Duplicate CSRC item", "pubDate": "2026-09-11", "link": "/csrc/c.shtml"}
+            ]
+          }
+        }
+        """
+        soup = BeautifulSoup(payload, "html.parser")
+        items = parse_csrc_search_json(
+            soup,
+            "https://www.csrc.gov.cn/searchList/a1a078ee0bc54721ab6b148884c784a8",
+            {"id": "SRC-003", "name": "中国证券监督管理委员会"},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "Valid CSRC item")
+        self.assertEqual(items[0]["date"], "2026-09-11")
+        self.assertEqual(items[0]["url"], "https://www.csrc.gov.cn/csrc/c.shtml")
+
+    def test_csrc_search_json_handles_empty_jsonp_or_invalid_payload(self):
+        jsonp = BeautifulSoup('callback({"data":[{"title":"JSONP item","date":"2026-09-11","url":"/csrc/j.shtml"}]});', "html.parser")
+        invalid = BeautifulSoup("<html>not json</html>", "html.parser")
+        empty = BeautifulSoup('{"data": []}', "html.parser")
+
+        self.assertEqual(len(parse_csrc_search_json(jsonp, "https://www.csrc.gov.cn/searchList/channel", {})), 1)
+        self.assertEqual(parse_csrc_search_json(invalid, "https://www.csrc.gov.cn", {}), [])
+        self.assertEqual(parse_csrc_search_json(empty, "https://www.csrc.gov.cn", {}), [])
 
 
 if __name__ == "__main__":

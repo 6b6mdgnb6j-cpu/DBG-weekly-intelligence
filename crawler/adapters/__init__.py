@@ -1,6 +1,7 @@
 from .dbg import parse_dbg_list, parse_eurex_list
 from .apra import parse_apra_list
 from .crypto_finance import parse_crypto_finance_list
+from .csrc import parse_csrc_search_json
 from .euronext import parse_euronext_list
 from .fca import parse_fca_list
 from .govuk import parse_govuk_list
@@ -29,6 +30,7 @@ from .expansion import (
 
 ADAPTERS = {
     "SRC-001": parse_nfra_docinfo_json,
+    "SRC-003": parse_csrc_search_json,
     "SRC-006": parse_hkma_list,
     "SRC-007": parse_sfc_list,
     "SRC-021": parse_fca_list,

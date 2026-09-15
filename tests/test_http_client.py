@@ -495,6 +495,73 @@ class HttpClientRetryTests(unittest.TestCase):
         self.assertEqual(filtered[0]["source"], "国家金融监督管理总局")
         self.assertEqual(filtered[0]["date"], "2026-09-11")
 
+    def test_csrc_web_adapter_integrates_with_collect_web(self):
+        source = {
+            "id": "SRC-003",
+            "name": "中国证券监督管理委员会",
+            "url": "http://www.csrc.gov.cn",
+            "crawl_url": "https://www.csrc.gov.cn/searchList/a1a078ee0bc54721ab6b148884c784a8",
+            "method": "web",
+            "category": "Macro",
+            "subcategory": "中国",
+            "max_pages": 1,
+            "max_items": 5,
+        }
+        payload = """
+        {
+          "data": {
+            "results": [
+              {
+                "title": "证监会发布资本市场监管规则",
+                "publishedTime": "2026-09-11",
+                "url": "/csrc/c100028/c7424382/content.shtml?from=search",
+                "channelName": "证监会要闻",
+                "summary": "完善资本市场基础制度。"
+              },
+              {
+                "title": "早于目标周的证监会新闻",
+                "publishedTime": "2026-09-06",
+                "url": "/csrc/c100028/c7424000/content.shtml"
+              }
+            ]
+          }
+        }
+        """
+        detail_html = """
+        <html><body>
+          <h1>证监会发布资本市场监管规则</h1>
+          <p>完善资本市场基础制度，促进证券期货市场稳定发展。</p>
+        </body></html>
+        """
+        with patch.object(
+            http_client.SESSION,
+            "request",
+            side_effect=[FakeResponse(200, text=payload), FakeResponse(200, text=detail_html)],
+        ):
+            raw, filtered, meta = collect_web(
+                source,
+                date(2026, 9, 7),
+                date(2026, 9, 13),
+                logging.getLogger("test"),
+            )
+
+        self.assertEqual(meta["error"], "")
+        self.assertEqual(meta["candidates_discovered"], 2)
+        self.assertEqual(meta["candidates_scanned"], 2)
+        self.assertEqual(meta["list_items_with_date"], 2)
+        self.assertEqual(meta["dated_candidates"], 2)
+        self.assertEqual(meta["newest_date_seen"], "2026-09-11")
+        self.assertEqual(meta["oldest_date_seen"], "2026-09-06")
+        self.assertTrue(meta["target_period_reached"])
+        self.assertEqual(meta["stopped_reason"], "passed_target_start")
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["source"], "中国证券监督管理委员会")
+        self.assertEqual(filtered[0]["date"], "2026-09-11")
+        self.assertEqual(
+            filtered[0]["url"],
+            "https://www.csrc.gov.cn/csrc/c100028/c7424382/content.shtml?from=search",
+        )
+
     def test_shfe_max_items_does_not_hide_target_week_candidates(self):
         source = {
             "id": "SRC-076",
