@@ -1,5 +1,8 @@
 import re
 from collections import defaultdict
+from datetime import date
+from difflib import SequenceMatcher
+from urllib.parse import urlparse
 
 
 RESULT_TERMS = (
@@ -125,12 +128,40 @@ def _priority_rank(item):
 
 def _cluster_key(item):
     if not _is_results_document(item):
-        return _cross_source_event_key(item)
+        return _cross_source_event_key(item) or _official_repost_key(item)
     source = item.get("source", "")
     date = item.get("date", "")
     if not source or not date:
         return None
     return source, date, "same-day-results-package"
+
+
+def _official_repost_key(item):
+    if not item.get("official"):
+        return None
+    title = _normalize_text(item.get("title_original", ""))
+    summary = _normalize_text(item.get("summary_original") or item.get("summary") or "")
+    date = item.get("date", "")
+    family = _official_source_family(item)
+    if not title or not summary or not date or not family:
+        return None
+    return "official-repost", family, date, title, summary
+
+
+def _normalize_text(text):
+    text = (text or "").lower()
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", " ", text)
+    return " ".join(text.split())
+
+
+def _official_source_family(item):
+    url = item.get("url", "")
+    host = urlparse(url).netloc.lower()
+    host = host[4:] if host.startswith("www.") else host
+    if host:
+        return host
+    return _normalize_text(item.get("source", ""))
 
 
 def _cross_source_event_key(item):
@@ -185,6 +216,9 @@ def cluster_same_event_items(items):
         else:
             passthrough.append((index, item))
 
+    grouped, repost_passthrough = _merge_official_repost_groups(grouped)
+    passthrough.extend(repost_passthrough)
+
     kept_indexed = list(passthrough)
     clustered_samples = []
     for group in grouped.values():
@@ -214,10 +248,106 @@ def cluster_same_event_items(items):
     return [item for _, item in kept_indexed], clustered_samples
 
 
+def _merge_official_repost_groups(grouped):
+    regular_groups = defaultdict(list)
+    repost_candidates = []
+    passthrough = []
+
+    for key, group in grouped.items():
+        if key and key[0] == "official-repost":
+            repost_candidates.extend((key, entry) for entry in group)
+        else:
+            regular_groups[key].extend(group)
+
+    used = set()
+    for pos, (key, entry) in enumerate(repost_candidates):
+        if pos in used:
+            continue
+        family = key[1]
+        date = key[2]
+        title = key[3]
+        summary = key[4]
+        group = [entry]
+        used.add(pos)
+        for other_pos, (other_key, other_entry) in enumerate(repost_candidates[pos + 1 :], start=pos + 1):
+            if other_pos in used:
+                continue
+            if other_key[1] != family or not _dates_close(date, other_key[2]):
+                continue
+            if _similarity(title, other_key[3]) < 0.94:
+                continue
+            if _similarity(summary, other_key[4]) < 0.80:
+                continue
+            group.append(other_entry)
+            used.add(other_pos)
+
+        if len(group) > 1:
+            regular_groups[("official-repost", family, date, title)].extend(group)
+        else:
+            passthrough.extend(group)
+
+    return regular_groups, passthrough
+
+
+def _dates_close(left, right):
+    if left == right:
+        return True
+    try:
+        left_date = date.fromisoformat(left)
+        right_date = date.fromisoformat(right)
+    except ValueError:
+        return False
+    return abs((left_date - right_date).days) <= 1
+
+
+def _similarity(left, right):
+    return SequenceMatcher(None, left, right).ratio()
+
+
 def _event_priority_rank(item):
+    official_repost_rank = _official_repost_priority_rank(item)
+    if official_repost_rank:
+        return official_repost_rank
     source = (item.get("source") or "").lower()
     if any(term in source for term in PRIMARY_SOURCE_TERMS):
         return -1
     if any(term in source for term in SECONDARY_SOURCE_TERMS):
         return 5
     return _priority_rank(item)
+
+
+def _official_repost_priority_rank(item):
+    if not item.get("official"):
+        return 0
+    url = (item.get("url") or "").lower()
+    title = (item.get("title_original") or "").lower()
+    text = f"{url} {title}"
+    leadership_terms = (
+        "leadership",
+        "leader",
+        "leaders",
+        "profile",
+        "biography",
+        "management",
+        "senior-official",
+        "hanglingdao",
+        "lingdao",
+        "领导",
+    )
+    primary_terms = (
+        "news",
+        "press",
+        "announcement",
+        "announcements",
+        "media",
+        "communication",
+        "communications",
+        "goutongjiaoliu",
+        "要闻",
+        "公告",
+    )
+    if any(term in url for term in leadership_terms):
+        return 10
+    if any(term in text for term in primary_terms):
+        return -2
+    return 0

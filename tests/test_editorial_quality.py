@@ -455,6 +455,90 @@ class SameEventAndGeographyGoldCases(unittest.TestCase):
         self.assertEqual(len(kept), 2)
         self.assertEqual(clustered, [])
 
+    def test_official_primary_page_kept_over_leadership_repost(self):
+        primary = item(
+            "中国人民银行副行长宣昌能会见标普全球总裁玛蒂娜",
+            "9月10日，中国人民银行副行长宣昌能会见了标普全球总裁玛蒂娜，围绕当前中国及全球经济金融形势、中国金融业对外开放及标普在华展业等议题进行了深入交流。",
+            source="中国人民银行",
+            subcategory="中国",
+            date="2026-09-11",
+            url="http://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2026091115515046822/index.html",
+        )
+        leadership_repost = item(
+            "中国人民银行副行长宣昌能会见标普全球总裁玛蒂娜",
+            "9月10日，中国人民银行副行长宣昌能会见了标普全球总裁玛蒂娜，围绕当前中国及全球经济金融形势、中国金融业对外开放及标普在华展业等议题进行了深入交流。",
+            source="中国人民银行",
+            subcategory="中国",
+            date="2026-09-11",
+            url="http://www.pbc.gov.cn/hanglingdao/128697/4675683/4675694/2026091116133282392/index.html",
+        )
+
+        kept, clustered = cluster_same_event_items([leadership_repost, primary])
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["url"], primary["url"])
+        self.assertEqual(clustered[0]["drop_reason"], "same_event_clustered")
+        self.assertEqual(clustered[0]["url"], leadership_repost["url"])
+
+    def test_same_official_organization_different_events_do_not_cluster(self):
+        meeting = item(
+            "中国人民银行副行长宣昌能会见标普全球总裁玛蒂娜",
+            "双方围绕中国及全球经济金融形势、中国金融业对外开放及标普在华展业等议题进行了交流。",
+            source="中国人民银行",
+            date="2026-09-11",
+            url="http://www.pbc.gov.cn/goutongjiaoliu/meeting/index.html",
+        )
+        announcement = item(
+            "中国人民银行公告〔2026〕第24号",
+            "相关事项按照《金融基础设施监督管理办法》等现行相关管理制度执行。",
+            source="中国人民银行",
+            date="2026-09-11",
+            url="http://www.pbc.gov.cn/tiaofasi/announcement/index.html",
+        )
+
+        kept, clustered = cluster_same_event_items([meeting, announcement])
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(clustered, [])
+
+    def test_same_title_from_different_official_organizations_does_not_cluster(self):
+        first = item(
+            "国新办举行金融领域贯彻落实十五五规划新闻发布会",
+            "中国人民银行介绍金融领域贯彻落实十五五规划、推动金融强国建设有关情况。",
+            source="中国人民银行",
+            date="2026-09-10",
+            url="http://www.pbc.gov.cn/goutongjiaoliu/briefing/index.html",
+        )
+        second = item(
+            "国新办举行金融领域贯彻落实十五五规划新闻发布会",
+            "国家外汇管理局介绍金融领域贯彻落实十五五规划、推动金融强国建设有关情况。",
+            source="国家外汇管理局",
+            date="2026-09-10",
+            url="http://www.safe.gov.cn/safe/2026/0910/27866.html",
+        )
+
+        kept, clustered = cluster_same_event_items([first, second])
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(clustered, [])
+
+    def test_unique_leadership_announcement_is_not_removed(self):
+        leadership_item = item(
+            "中国人民银行行长出席金融基础设施监督管理专题会议",
+            "会议研究支付清算、金融基础设施监督管理和跨境支付安排。",
+            source="中国人民银行",
+            date="2026-09-11",
+            url="http://www.pbc.gov.cn/hanglingdao/unique-leadership-event/index.html",
+        )
+        different_item = item(
+            "中国人民银行发布人民币汇率中间价公告",
+            "中国外汇交易中心受权公布人民币汇率中间价。",
+            source="中国人民银行",
+            date="2026-09-11",
+            url="http://www.pbc.gov.cn/zhengcehuobisi/parity/index.html",
+        )
+
+        kept, clustered = cluster_same_event_items([leadership_item, different_item])
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(clustered, [])
+
     def test_subject_based_macro_geography_overrides_source_fallback(self):
         aima_mas = item(
             "MAS announce set of measures to strengthen Singapore's position as a leading asset management hub",
