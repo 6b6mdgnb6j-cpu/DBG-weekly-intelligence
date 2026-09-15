@@ -426,6 +426,75 @@ class HttpClientRetryTests(unittest.TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0]["date"], "2026-09-11")
 
+    def test_nfra_web_adapter_integrates_with_collect_web(self):
+        source = {
+            "id": "SRC-001",
+            "name": "国家金融监督管理总局",
+            "url": "https://www.nfra.gov.cn",
+            "crawl_url": "https://www.nfra.gov.cn/cbircweb/DocInfo/SelectDocByItemUUIdsAndChild?itemUUIds=8401,8402,8403,8404,8406,8409&pageSize=50&orderBy=builddate",
+            "method": "web",
+            "category": "Macro",
+            "subcategory": "中国",
+            "max_pages": 1,
+            "max_items": 5,
+        }
+        payload = """
+        {
+          "rptCode": 200,
+          "data": [
+            {
+              "itemName": "政策规章规范性文件",
+              "itemId": 861,
+              "docInfoVOList": [
+                {
+                  "docId": 1270034,
+                  "docTitle": "国家金融监督管理总局发布资本监管规则",
+                  "publishDate": "2026-09-11 09:00:00",
+                  "docSummary": "完善银行资本监管制度。",
+                  "itemId": null
+                },
+                {
+                  "docId": 1260000,
+                  "docTitle": "早于目标周的监管规则",
+                  "publishDate": "2026-09-06 09:00:00",
+                  "itemId": 861
+                }
+              ]
+            }
+          ]
+        }
+        """
+        detail_html = """
+        <html><body>
+          <h1>国家金融监督管理总局发布资本监管规则</h1>
+          <p>完善银行资本监管制度，推动金融机构稳健经营。</p>
+        </body></html>
+        """
+        with patch.object(
+            http_client.SESSION,
+            "request",
+            side_effect=[FakeResponse(200, text=payload), FakeResponse(200, text=detail_html)],
+        ):
+            raw, filtered, meta = collect_web(
+                source,
+                date(2026, 9, 7),
+                date(2026, 9, 13),
+                logging.getLogger("test"),
+            )
+
+        self.assertEqual(meta["error"], "")
+        self.assertEqual(meta["candidates_discovered"], 2)
+        self.assertEqual(meta["candidates_scanned"], 2)
+        self.assertEqual(meta["list_items_with_date"], 2)
+        self.assertEqual(meta["dated_candidates"], 2)
+        self.assertEqual(meta["newest_date_seen"], "2026-09-11")
+        self.assertEqual(meta["oldest_date_seen"], "2026-09-06")
+        self.assertTrue(meta["target_period_reached"])
+        self.assertEqual(meta["stopped_reason"], "passed_target_start")
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["source"], "国家金融监督管理总局")
+        self.assertEqual(filtered[0]["date"], "2026-09-11")
+
     def test_shfe_max_items_does_not_hide_target_week_candidates(self):
         source = {
             "id": "SRC-076",

@@ -8,6 +8,7 @@ from crawler.official_source_parser import (
     parse_sp_dji_archive_entry,
     sp_dji_source_filter,
 )
+from crawler.adapters.nfra import parse_nfra_docinfo_json
 from crawler.adapters.shfe import parse_shfe_notice_list
 
 
@@ -130,6 +131,83 @@ class OfficialSourceParserRegressionTests(unittest.TestCase):
             items[0]["url"],
             "https://www.shfe.com.cn/publicnotice/notice/202609/t20260911_833384.html",
         )
+
+    def test_nfra_docinfo_json_extracts_title_date_url_and_category(self):
+        payload = """
+        {
+          "rptCode": 200,
+          "msg": "成功",
+          "data": [
+            {
+              "itemName": "政策规章规范性文件",
+              "itemId": 861,
+              "docInfoVOList": [
+                {
+                  "docId": 1270034,
+                  "docTitle": "国家金融监督管理总局关于印发《商品住房开发贷款管理办法（试行）》的通知",
+                  "publishDate": "2026-08-28 19:15:10",
+                  "builddate": "2026-08-28",
+                  "docSummary": "规范商品住房开发贷款管理。",
+                  "itemName": null,
+                  "itemId": null
+                }
+              ]
+            }
+          ]
+        }
+        """
+        soup = BeautifulSoup(payload, "html.parser")
+        items = parse_nfra_docinfo_json(
+            soup,
+            "https://www.nfra.gov.cn/cbircweb/DocInfo/SelectDocByItemUUIdsAndChild",
+            {"id": "SRC-001", "name": "国家金融监督管理总局"},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "国家金融监督管理总局关于印发《商品住房开发贷款管理办法（试行）》的通知")
+        self.assertEqual(items[0]["date"], "2026-08-28 19:15:10")
+        self.assertEqual(
+            items[0]["url"],
+            "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1270034&itemId=861",
+        )
+        self.assertEqual(items[0]["summary"], "规范商品住房开发贷款管理。")
+        self.assertEqual(items[0]["content_type"], "nfra_docinfo")
+        self.assertEqual(items[0]["category"], "政策规章规范性文件")
+
+    def test_nfra_docinfo_json_ignores_malformed_records(self):
+        payload = """
+        {
+          "rptCode": 200,
+          "data": [
+            {"docId": 1, "docTitle": "", "publishDate": "2026-08-28", "itemId": 861},
+            {"docId": 2, "docTitle": "Missing date", "itemId": 861},
+            {"docTitle": "Missing URL parts", "publishDate": "2026-08-28"},
+            {
+              "docId": 3,
+              "docTitle": "Valid NFRA item",
+              "builddate": "2026-08-28",
+              "itemId": 861
+            }
+          ]
+        }
+        """
+        soup = BeautifulSoup(payload, "html.parser")
+        items = parse_nfra_docinfo_json(
+            soup,
+            "https://www.nfra.gov.cn/cbircweb/DocInfo/SelectDocByItemUUIdsAndChild",
+            {"id": "SRC-001", "name": "国家金融监督管理总局"},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "Valid NFRA item")
+        self.assertEqual(items[0]["date"], "2026-08-28")
+
+    def test_nfra_docinfo_json_handles_empty_or_invalid_payload(self):
+        invalid = BeautifulSoup("<html>not json</html>", "html.parser")
+        empty = BeautifulSoup('{"rptCode": 200, "data": []}', "html.parser")
+
+        self.assertEqual(parse_nfra_docinfo_json(invalid, "https://www.nfra.gov.cn", {}), [])
+        self.assertEqual(parse_nfra_docinfo_json(empty, "https://www.nfra.gov.cn", {}), [])
 
 
 if __name__ == "__main__":

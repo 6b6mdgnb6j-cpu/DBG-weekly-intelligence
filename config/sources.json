@@ -18,7 +18,8 @@
     "technical_status": "network_probe_failed",
     "max_candidates": 8,
     "registry_source": "周报信息来源清单_副本.docx",
-    "registry_raw": "1.国家金融监督管理总局—https://www.nfra.gov.cn"
+    "registry_raw": "1.国家金融监督管理总局—https://www.nfra.gov.cn",
+    "crawl_url": "https://www.nfra.gov.cn/cbircweb/DocInfo/SelectDocByItemUUIdsAndChild?itemUUIds=8401,8402,8403,8404,8406,8409&pageSize=50&orderBy=builddate"
   },
   {
     "id": "SRC-002",

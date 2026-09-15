@@ -7,6 +7,7 @@ from .govuk import parse_govuk_list
 from .hkma import parse_hkma_list
 from .hkex import parse_hkex_list
 from .jpx import parse_jpx_list
+from .nfra import parse_nfra_docinfo_json
 from .osc import parse_osc_list
 from .sfc import parse_sfc_list
 from .shfe import parse_shfe_notice_list
@@ -27,6 +28,7 @@ from .expansion import (
 
 
 ADAPTERS = {
+    "SRC-001": parse_nfra_docinfo_json,
     "SRC-006": parse_hkma_list,
     "SRC-007": parse_sfc_list,
     "SRC-021": parse_fca_list,
