@@ -495,7 +495,7 @@ class HttpClientRetryTests(unittest.TestCase):
         self.assertEqual(filtered[0]["source"], "国家金融监督管理总局")
         self.assertEqual(filtered[0]["date"], "2026-09-11")
 
-    def test_csrc_web_adapter_integrates_with_collect_web(self):
+    def test_csrc_web_adapter_integrates_with_collect_web_html_fallback(self):
         source = {
             "id": "SRC-003",
             "name": "中国证券监督管理委员会",
@@ -508,24 +508,24 @@ class HttpClientRetryTests(unittest.TestCase):
             "max_items": 5,
         }
         payload = """
-        {
-          "data": {
-            "results": [
-              {
-                "title": "证监会发布资本市场监管规则",
-                "publishedTime": "2026-09-11",
-                "url": "/csrc/c100028/c7424382/content.shtml?from=search",
-                "channelName": "证监会要闻",
-                "summary": "完善资本市场基础制度。"
-              },
-              {
-                "title": "早于目标周的证监会新闻",
-                "publishedTime": "2026-09-06",
-                "url": "/csrc/c100028/c7424000/content.shtml"
-              }
-            ]
-          }
-        }
+        <html><body>
+          <ul class="listTxt" id="body">
+            <li>
+              <div class="title">
+                <a href="//www.csrc.gov.cn/csrc/c100028/c7424382/content.shtml?from=search">
+                  [证监会要闻 ]  证监会发布资本市场监管规则
+                </a>
+              </div>
+              <div class="date">2026-09-11 </div>
+            </li>
+            <li>
+              <div class="title">
+                <a href="/csrc/c100028/c7424000/content.shtml">早于目标周的证监会新闻</a>
+              </div>
+              <div class="date">2026-09-06</div>
+            </li>
+          </ul>
+        </body></html>
         """
         detail_html = """
         <html><body>

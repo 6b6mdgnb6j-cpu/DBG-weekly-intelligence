@@ -279,6 +279,55 @@ class OfficialSourceParserRegressionTests(unittest.TestCase):
         self.assertEqual(parse_csrc_search_json(invalid, "https://www.csrc.gov.cn", {}), [])
         self.assertEqual(parse_csrc_search_json(empty, "https://www.csrc.gov.cn", {}), [])
 
+    def test_csrc_search_html_extracts_title_date_url_and_category(self):
+        html = """
+        <ul class="listTxt" id="body">
+          <li>
+            <div class="title">
+              <a href="//www.csrc.gov.cn/csrc/c100028/c7658236/content.shtml?from=search" target="_blank">
+                [证监会要闻 ]  中国证监会发布《期货公司监督管理办法》及配套实施公告
+              </a>
+            </div>
+            <div style="float: right" class="date">2026-09-11 </div>
+          </li>
+          <li>
+            <a href="/csrc/c100028/">证监会要闻</a>
+            <div class="date">2026-09-11</div>
+          </li>
+          <li>
+            <div class="title"><a href="/csrc/c100028/c7658000/content.shtml">Missing date</a></div>
+          </li>
+        </ul>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        items = parse_csrc_search_json(
+            soup,
+            "https://www.csrc.gov.cn/searchList/a1a078ee0bc54721ab6b148884c784a8",
+            {"id": "SRC-003", "name": "中国证券监督管理委员会"},
+        )
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "中国证监会发布《期货公司监督管理办法》及配套实施公告")
+        self.assertEqual(items[0]["date"], "2026-09-11")
+        self.assertEqual(
+            items[0]["url"],
+            "https://www.csrc.gov.cn/csrc/c100028/c7658236/content.shtml?from=search",
+        )
+        self.assertEqual(items[0]["category"], "证监会要闻")
+        self.assertEqual(items[0]["content_type"], "csrc_search_html")
+
+    def test_csrc_search_html_handles_empty_page(self):
+        soup = BeautifulSoup("<html><body><ul class='listTxt'></ul></body></html>", "html.parser")
+
+        self.assertEqual(
+            parse_csrc_search_json(
+                soup,
+                "https://www.csrc.gov.cn/searchList/a1a078ee0bc54721ab6b148884c784a8",
+                {"id": "SRC-003", "name": "中国证券监督管理委员会"},
+            ),
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -77,10 +77,52 @@ def _normalize_url(href):
     return urljoin(CSRC_BASE_URL, href).split("#")[0]
 
 
+def _split_html_title(value):
+    text = _clean(value)
+    match = re.match(r"^\[([^\]]+)\]\s*(.+)$", text)
+    if not match:
+        return text, ""
+    return _clean(match.group(2)), _clean(match.group(1))
+
+
+def _parse_html_list(soup):
+    items = []
+    seen = set()
+    for entry in soup.select("ul.listTxt > li, .listTxt > li, .list li"):
+        link = entry.select_one(".title a[href], a[href]")
+        date_el = entry.select_one(".date")
+        if not link or not date_el:
+            continue
+
+        url = _normalize_url(link.get("href"))
+        if not url or url in seen:
+            continue
+        if "csrc.gov.cn" not in url or "content.shtml" not in url:
+            continue
+
+        title, category = _split_html_title(link.get_text(" ", strip=True))
+        raw_date = _clean(date_el.get_text(" ", strip=True))
+        if not title or not raw_date:
+            continue
+
+        seen.add(url)
+        items.append(
+            {
+                "title": title,
+                "url": url,
+                "date": raw_date,
+                "summary": "",
+                "content_type": "csrc_search_html",
+                "category": category,
+            }
+        )
+    return items
+
+
 def parse_csrc_search_json(soup, current_url, source, week_start=None, week_end=None):
     payload = _load_json_payload(soup)
     if payload is None:
-        return []
+        return _parse_html_list(soup)
 
     items = []
     seen = set()
