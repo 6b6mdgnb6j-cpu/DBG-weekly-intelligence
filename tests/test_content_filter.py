@@ -496,6 +496,66 @@ class ContentFilterRegressionTests(unittest.TestCase):
                 self.assertLess(score, MIN_SCORE, reason)
                 self.assertIn("downrank:low_value_event", reason)
 
+    def test_shfe_trading_management_rule_revision_is_relevant(self):
+        item = make_item(
+            "关于发布《上海期货交易所交易管理办法》（修订案）的公告",
+            "《上海期货交易所交易管理办法》（修订案）已经发布，涉及交易规则和市场管理安排。",
+            source="上海期货交易所",
+            category="Competitor",
+            subcategory="交易与清算",
+            brand="SHFE",
+            official=True,
+            priority=1,
+        )
+        score, reason = relevance(item)
+        self.assertGreaterEqual(score, MIN_SCORE, reason)
+        self.assertIn("hard_signal:exchange_market_structure_change", reason)
+
+    def test_routine_shfe_system_test_notice_remains_rejected(self):
+        item = make_item(
+            "关于交易系统测试的通知",
+            "上海期货交易所将于周末开展交易系统测试。",
+            source="上海期货交易所",
+            category="Competitor",
+            subcategory="交易与清算",
+            brand="SHFE",
+            official=True,
+            priority=1,
+        )
+        score, reason = relevance(item)
+        self.assertLess(score, MIN_SCORE, reason)
+        self.assertNotIn("hard_signal:exchange_market_structure_change", reason)
+
+    def test_shfe_warehouse_approval_notice_remains_rejected(self):
+        item = make_item(
+            "关于同意上港云仓（上海）仓储管理有限公司调整铜期货存放点的公告",
+            "上海期货交易所同意交割仓库存放点调整。",
+            source="上海期货交易所",
+            category="Competitor",
+            subcategory="交易与清算",
+            brand="SHFE",
+            official=True,
+            priority=1,
+        )
+        score, reason = relevance(item)
+        self.assertLess(score, MIN_SCORE, reason)
+        self.assertNotIn("hard_signal:exchange_market_structure_change", reason)
+
+    def test_exchange_contract_rule_change_is_relevant(self):
+        item = make_item(
+            "CME amends contract specifications for interest rate futures",
+            "CME adopted rule amendments changing contract specifications and margin requirements for futures contracts.",
+            source="芝加哥商品交易所集团",
+            category="Competitor",
+            subcategory="Trading / Clearing",
+            brand="CME",
+            official=True,
+            priority=1,
+        )
+        score, reason = relevance(item)
+        self.assertGreaterEqual(score, MIN_SCORE, reason)
+        self.assertIn("hard_signal:exchange_market_structure_change", reason)
+
 
 if __name__ == "__main__":
     unittest.main()

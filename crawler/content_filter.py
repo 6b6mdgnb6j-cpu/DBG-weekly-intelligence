@@ -187,6 +187,128 @@ FINANCIAL_INFRASTRUCTURE_RULE_TERMS = (
     "监督管理",
 )
 
+EXCHANGE_MARKET_STRUCTURE_SOURCES = (
+    "上海期货交易所",
+    "上海国际能源交易中心",
+    "欧洲期交所",
+    "芝加哥商品交易所集团",
+    "芝加哥期权交易所",
+    "洲际交易所",
+    "香港交易所",
+    "日本交易所集团",
+    "泛欧交易所",
+    "伦敦证券交易所集团",
+    "瑞士交易所",
+    "巴西证券商品期货交易所",
+    "纳斯达克公司",
+    "新加坡交易所",
+    "shfe",
+    "ine",
+    "eurex",
+    "cme",
+    "cboe",
+    "ice",
+    "hkex",
+    "jpx",
+    "euronext",
+    "lseg",
+    "six",
+    "b3",
+    "nasdaq",
+    "sgx",
+)
+
+
+EXCHANGE_MARKET_STRUCTURE_ACTION_TERMS = (
+    "发布",
+    "修订",
+    "修订案",
+    "调整",
+    "上市",
+    "launch",
+    "launches",
+    "list",
+    "lists",
+    "listing",
+    "amend",
+    "amends",
+    "amendment",
+    "amendments",
+    "revise",
+    "revises",
+    "revision",
+    "revisions",
+    "change",
+    "changes",
+    "adjust",
+    "adjusts",
+    "adjustment",
+    "updates",
+)
+
+
+EXCHANGE_MARKET_STRUCTURE_OBJECT_TERMS = (
+    "交易管理办法",
+    "交易规则",
+    "业务规则",
+    "业务细则",
+    "风险控制管理办法",
+    "交易限额",
+    "涨跌停板幅度",
+    "交易保证金比例",
+    "保证金比例",
+    "限仓",
+    "期货合约",
+    "期权合约",
+    "合约上市",
+    "上市挂牌基准价",
+    "contract specification",
+    "contract specifications",
+    "trading rule",
+    "trading rules",
+    "rule amendment",
+    "rule amendments",
+    "market structure",
+    "margin requirement",
+    "margin requirements",
+    "price limit",
+    "price limits",
+    "position limit",
+    "position limits",
+    "trading limit",
+    "trading limits",
+    "risk management framework",
+    "new futures",
+    "new options",
+    "new derivatives contract",
+    "new derivatives contracts",
+)
+
+
+EXCHANGE_MARKET_STRUCTURE_EXCLUSION_TERMS = (
+    "交易系统测试",
+    "system test",
+    "system testing",
+    "test session",
+    "违规处理决定",
+    "限制开仓监管措施",
+    "部分客户",
+    "自律监管信息",
+    "注册生产企业",
+    "存放点",
+    "仓储",
+    "交割仓库",
+    "warehouse",
+    "warehousing",
+    "delivery warehouse",
+    "registered producer",
+    "disciplinary decision",
+    "disciplinary notice",
+    "enforcement notice",
+    "monthly statistics",
+    "monthly self-regulation",
+)
+
 
 MATERIAL_DEVELOPMENT_TERMS = [
     "launch", "launches", "introduction of", "new product", "new futures",
@@ -892,6 +1014,28 @@ def is_official_financial_infrastructure_regulatory_signal(item, text):
     )
 
 
+def is_exchange_market_structure_change_signal(item, text):
+    if not item.get("official"):
+        return False
+    if (item.get("category") or "").lower() not in {"competitor", "dbg"}:
+        return False
+    source_context = normalize_text(
+        item.get("source"),
+        item.get("brand"),
+        item.get("title_original"),
+        item.get("summary_original"),
+        item.get("summary"),
+    )
+    if not contains_any_phrase(source_context, EXCHANGE_MARKET_STRUCTURE_SOURCES):
+        return False
+    if contains_any_phrase(text, EXCHANGE_MARKET_STRUCTURE_EXCLUSION_TERMS):
+        return False
+    return contains_any_phrase(text, EXCHANGE_MARKET_STRUCTURE_ACTION_TERMS) and contains_any_phrase(
+        text,
+        EXCHANGE_MARKET_STRUCTURE_OBJECT_TERMS,
+    )
+
+
 # Scoring
 
 def score_item(item):
@@ -985,6 +1129,10 @@ def score_item(item):
     if is_official_financial_infrastructure_regulatory_signal(item, text):
         score += 6
         reasons.append("hard_signal:financial_infrastructure_regulation")
+
+    if is_exchange_market_structure_change_signal(item, text):
+        score += 6
+        reasons.append("hard_signal:exchange_market_structure_change")
 
     if is_regulatory_final_rule_signal(item, text):
         score += 8
