@@ -3230,7 +3230,7 @@
     "url": "https://www.cmegroup.com",
     "category": "Competitor",
     "subcategory": "交易与清算",
-    "method": "web",
+    "method": "cme_press_rss",
     "priority": 1,
     "source_type": "competitor_official",
     "official": true,
@@ -3239,12 +3239,13 @@
     "competitor_type": "international",
     "enabled": true,
     "status": "active",
-    "technical_class": "blocked_or_unreachable",
-    "technical_status": "blocked",
+    "technical_class": "official_rss",
+    "technical_status": "working",
     "max_candidates": 8,
     "registry_source": "周报信息来源清单_副本.docx",
     "registry_raw": "149.芝加哥商品交易所集团(CMEGroup)—https://www.cmegroup.com",
-    "crawl_url": "https://www.cmegroup.com/media-room/press-releases.html"
+    "crawl_url": "https://feeds.feedburner.com/mediaroom/CMsF",
+    "max_scan_candidates": 30
   },
   {
     "id": "SRC-150",

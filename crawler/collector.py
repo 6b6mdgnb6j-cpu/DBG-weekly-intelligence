@@ -9,6 +9,7 @@ from .dedupe import dedupe_news
 from .event_cluster import cluster_same_event_items
 from .geography import apply_macro_geography
 from .news_model import ensure_news_schema
+from .adapters.cme import collect_cme_press_rss
 from .official_source_parser import (
     collect_asic_media_releases,
     collect_cboe_press,
@@ -76,6 +77,9 @@ def empty_status(source):
         "status": "success",
         "method": source.get("method", ""),
         "list_url": source.get("crawl_url") or source.get("url", ""),
+        "feed_used": "",
+        "feed_key": "",
+        "feed_stats": [],
         "candidates": 0,
         "candidates_discovered": 0,
         "candidates_scanned": 0,
@@ -145,6 +149,7 @@ def classify_empty_status(status, source):
         "lseg_search",
         "nasdaq_press",
         "cboe_press",
+        "cme_press_rss",
         "ice_q4",
         "msci_rss",
         "asic_media_releases",
@@ -229,6 +234,8 @@ def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR, require_
                 source_raw, source_filtered, meta = collect_nasdaq_press(source, week_start, week_end, logger)
             elif method == "cboe_press":
                 source_raw, source_filtered, meta = collect_cboe_press(source, week_start, week_end, logger)
+            elif method == "cme_press_rss":
+                source_raw, source_filtered, meta = collect_cme_press_rss(source, week_start, week_end, logger)
             elif method == "ice_q4":
                 source_raw, source_filtered, meta = collect_ice_q4(source, week_start, week_end, logger)
             elif method == "iosco_official":
@@ -273,6 +280,9 @@ def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR, require_
             status["within_period"] = len(source_filtered)
             status["sample_candidates"] = meta.get("sample_candidates", [])[:3]
             status["list_url"] = meta.get("list_url", status["list_url"])
+            status["feed_used"] = meta.get("feed_used", "")
+            status["feed_key"] = meta.get("feed_key", "")
+            status["feed_stats"] = meta.get("feed_stats", [])
             status["requests_total"] = int(meta.get("requests_total") or 0)
             status["request_attempts_total"] = int(meta.get("request_attempts_total") or 0)
             status["retried_requests"] = int(meta.get("retried_requests") or 0)
