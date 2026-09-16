@@ -1631,10 +1631,10 @@
   {
     "id": "SRC-075",
     "name": "新加坡交易所",
-    "url": "https://www.sgx.com",
+    "url": "https://rulebook.sgx.com/latest-updates?items_per_page=20",
     "category": "Competitor",
     "subcategory": "交易与清算",
-    "method": "web",
+    "method": "sgx_rulebook",
     "priority": 1,
     "source_type": "exchange",
     "official": true,
@@ -1643,12 +1643,13 @@
     "competitor_type": "international",
     "enabled": true,
     "status": "active",
-    "technical_class": "js_dynamic",
-    "technical_status": "js_required",
+    "technical_class": "static_html",
+    "technical_status": "working",
     "max_candidates": 8,
     "registry_source": "周报信息来源清单_副本.docx",
     "registry_raw": "75.新加坡交易所(SGX)—https://www.sgx.com",
-    "crawl_url": "https://www.sgx.com/media-centre"
+    "crawl_url": "https://rulebook.sgx.com/latest-updates?items_per_page=20",
+    "max_scan_candidates": 100
   },
   {
     "id": "SRC-076",
