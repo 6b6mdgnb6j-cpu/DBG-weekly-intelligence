@@ -4076,5 +4076,29 @@
     "registry_raw": "S&P Global official press archive category 784: S&P Dow Jones Indices",
     "added_from_baseline": "baseline-64-sources",
     "crawl_url": "https://press.spglobal.com/index.php?s=2429&category=784&year=2026&l=100"
+  },
+  {
+    "id": "SRC-188",
+    "name": "LCH",
+    "url": "https://www.lseg.com/en/post-trade/clearing/",
+    "category": "Competitor",
+    "subcategory": "交易与清算",
+    "method": "lch_clearing",
+    "priority": 1,
+    "source_type": "competitor_official",
+    "official": true,
+    "max_items": 10,
+    "brand": "Eurex",
+    "competitor_type": "international",
+    "enabled": true,
+    "status": "active",
+    "technical_class": "official_multi_surface",
+    "technical_status": "working",
+    "max_candidates": 40,
+    "max_pages": 6,
+    "max_scan_candidates": 300,
+    "registry_source": "source coverage gap analysis phase 3",
+    "registry_raw": "LCH official proposed rule changes and Ltd/SA member updates",
+    "crawl_url": "https://www.lseg.com/en/post-trade/clearing/clearing-resources/rulebooks/proposed-rule-changes"
   }
 ]

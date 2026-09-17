@@ -10,6 +10,7 @@ from .event_cluster import cluster_same_event_items
 from .geography import apply_macro_geography
 from .news_model import ensure_news_schema
 from .adapters.cme import collect_cme_press_rss
+from .adapters.lch import collect_lch_clearing
 from .adapters.sgx import collect_sgx_rulebook
 from .official_source_parser import (
     collect_asic_media_releases,
@@ -158,6 +159,7 @@ def classify_empty_status(status, source):
         "pcaob_hawksearch",
         "sp_dji_press_archive",
         "sgx_rulebook",
+        "lch_clearing",
     }
     if status["within_period"] == 0:
         if status["date_parse_failed"] > status["dated_candidates"]:
@@ -238,6 +240,8 @@ def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR, require_
                 source_raw, source_filtered, meta = collect_cboe_press(source, week_start, week_end, logger)
             elif method == "cme_press_rss":
                 source_raw, source_filtered, meta = collect_cme_press_rss(source, week_start, week_end, logger)
+            elif method == "lch_clearing":
+                source_raw, source_filtered, meta = collect_lch_clearing(source, week_start, week_end, logger)
             elif method == "sgx_rulebook":
                 source_raw, source_filtered, meta = collect_sgx_rulebook(source, week_start, week_end, logger)
             elif method == "ice_q4":
