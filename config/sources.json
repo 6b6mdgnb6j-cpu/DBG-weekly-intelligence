@@ -1193,9 +1193,9 @@
     "brand": "Eurex",
     "competitor_type": "international",
     "enabled": false,
-    "status": "active",
+    "status": "deferred",
     "technical_class": "static_web",
-    "technical_status": "manual_review",
+    "technical_status": "duplicate_registry_entry",
     "max_candidates": 8,
     "registry_source": "周报信息来源清单_副本.docx",
     "registry_raw": "54.纳斯达克交易所(NASDAQ)—https://www.nasdaq.com"
