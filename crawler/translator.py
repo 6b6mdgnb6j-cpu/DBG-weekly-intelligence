@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v21"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v22"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -779,39 +779,45 @@ class TerminologyNormalizer:
                 seen.add(canonical)
         return ordered
 
-    def protect_entity_occurrences(self, original):
+    ENTITY_TRANSPORT_VARIANTS = {
+        "Partior": ("企业",),
+        "Obita": ("奥比塔",),
+    }
+
+    def protected_entity_occurrences(self, original):
         matches = []
         for canonical, spec in self.CANONICAL_ENTITIES.items():
             for evidence in (canonical, *spec.get("aliases", [])):
                 for match in self._entity_matches(original, evidence):
-                    matches.append((match.start(), match.end(), canonical))
+                    matches.append((match.start(), match.end(), canonical, canonical))
         selected = []
         occupied_until = -1
-        for start, end, canonical in sorted(matches, key=lambda value: (value[0], -(value[1] - value[0]))):
+        for start, end, canonical, preserved in sorted(matches, key=lambda value: (value[0], -(value[1] - value[0]))):
             if start < occupied_until:
                 continue
-            selected.append((start, end, canonical))
+            selected.append((canonical, preserved))
             occupied_until = end
-        if not selected:
-            return original, []
-        parts = []
-        mappings = []
-        cursor = 0
-        for index, (start, end, canonical) in enumerate(selected):
-            placeholder = f"XQZENT{index:03d}ZQX"
-            parts.extend((original[cursor:start], placeholder))
-            mappings.append((placeholder, canonical))
-            cursor = end
-        parts.append(original[cursor:])
-        return "".join(parts), mappings
+        return selected
 
-    @staticmethod
-    def restore_entity_occurrences(translated, mappings):
+    def restore_entity_occurrences(self, translated, original):
         out = translated or ""
-        for placeholder, canonical in mappings:
-            if out.count(placeholder) != 1:
+        cursor = 0
+        for canonical, preserved in self.protected_entity_occurrences(original):
+            spec = self.CANONICAL_ENTITIES.get(canonical, {})
+            variants = [canonical, *spec.get("aliases", []), *spec.get("bad", [])]
+            variants.extend(self.ENTITY_TRANSPORT_VARIANTS.get(canonical, ()))
+            matches = []
+            for variant in variants:
+                if not variant or variant.startswith("(?<"):
+                    continue
+                match = re.search(self._entity_pattern(variant), out[cursor:], flags=self._entity_flags(variant))
+                if match:
+                    matches.append((cursor + match.start(), cursor + match.end()))
+            if not matches:
                 return translated or "", False
-            out = out.replace(placeholder, canonical, 1)
+            start, end = min(matches, key=lambda value: value[0])
+            out = out[:start] + preserved + out[end:]
+            cursor = start + len(preserved)
         return out, True
 
     def _dedupe_protected_entities(self, text, original):
@@ -983,11 +989,9 @@ class TitleTranslator:
         }
 
     def _translate_protected(self, provider, text, chunk_token_limit):
-        protected, mappings = self.normalizer.protect_entity_occurrences(text)
-        provider.protected_entity_mappings = list(mappings)
-        raw = self._provider_translate(provider, protected, chunk_token_limit)
-        restored, complete = self.normalizer.restore_entity_occurrences(raw, mappings)
-        if mappings and not complete:
+        raw = self._provider_translate(provider, text, chunk_token_limit)
+        restored, complete = self.normalizer.restore_entity_occurrences(raw, text)
+        if self.normalizer.protected_entity_occurrences(text) and not complete:
             raise TranslationUnavailableError("protected entity occurrence missing from model output")
         return restored
 

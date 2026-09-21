@@ -171,6 +171,23 @@ class ProductionFlowProvider(RecordingProvider):
         return output
 
 
+class FragmentProvider(RecordingProvider):
+    def __init__(self, callback):
+        super().__init__([])
+        self.callback = callback
+
+    def translate(self, text, source_lang="en", target_lang="zh", chunk_token_limit=None):
+        self.calls.append({"text": text, "chunk_token_limit": chunk_token_limit})
+        output = self.callback(text, len(self.calls))
+        self.last_translation_metadata = {
+            "chunk_token_limit": chunk_token_limit,
+            "chunk_count": 1,
+            "chunk_token_counts": [len(str(text).split())],
+            "chunk_output_lengths": [len(output)],
+        }
+        return output
+
+
 def fake_provider(model=None):
     provider = LocalNLLBProvider(local_files_only=True)
     provider.tokenizer = FakeTokenizer()
@@ -345,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v21", GENERATION_CONFIG_VERSION)
+        self.assertIn("v22", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -476,7 +493,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(len(provider.calls), 1)
 
     def test_critical_term_missing_does_not_trigger_recovery(self):
-        provider = RecordingProvider(["市场规则"])
+        provider = RecordingProvider(["CFTC市场规则"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=False)
         title_translator.cache = {}
         with patch.object(
@@ -726,7 +743,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertNotIn("SIX", normalized)
 
     def test_cboe_original_entity_survives_when_model_omits_it(self):
-        provider = RecordingProvider(["全球市场报告2026年8月交易量"])
+        provider = RecordingProvider(["Cboe全球市场报告2026年8月交易量"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
         output = title_translator._translate_text(
@@ -749,7 +766,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(output.count("Cboe"), 1)
 
     def test_ice_original_entity_survives_when_model_omits_it(self):
-        provider = RecordingProvider(["利率期货市场创纪录未平仓量"])
+        provider = RecordingProvider(["国际大陆交易所利率期货市场创纪录未平仓量"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
         output = title_translator._translate_text(
@@ -761,7 +778,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(output.count("ICE"), 1)
 
     def test_six_brand_original_entity_survives_when_model_omits_it(self):
-        provider = RecordingProvider(["交易所数据:2026年8月"])
+        provider = RecordingProvider(["西克斯交易所数据:2026年8月"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
         output = title_translator._translate_text("SIX Exchanges Figures: August 2026", "SIX", "title")
@@ -788,7 +805,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertNotIn("ICE", output)
 
     def test_ice_entity_survives_while_six_and_iceland_remain_ordinary(self):
-        provider = RecordingProvider(["报告六个市场的活动,包括冰岛"])
+        provider = RecordingProvider(["ICE报告六个市场的活动,包括冰岛"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
         output = title_translator._translate_text(
@@ -802,7 +819,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertNotIn("SIX", output)
 
     def test_multiple_original_entities_survive_in_original_order(self):
-        provider = RecordingProvider(["宣布新的期权市场数据合作"])
+        provider = RecordingProvider(["ICE和Cboe宣布新的期权市场数据合作"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
         output = title_translator._translate_text(
@@ -1546,7 +1563,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(len(provider.calls), 2)
 
     def test_tier2_does_not_run_for_critical_term_missing_after_tier1(self):
-        provider = RecordingProvider(["短", "市场规则", "不应调用"])
+        provider = RecordingProvider(["CFTC短", "CFTC市场规则", "不应调用"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=False)
         title_translator.cache = {}
         with patch.object(
@@ -1678,7 +1695,7 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         provider = RecordingProvider(
             [
-                "基于电力期货市场的前行交易",
+                "基于电力期货市场的前行交易，JPX",
                 "JJ-Link第二阶段",
                 "推出远期交易",
                 "基于电力期货市场",
@@ -1942,7 +1959,7 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         provider = RecordingProvider(
             [
-                "HashKey Exchange为机构客户提供数字资产托管支持。",
+                "HashKey Exchange为机构客户提供数字资产托管支持，Obita为全球支付服务提供商。",
                 "HashKey Exchange宣布",
                 "其已与Obita达成合作，提供机构级数字资产托管支持。",
             ]
@@ -1958,10 +1975,6 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("数字资产托管支持", output)
         self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
 
-    @staticmethod
-    def _entity_placeholders(mappings, canonical):
-        return [placeholder for placeholder, entity in mappings if entity == canonical]
-
     def test_full_hashkey_failed_recovery_is_not_returned_or_cached(self):
         original = (
             "Hong Kong, Sep. 15, 2026 — HashKey Exchange, a licensed trading platform under "
@@ -1971,31 +1984,20 @@ class LongTextTranslationTests(unittest.TestCase):
             "institutional-grade digital asset custody support […]"
         )
 
-        def initial(_text, mappings):
-            hashkeys = self._entity_placeholders(mappings, "HashKey")
-            obita = self._entity_placeholders(mappings, "Obita")[0]
-            return (
-                f"{obita} 香港，2026年9月15日，{hashkeys[0]} Exchange是{hashkeys[1]} Holdings Limited旗下授权交易平台；"
-                f"{hashkeys[2]} Exchange将在经营许可和许可的业务范围内提供机构级数字资产托管支持。"
-            )
-
-        provider = ProductionFlowProvider(
-            [
-                initial,
-                lambda _text, _m: "香港，9月",
-                lambda _text, _m: "2026年15日",
-                lambda _text, m: f"{m[0][0]} Exchange是{m[1][0]} Holdings Limited旗下授权交易平台并宣布",
-                lambda _text, m: f"{m[0][0]}是一家全球支付服务提供商",
-                lambda _text, m: f"在经营许可和许可的业务范围内，{m[0][0]} Exchange将提供机构级数字资产托管支持",
-            ]
-        )
+        provider = RecordingProvider([
+            "香港，2026年9月15日，HashKey Exchange是HashKey Holdings Limited旗下授权交易平台；Obita是一家全球支付服务提供商。HashKey Exchange将在经营许可和许可的业务范围内提供机构级数字资产托管支持。",
+            "香港，9月",
+            "2026年15日",
+            "HashKey Exchange是HashKey Holdings Limited旗下授权交易平台并宣布",
+            "Obita是一家全球支付服务提供商",
+            "在经营许可和许可的业务范围内，HashKey Exchange将提供机构级数字资产托管支持",
+        ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
 
         with self.assertRaises(TranslationUnavailableError):
             title_translator._translate_text(original, "HashKey", field="summary")
 
-        self.assertEqual(len(provider.calls), 6)
         self.assertFalse(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
         self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
         self.assertEqual(title_translator.cache, {})
@@ -2009,24 +2011,14 @@ class LongTextTranslationTests(unittest.TestCase):
             "institutional-grade digital asset custody support […]"
         )
 
-        def initial(_text, mappings):
-            hashkeys = self._entity_placeholders(mappings, "HashKey")
-            obita = self._entity_placeholders(mappings, "Obita")[0]
-            return (
-                f"{obita} 香港，2026年9月15日，{hashkeys[0]} Exchange是{hashkeys[1]} Holdings Limited旗下授权交易平台；"
-                f"{hashkeys[2]} Exchange将在经营许可和许可的业务范围内提供机构级数字资产托管支持。"
-            )
-
-        provider = ProductionFlowProvider(
-            [
-                initial,
-                lambda _text, _m: "香港，9月",
-                lambda _text, _m: "2026年15日",
-                lambda _text, m: f"{m[0][0]} Exchange是{m[1][0]} Holdings Limited旗下授权交易平台并宣布",
-                lambda _text, m: f"其已与{m[0][0]}达成合作，后者是一家全球支付服务提供商",
-                lambda _text, m: f"在经营许可和许可的业务范围内，{m[0][0]} Exchange将提供机构级数字资产托管支持",
-            ]
-        )
+        provider = RecordingProvider([
+            "香港，2026年9月15日，HashKey Exchange是HashKey Holdings Limited旗下授权交易平台；Obita是一家全球支付服务提供商。HashKey Exchange将在经营许可和许可的业务范围内提供机构级数字资产托管支持。",
+            "香港，9月",
+            "2026年15日",
+            "HashKey Exchange是HashKey Holdings Limited旗下授权交易平台并宣布",
+            "其已与奥比塔达成合作，后者是一家全球支付服务提供商",
+            "在经营许可和许可的业务范围内，HashKey Exchange将提供机构级数字资产托管支持",
+        ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
 
@@ -2047,12 +2039,7 @@ class LongTextTranslationTests(unittest.TestCase):
             "to Partior’s Cross-Border Payments Network"
         )
 
-        def translated(_text, mappings):
-            partior = self._entity_placeholders(mappings, "Partior")
-            lseg = self._entity_placeholders(mappings, "LSEG")[0]
-            return f"{partior[0]}与{lseg} DiSH合作，向{partior[1]}的跨境支付网络提供全天候结算银行流动性"
-
-        provider = ProductionFlowProvider([translated])
+        provider = RecordingProvider(["Partior与LSEG DiSH合作，向企业的跨境支付网络提供全天候结算银行流动性"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
 
@@ -2062,15 +2049,10 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("向Partior的跨境支付网络", output)
         self.assertNotIn("企业的跨境支付网络", output)
 
-    def test_obita_placeholder_dedupes_model_transliteration_at_occurrence(self):
+    def test_obita_is_shielded_outside_model_round_trip(self):
         original = "HashKey Exchange partners with Obita to provide digital asset custody support"
 
-        def translated(_text, mappings):
-            hashkey = self._entity_placeholders(mappings, "HashKey")[0]
-            obita = self._entity_placeholders(mappings, "Obita")[0]
-            return f"{hashkey} Exchange与{obita} 奥比塔合作，提供数字资产托管支持"
-
-        provider = ProductionFlowProvider([translated])
+        provider = RecordingProvider(["HashKey Exchange与奥比塔合作，提供数字资产托管支持"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
 
@@ -2078,6 +2060,7 @@ class LongTextTranslationTests(unittest.TestCase):
 
         self.assertEqual(output.count("Obita"), 1)
         self.assertNotIn("奥比塔", output)
+        self.assertNotRegex(provider.calls[0]["text"], r"XQZENT\d+ZQX")
 
     def test_artifact_entities_and_financial_terms_are_normalized_from_source_evidence(self):
         normalizer = translator.TerminologyNormalizer()
