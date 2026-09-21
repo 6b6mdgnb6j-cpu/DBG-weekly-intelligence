@@ -127,6 +127,51 @@ def fake_provider(model=None):
 
 
 class LongTextTranslationTests(unittest.TestCase):
+    def test_fca_euro_exchange_company_incident_restores_full_entity(self):
+        original = "FCA opens investigation into Euro Exchange Securities UK Ltd"
+        provider = RecordingProvider(["欧元交易所证券英国股份有限公司启动调查"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+        output = title_translator._translate_text(original, "金融行为监管局", "title")
+        self.assertEqual(output, "FCA 对 Euro Exchange Securities UK Ltd 启动调查")
+        self.assertTrue(TranslationSanityValidator.validate_with_reason(
+            original, output, "金融行为监管局", field="title"
+        ).valid)
+
+    def test_euro_exchange_entity_preserved_without_duplication(self):
+        original = "FCA opens investigation into Euro Exchange Securities UK Ltd"
+        normalized, _ = translator.TerminologyNormalizer().normalize(
+            "FCA 对 Euro Exchange Securities UK Ltd 启动调查", original, "金融行为监管局"
+        )
+        self.assertEqual(normalized.count("Euro Exchange Securities UK Ltd"), 1)
+
+    def test_euro_exchange_bad_term_still_rejected_without_exact_entity(self):
+        for original in (
+            "FCA opens an investigation into a securities company",
+            "FCA opens investigation into Euro Exchange Securities UK Limited",
+        ):
+            with self.subTest(original=original):
+                normalized, _ = translator.TerminologyNormalizer().normalize(
+                    "欧元交易所证券英国股份有限公司启动调查", original, "金融行为监管局"
+                )
+                result = TranslationSanityValidator.validate_with_reason(
+                    original, normalized, "金融行为监管局", field="title"
+                )
+                self.assertFalse(result.valid)
+                self.assertEqual(result.reason, "bad_term:欧元交易所")
+
+    def test_legitimate_company_does_not_whitelist_other_bad_terms(self):
+        original = "FCA opens investigation into Euro Exchange Securities UK Ltd"
+        normalized, _ = translator.TerminologyNormalizer().normalize(
+            "FCA 对 Euro Exchange Securities UK Ltd 启动调查，欧元交易所公告",
+            original, "金融行为监管局"
+        )
+        result = TranslationSanityValidator.validate_with_reason(
+            original, normalized, "金融行为监管局", field="title"
+        )
+        self.assertFalse(result.valid)
+        self.assertEqual(result.reason, "bad_term:欧元交易所")
+
     def test_short_text_within_budget_uses_one_translation_call(self):
         provider = fake_provider()
         with patch.object(translator, "SOURCE_CHUNK_TOKEN_LIMIT", 10):

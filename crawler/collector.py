@@ -10,6 +10,7 @@ from .event_cluster import cluster_same_event_items
 from .geography import apply_macro_geography
 from .news_model import ensure_news_schema
 from .adapters.cme import collect_cme_press_rss
+from .adapters.ccp12 import collect_ccp_global_publications
 from .adapters.lch import collect_lch_clearing
 from .adapters.prudential_publications import collect_prudential_publications
 from .adapters.sgx import collect_sgx_rulebook
@@ -161,6 +162,7 @@ def classify_empty_status(status, source):
         "sp_dji_press_archive",
         "sgx_rulebook",
         "lch_clearing",
+        "ccp_global_publications",
         "prudential_publications",
     }
     if status["within_period"] == 0:
@@ -244,6 +246,10 @@ def collect_week(start_arg=None, translate=True, output_dir=OUTPUT_DIR, require_
                 source_raw, source_filtered, meta = collect_cme_press_rss(source, week_start, week_end, logger)
             elif method == "lch_clearing":
                 source_raw, source_filtered, meta = collect_lch_clearing(source, week_start, week_end, logger)
+            elif method == "ccp_global_publications":
+                source_raw, source_filtered, meta = collect_ccp_global_publications(
+                    source, week_start, week_end, logger
+                )
             elif method == "prudential_publications":
                 source_raw, source_filtered, meta = collect_prudential_publications(
                     source, week_start, week_end, logger

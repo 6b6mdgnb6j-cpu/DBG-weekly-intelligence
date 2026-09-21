@@ -443,6 +443,11 @@ class LocalNLLBProvider:
 
 class TerminologyNormalizer:
     CANONICAL_ENTITIES = {
+        # Preserve the complete legal name; never whitelist its mistranslated prefix.
+        "Euro Exchange Securities UK Ltd": {
+            "aliases": [],
+            "bad": ["欧元交易所证券英国股份有限公司"],
+        },
         "Deutsche Börse": {
             "aliases": ["Deutsche Börse Group"],
             "bad": ["德意志交易所", "德意志 Börse"],
@@ -694,6 +699,12 @@ class TerminologyNormalizer:
     ]
 
     PROPER_NOUN_RULES = [
+        # Exact incident sentence: the model also inverted investigator and target.
+        (
+            "FCA opens investigation into Euro Exchange Securities UK Ltd",
+            r"^Euro Exchange Securities UK Ltd启动调查$",
+            "FCA 对 Euro Exchange Securities UK Ltd 启动调查",
+        ),
         ("Singapore", r"新加拿大", "新加坡"),
         ("Republic of Korea", r"韩国共和国", "韩国"),
         ("Korea", r"韩国共和国", "韩国"),

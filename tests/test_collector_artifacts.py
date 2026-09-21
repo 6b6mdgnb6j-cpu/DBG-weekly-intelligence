@@ -1,3 +1,5 @@
+import ast
+import inspect
 import json
 import tempfile
 import unittest
@@ -8,12 +10,12 @@ from crawler import collector
 
 
 class CollectorArtifactModeTests(unittest.TestCase):
-    def run_empty_collection(self, tmp, translate=True, output_dir=None):
+    def run_empty_collection(self, tmp, translate=True, output_dir=None, sources=None):
         root = Path(tmp)
         legacy = root / "data" / "news.json"
         log_dir = root / "logs"
         raw_dir = root / "raw"
-        with patch.object(collector, "load_sources", return_value=[]), patch.object(
+        with patch.object(collector, "load_sources", return_value=sources or []), patch.object(
             collector, "LOG_DIR", log_dir
         ), patch.object(collector, "RAW_DIR", raw_dir), patch.object(
             collector, "LEGACY_DATA_FILE", legacy
@@ -34,6 +36,34 @@ class CollectorArtifactModeTests(unittest.TestCase):
                 translate=translate,
                 output_dir=output_dir or root / "output",
             )
+
+    def test_every_enabled_source_method_has_callable_dispatch(self):
+        tree = ast.parse(inspect.getsource(collector.collect_week))
+        routes = {}
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
+                    and isinstance(node.test.left, ast.Name) and node.test.left.id == "method"
+                    and isinstance(node.test.comparators[0], ast.Constant)):
+                routes[node.test.comparators[0].value] = node.body[0].value.func.id
+        for source in collector.load_sources():
+            if source.get("enabled", True):
+                with self.subTest(source=source["id"], method=source["method"]):
+                    self.assertIn(source["method"], routes)
+                    self.assertTrue(callable(getattr(collector, routes[source["method"]], None)))
+
+    def test_enabled_ccp_source_reaches_adapter(self):
+        source = next(source for source in collector.load_sources() if source["id"] == "SRC-107")
+        self.assertTrue(source["enabled"])
+        self.assertEqual(source["method"], "ccp_global_publications")
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            collector, "collect_ccp_global_publications",
+            return_value=([], [], {"candidates": 1, "dated_candidates": 1, "target_period_reached": True})
+        ) as adapter:
+            result = self.run_empty_collection(tmp, sources=[source])
+            adapter.assert_called_once()
+            self.assertEqual(adapter.call_args.args[0], source)
+            statuses = json.loads(Path(result["source_status_path"]).read_text())
+            self.assertEqual(statuses[0]["status"], "true_no_updates")
 
     def test_normal_collection_artifact_marked_bilingual(self):
         with tempfile.TemporaryDirectory() as tmp:

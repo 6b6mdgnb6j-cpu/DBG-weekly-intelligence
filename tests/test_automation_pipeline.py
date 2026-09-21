@@ -1,4 +1,8 @@
 import json
+import os
+import re
+import subprocess
+import textwrap
 import sys
 import tempfile
 import types
@@ -400,6 +404,56 @@ class AutomationPipelineContractTests(unittest.TestCase):
             with self.subTest(gate=gate):
                 self.assertIn(gate, workflow)
 
+    def test_generation_failure_preserves_requested_context_and_safe_debug_paths(self):
+        workflow = Path(".github/workflows/weekly-report-production.yml").read_text()
+        prepare = workflow.split("      - name: Prepare manual week input", 1)[1].split("      - name:", 1)[0]
+        prepare_python = textwrap.dedent(prepare.split("python3 - <<'PY'\n", 1)[1].split("          PY", 1)[0])
+        generation = workflow.split("      - name: Generate bilingual weekly report and QA", 1)[1].split("      - name:", 1)[0]
+        generation_shell = textwrap.dedent(generation.split("        run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory() as tmp:
+            requested_file = Path(tmp) / "requested"
+            weekly_file = Path(tmp) / "weekly"
+            env = dict(os.environ, RAW_WEEK_START="2026-09-14", GITHUB_OUTPUT=str(requested_file))
+            with patch.dict(os.environ, env):
+                exec(compile(prepare_python, "workflow-prepare", "exec"), {})
+            requested = dict(line.split("=", 1) for line in requested_file.read_text().splitlines())
+            self.assertEqual(requested, dict(week_start="2026-09-14", week_end="2026-09-20",
+                                            compact_week_start="20260914", output_dir="output/production/20260914"))
+            env.update(GITHUB_OUTPUT=str(weekly_file), EVENT_NAME="workflow_dispatch",
+                       MANUAL_WEEK_START=requested["week_start"], MANUAL_OUTPUT_DIR=requested["output_dir"])
+            # Execute the actual workflow shell with a failing Python command; no crawl runs.
+            result = subprocess.run(["bash", "-c", "python3() { return 4; }\n" + generation_shell],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            weekly = dict(line.split("=", 1) for line in weekly_file.read_text().splitlines())
+            self.assertEqual(weekly, {"exit_code": "4"})
+            summary = workflow.split("      - name: Write job summary", 1)[1]
+            for variable, key in [("WEEK_START", "week_start"), ("WEEK_END", "week_end"),
+                                  ("COMPACT_WEEK_START", "compact_week_start"), ("PROD_OUTPUT_DIR", "output_dir")]:
+                expression = re.search(r"^          " + variable + r": \$\{\{ (.*?) \}\}", summary, re.M).group(1)
+                values = {**{f"steps.requested_week.outputs.{k}": v for k, v in requested.items()},
+                          **{f"steps.weekly.outputs.{k}": v for k, v in weekly.items()}}
+                resolved = next((values.get(term.strip(), term.strip()[1:-1] if term.strip().startswith("'") else "")
+                                 for term in expression.split("||")
+                                 if values.get(term.strip()) or term.strip().startswith("'")), "")
+                self.assertEqual(resolved, requested[key])
+            requested_file.write_text("")
+            with patch.dict(os.environ, dict(env, RAW_WEEK_START="", GITHUB_OUTPUT=str(requested_file))):
+                exec(compile(prepare_python, "workflow-prepare-scheduled", "exec"), {})
+            scheduled = dict(line.split("=", 1) for line in requested_file.read_text().splitlines())
+            self.assertTrue(all(scheduled.values()))
+            self.assertEqual(scheduled["output_dir"], "output")
+        debug = workflow.split("      - name: Upload debug artifacts", 1)[1].split("      - name:", 1)[0]
+        paths = [line.strip() for line in debug.split("          path: |", 1)[1].splitlines() if line.strip()]
+        self.assertTrue(paths)
+        for path in paths:
+            self.assertNotIn("${{", path)  # Empty/missing outputs cannot alter these literals.
+            self.assertFalse(Path(path).is_absolute())
+            self.assertNotIn("..", Path(path).parts)
+            self.assertIn(Path(path).parts[0], {"raw", "logs", "output"})
+            self.assertNotEqual(path, "/**")
+        self.assertIn("weekly-report-debug-${{ github.run_id }}-${{ github.run_attempt }}", debug)
+
     def test_production_workflow_scheduled_generation_never_publishes(self):
         workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
 
@@ -409,7 +463,7 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertIn('github.event_name == \'workflow_dispatch\' && inputs.week_start || \'\'', workflow)
         self.assertIn('python3 run_weekly.py --start "$MANUAL_WEEK_START"', workflow)
         self.assertIn("python3 run_weekly.py --require-translation", workflow)
-        self.assertIn("No manual week requested; run_weekly.py will resolve the previous natural week.", workflow)
+        self.assertIn("from crawler.date_utils import parse_week_start", workflow)
         self.assertNotIn("ZoneInfo", workflow)
         self.assertNotIn("this_monday", workflow)
         self.assertNotIn("publish_weekly.py", workflow)

@@ -70,9 +70,9 @@ jobs:
               compact = start.strftime("%Y%m%d")
               output_dir = f"output/production/{compact}"
           else:
-              start = ""
-              end = ""
-              compact = ""
+              from crawler.date_utils import parse_week_start
+              start, end = parse_week_start()
+              compact = start.strftime("%Y%m%d")
               output_dir = "output"
           output_path = os.environ["GITHUB_OUTPUT"]
           with open(output_path, "a", encoding="utf-8") as f:
@@ -80,10 +80,10 @@ jobs:
               f.write(f"week_end={end.isoformat() if end else ''}\n")
               f.write(f"compact_week_start={compact}\n")
               f.write(f"output_dir={output_dir}\n")
-          if start:
+          if raw:
               print(f"Manual week requested: {start.isoformat()} to {end.isoformat()}")
           else:
-              print("No manual week requested; run_weekly.py will resolve the previous natural week.")
+              print(f"No manual week requested; resolved previous natural week: {start} to {end}.")
           PY
 
       - name: Run permanent tests
@@ -133,7 +133,7 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$MANUAL_WEEK_START" ]; then
             python3 run_weekly.py --start "$MANUAL_WEEK_START" --output-dir "$MANUAL_OUTPUT_DIR" --require-translation
           else
-            python3 run_weekly.py --require-translation
+            python3 run_weekly.py --require-translation --start "$MANUAL_WEEK_START" --output-dir "$MANUAL_OUTPUT_DIR"
           fi
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
@@ -246,24 +246,31 @@ jobs:
             ${{ steps.weekly.outputs.output_dir }}/review_manifest_${{ steps.weekly.outputs.compact_week_start }}.json
 
       - name: Upload debug artifacts
+        id: upload_debug
         if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.translation_preflight.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.bilingual_validation.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
         uses: actions/upload-artifact@v7
         with:
-          name: weekly-report-debug-${{ steps.weekly.outputs.week_start }}
+          name: weekly-report-debug-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 7
           if-no-files-found: warn
           path: |
-            raw/**/*${{ steps.weekly.outputs.compact_week_start }}*
-            logs/**/*${{ steps.weekly.outputs.compact_week_start }}*
-            ${{ steps.weekly.outputs.output_dir }}/*${{ steps.weekly.outputs.compact_week_start }}*
+            raw/**
+            logs/**
+            output/production/**
+            output/weekly_data_*.json
+            output/source_status_*.json
+            output/relevance_rejected_*.json
+            output/qa_report_*.json
+            output/qa_report_*.md
+            output/weekly_report_*.html
 
       - name: Write job summary
         if: always()
         env:
-          WEEK_START: ${{ steps.weekly.outputs.week_start }}
-          WEEK_END: ${{ steps.weekly.outputs.week_end }}
-          COMPACT_WEEK_START: ${{ steps.weekly.outputs.compact_week_start }}
-          PROD_OUTPUT_DIR: ${{ steps.weekly.outputs.output_dir }}
+          WEEK_START: ${{ steps.weekly.outputs.week_start || steps.requested_week.outputs.week_start || 'unavailable' }}
+          WEEK_END: ${{ steps.weekly.outputs.week_end || steps.requested_week.outputs.week_end || 'unavailable' }}
+          COMPACT_WEEK_START: ${{ steps.weekly.outputs.compact_week_start || steps.requested_week.outputs.compact_week_start }}
+          PROD_OUTPUT_DIR: ${{ steps.weekly.outputs.output_dir || steps.requested_week.outputs.output_dir || 'output' }}
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
           COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
           PREFLIGHT_EXIT_CODE: ${{ steps.translation_preflight.outputs.exit_code }}
@@ -276,6 +283,8 @@ jobs:
           MANIFEST_OUTCOME: ${{ steps.manifest.outcome }}
           BUNDLE_VALIDATION_OUTCOME: ${{ steps.bundle_validation.outcome }}
           REVIEW_UPLOADED: ${{ steps.upload_review.outcome == 'success' }}
+          DEBUG_UPLOAD_OUTCOME: ${{ steps.upload_debug.outcome }}
+          GENERATION_RUN_ATTEMPT: ${{ github.run_attempt }}
           GENERATION_RUN_ID: ${{ github.run_id }}
           GENERATION_SHA: ${{ github.sha }}
         run: |
@@ -315,13 +324,18 @@ jobs:
           manifest_status = workflow_step_status(value("MANIFEST_OUTCOME"), manifest_code)
           bundle_status = workflow_step_status(value("BUNDLE_VALIDATION_OUTCOME"), validation_code)
           review_artifact = f"weekly-report-review-{week_start}" if review_ready else "NOT READY"
-          debug_artifact = f"weekly-report-debug-{week_start}" if not review_ready else "not uploaded"
+          debug_artifact = (
+              f"weekly-report-debug-{value('GENERATION_RUN_ID')}-{value('GENERATION_RUN_ATTEMPT')}"
+              if value("DEBUG_UPLOAD_OUTCOME") == "success" else "not uploaded"
+          )
           highlight_count = summary_highlight_count(weekly, qa)
 
           lines = [
               "# DBG Weekly Report - Production",
               "",
               f"- Week: {week_start} -> {week_end}",
+              f"- Compact week start: {compact}",
+              f"- Output directory: {output_dir}",
               f"- Generation status: {generation}",
               f"- Translation mode: {weekly.get('translation_mode', 'unavailable')}",
               f"- QA status: {qa_status}",
