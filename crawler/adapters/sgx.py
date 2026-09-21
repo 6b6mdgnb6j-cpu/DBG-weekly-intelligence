@@ -18,6 +18,10 @@ SGX_RULEBOOK_HEADERS = {
 
 DATE_SUFFIX_RE = re.compile(r"\((\d{1,2}\s+[A-Za-z]+\s+\d{4})\)\s*$")
 NUMERIC_RULE_RE = re.compile(r"^\s*\d+(?:\.\d+)+(?:\([^)]+\))?\b")
+REFERENCE_ONLY_APPENDIX_RE = re.compile(
+    r"^\s*appendix\s+[a-z0-9]+\s+to\s+regulatory\s+notice\s+\d+(?:\.\d+)+(?:\([^)]+\))?\s*$",
+    re.I,
+)
 
 SGX_KEEP_TERMS = (
     "trading rule",
@@ -228,6 +232,8 @@ def _is_routine_update(text):
 
 def _source_filter_reason(candidate):
     text = " ".join([candidate.get("title", ""), candidate.get("context", "")])
+    if REFERENCE_ONLY_APPENDIX_RE.match(normalize_text_encoding(candidate.get("title", ""))):
+        return "sgx_rulebook_package_grouped"
     if _is_routine_update(text):
         return "sgx_rulebook_routine_update"
     if not _has_keep_signal(text):

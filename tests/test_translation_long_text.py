@@ -292,7 +292,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v19", GENERATION_CONFIG_VERSION)
+        self.assertIn("v20", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -1881,6 +1881,58 @@ class LongTextTranslationTests(unittest.TestCase):
         fixed, warning = apply_critical_action_safe_fallback(item)
         self.assertEqual(fixed["summary_cn"], item["summary_cn"])
         self.assertIsNone(warning)
+
+    def test_hashkey_obita_summary_semantic_recovery_preserves_partnership_and_custody(self):
+        original = (
+            "HashKey Exchange announced that it has reached a partnership with Obita "
+            "to provide institutional-grade digital asset custody support."
+        )
+        provider = RecordingProvider(
+            [
+                "HashKey Exchange为机构客户提供数字资产托管支持。",
+                "HashKey Exchange宣布",
+                "其已与Obita达成合作，提供机构级数字资产托管支持。",
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "HashKey", field="summary")
+
+        self.assertIn("HashKey", output)
+        self.assertIn("Obita", output)
+        self.assertIn("合作", output)
+        self.assertIn("数字资产托管支持", output)
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+
+    def test_artifact_entities_and_financial_terms_are_normalized_from_source_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+        cases = [
+            ("雷波克莱尔调整抵押品框架", "RepoClear adjusts its collateral framework", "LCH", "RepoClear", "雷波克莱尔"),
+            ("瑞士证券交易所 (FTSE Russell) 宣布指数调整", "FTSE Russell announces index changes", "LSEG", "FTSE Russell", "瑞士证券交易所"),
+            ("国际空间站发布治理报告", "ISS published a governance report", "ISS STOXX", "ISS", "国际空间站"),
+            ("欧安组织发布资本市场更新", "OSC publishes a capital markets update", "OSC", "OSC", "欧安组织"),
+            ("企业与LSEG DiSH合作", "Partior partners with LSEG DiSH", "Partior", "Partior", "企业与"),
+            ("黄金-i推出新平台", "Gold-i launches a new platform", "Gold-i", "Gold-i", "黄金-i"),
+            ("菲亚特与数字资产之间的兑换", "conversion between fiat and digital assets", "Source", "法定货币", "菲亚特"),
+            ("零点市场交易", "spot market trading", "Source", "现货市场", "零点市场"),
+            ("提供数字资产监管支持", "provide digital asset custody support", "HashKey", "数字资产托管", "数字资产监管"),
+            ("默认基金贡献增加", "CCP Default Fund Contribution increased", "CCP", "违约基金出资", "默认基金贡献"),
+        ]
+        for translated, original, source, expected, rejected in cases:
+            with self.subTest(original=original):
+                normalized, _ = normalizer.normalize(translated, original, source)
+                self.assertIn(expected, normalized)
+                self.assertNotIn(rejected, normalized)
+
+    def test_iss_protection_does_not_rewrite_explicit_space_station_context(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "ISS与国际空间站开展研究",
+            "ISS discussed research aboard the International Space Station",
+            "ISS STOXX",
+        )
+        self.assertIn("国际空间站", normalized)
 
 
 if __name__ == "__main__":

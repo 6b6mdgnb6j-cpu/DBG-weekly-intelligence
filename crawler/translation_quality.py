@@ -1,4 +1,5 @@
 import re
+from datetime import date
 
 from crawler.translator import TerminologyNormalizer
 
@@ -25,7 +26,7 @@ SUBSTANTIVE_TITLE_ANCHORS = [
     ("acquire", (r"\bacquir(?:e|es|ed|ing)\b", r"\bacquisition\b"), ("收购", "并购")),
     ("propose", (r"\bpropos(?:e|es|ed|al)\b",), ("提议", "拟", "建议", "提出")),
     ("rescind", (r"\brescind(?:s|ed|ing)?\b", r"\brescission\b", r"\brepeal(?:s|ed|ing)?\b", r"\brevok(?:e|es|ed|ing)\b", r"\brevocation\b"), ("取消", "撤销", "废除", "撤回")),
-    ("approve", (r"\bapprov(?:e|es|ed|ing|al)\b",), ("批准", "核准")),
+    ("approve", (r"\bapprov(?:e|es|ed|ing|al)\b",), ("批准", "核准", "获批", "被批准", "认可")),
     ("suspend", (r"\bsuspend(?:s|ed|ing)?\b",), ("暂停", "中止")),
     ("extend", (r"\bextend(?:s|ed|ing)?\b",), ("延长", "延期", "扩大", "扩展")),
     ("increase", (r"\bincreas(?:e|es|ed|ing)\b", r"\brecord\b"), ("增加", "上升", "提高", "创纪录")),
@@ -39,7 +40,7 @@ ACTION_DIRECTION_RULES = [
     ("rescind", (r"\brescind(?:s|ed|ing)?\b", r"\brescission\b", r"\brepeal(?:s|ed|ing)?\b", r"\brevok(?:e|es|ed|ing)\b"), ("取消", "撤销", "废除", "撤回")),
     ("propose", (r"\bpropos(?:e|es|ed|al)\b",), ("提议", "拟", "建议", "提出")),
     ("extend", (r"\bextend(?:s|ed|ing)?\b",), ("延长", "延期", "扩大", "扩展")),
-    ("approve", (r"\bapprov(?:e|es|ed|ing|al)\b",), ("批准", "核准")),
+    ("approve", (r"\bapprov(?:e|es|ed|ing|al)\b",), ("批准", "核准", "获批", "被批准", "认可")),
     ("ban", (r"\bban(?:s|ned|ning)?\b", r"\bprohibit(?:s|ed|ing)?\b"), ("禁止",)),
     ("allow", (r"\ballow(?:s|ed|ing)?\b", r"\bpermit(?:s|ted|ting)?\b"), ("允许",)),
     ("increase", (r"\bincreas(?:e|es|ed|ing)\b",), ("增加", "上升", "提高")),
@@ -71,6 +72,11 @@ DANGEROUS_ENTITY_VARIANTS = {
     "CFTC": ("欧盟货币交易委员会", "欧盟CFTC", "欧盟贸易交易委员会", "美国央行", "金融交易委员会"),
     "IOSCO": ("国际证券委员会组织", "国际证券交易委员会组织"),
     "OCC": ("欧盟委员会", "欧盟银行"),
+    "RepoClear": ("雷波克莱尔",),
+    "FTSE Russell": ("瑞士证券交易所",),
+    "ISS": ("国际空间站", "国际航天站"),
+    "OSC": ("欧安组织",),
+    "Gold-i": ("黄金-i", "黄金－i"),
 }
 
 ACCEPTABLE_ENTITY_RENDERINGS = {
@@ -85,9 +91,42 @@ ACCEPTABLE_ENTITY_RENDERINGS = {
     "Euronext": ("Euronext", "泛欧交易所"),
     "IOSCO": ("IOSCO", "国际证监会组织"),
     "OCC": ("OCC", "货币监理署"),
+    "OSC": ("OSC", "安大略省证券委员会"),
 }
 
 MATERIAL_TERM_RULES = [
+    {
+        "issue_id": "translation_material_term_conflict",
+        "trigger_patterns": (r"\bfiat\b",),
+        "bad_terms": ("菲亚特",),
+        "expected_terms": ("法定货币",),
+        "term": "fiat",
+        "reason": "Fiat currency was translated as an unrelated proper noun.",
+    },
+    {
+        "issue_id": "translation_material_term_conflict",
+        "trigger_patterns": (r"\bspot market\b",),
+        "bad_terms": ("零点市场",),
+        "expected_terms": ("现货市场",),
+        "term": "spot market",
+        "reason": "Spot market was translated as an unrelated time/point concept.",
+    },
+    {
+        "issue_id": "translation_material_term_conflict",
+        "trigger_patterns": (r"\bdigital asset custody\b", r"\bcustody support\b"),
+        "bad_terms": ("数字资产监管", "监管支持"),
+        "expected_terms": ("数字资产托管", "托管支持"),
+        "term": "digital asset custody",
+        "reason": "Custody was translated as regulatory supervision.",
+    },
+    {
+        "issue_id": "translation_material_term_conflict",
+        "trigger_patterns": (r"\bDefault Fund Contribution\b",),
+        "bad_terms": ("默认基金贡献",),
+        "expected_terms": ("违约基金出资", "违约基金缴款"),
+        "term": "Default Fund Contribution",
+        "reason": "CCP Default Fund Contribution was translated literally and lost its financial meaning.",
+    },
     {
         "issue_id": "translation_material_term_conflict",
         "trigger_patterns": (r"\bFMIs?\b", r"\bFinancial Market Infrastructures?\b"),
@@ -379,6 +418,54 @@ def _action_direction_issues(index, item):
     return issues
 
 
+def _relationship_issues(index, item):
+    issues = []
+    for field, original, translated in _translated_fields(item):
+        if field != "summary" or not original or not translated:
+            continue
+        if not re.search(r"\b(?:partner(?:s|ed|ing|ship)?|collaborat(?:e|es|ed|ing|ion))\b", original, flags=re.I):
+            continue
+        if _contains_any(translated, ("合作", "伙伴", "协作", "携手")):
+            continue
+        issues.append(
+            _issue(
+                index,
+                item,
+                field,
+                "translation_relationship_missing",
+                FAIL,
+                {"relationship": "partnership", "translated_prefix": translated[:160]},
+                "Translated summary omits a material partnership or collaboration relationship.",
+            )
+        )
+    return issues
+
+
+def _corruption_issues(index, item):
+    issues = []
+    for field, original, translated in _translated_fields(item):
+        if not original or not translated:
+            continue
+        for match in re.finditer(r"(?<!\d)(20\d{2})\s*(?:[-/.]|年)\s*(\d{1,2})\s*(?:[-/.]|月)\s*(\d{1,2})(?:日)?(?!\d)", translated):
+            year, month, day = (int(value) for value in match.groups())
+            try:
+                date(year, month, day)
+            except ValueError:
+                issues.append(
+                    _issue(
+                        index,
+                        item,
+                        field,
+                        "translation_date_corruption",
+                        FAIL,
+                        {"invalid_date": match.group(0), "translated_prefix": translated[:160]},
+                        "Translation contains an impossible calendar date.",
+                    )
+                )
+                break
+    return issues
+
+
 COMPRESSION_CONNECTORS = (
     r"\s+—\s+",
     r"\s+-\s+",
@@ -458,7 +545,9 @@ def audit_translation_quality(items, translation_mode=""):
         issues.extend(_proper_noun_issues(index, item))
         issues.extend(_title_proposition_issues(index, item))
         issues.extend(_action_direction_issues(index, item))
+        issues.extend(_relationship_issues(index, item))
         issues.extend(_suspicious_compression_issues(index, item))
+        issues.extend(_corruption_issues(index, item))
         fallback_warning = safe_fallback_warning(item, index)
         if fallback_warning:
             issues.append(fallback_warning)
@@ -479,13 +568,17 @@ def validate_translation_field(original, translated, field_type="text", source="
             + _proper_noun_issues(0, item)
             + _title_proposition_issues(0, item)
             + _action_direction_issues(0, item)
+            + _relationship_issues(0, item)
+            + _corruption_issues(0, item)
         )
     if field_type == "summary":
         return (
             _entity_issues(0, item, TerminologyNormalizer())
             + _proper_noun_issues(0, item)
             + _action_direction_issues(0, item)
+            + _relationship_issues(0, item)
             + _suspicious_compression_issues(0, item)
+            + _corruption_issues(0, item)
         )
     return []
 

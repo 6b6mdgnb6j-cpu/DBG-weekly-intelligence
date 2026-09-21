@@ -734,6 +734,87 @@ class QAGateTests(unittest.TestCase):
         report = self.evaluate(weekly=weekly)
         self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
 
+    def test_mks_pamp_approval_title_accepts_clear_approval_equivalents(self):
+        original = (
+            "MKS PAMP Has Been Approved as an Approved Person in the Chain of Custody "
+            "Related to the Issuance of Warehouse Receipts for Precious Metals"
+        )
+        for translated in (
+            "MKS PAMP 已获批成为与贵金属仓单发行相关的托管链认可参与方",
+            "MKS PAMP 被批准成为与贵金属仓单发行相关的托管链认可参与方",
+            "MKS PAMP 被认可为与贵金属仓单发行相关的托管链认可参与方",
+        ):
+            with self.subTest(translated=translated):
+                report = self.evaluate(weekly=payload(items=[item(1, title_original=original, title_cn=translated)], highlights=[]))
+                issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+                self.assertNotIn("translation_title_proposition_missing", issue_ids)
+                self.assertNotIn("translation_action_direction_missing", issue_ids)
+
+    def test_mks_pamp_approval_title_still_fails_when_approval_is_omitted(self):
+        original = (
+            "MKS PAMP Has Been Approved as an Approved Person in the Chain of Custody "
+            "Related to the Issuance of Warehouse Receipts for Precious Metals"
+        )
+        report = self.evaluate(
+            weekly=payload(items=[item(1, title_original=original, title_cn="MKS PAMP 与贵金属仓单发行相关的托管链参与方")], highlights=[])
+        )
+        issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+        self.assertIn("translation_title_proposition_missing", issue_ids)
+        self.assertIn("translation_action_direction_missing", issue_ids)
+
+    def test_hashkey_obita_partnership_omission_fails_qa(self):
+        report = self.evaluate(
+            weekly=payload(
+                items=[
+                    item(
+                        1,
+                        source="HashKey",
+                        title_original="HashKey Exchange Partners with Obita to Provide Institutional-Grade Digital Asset Custody Support",
+                        title_cn="HashKey Exchange与Obita合作提供机构级数字资产托管支持",
+                        summary_original=(
+                            "HashKey Exchange announced that it has reached a partnership with Obita "
+                            "to provide institutional-grade digital asset custody support."
+                        ),
+                        summary_cn="HashKey Exchange为机构客户提供数字资产托管支持。",
+                    )
+                ],
+                highlights=[],
+            )
+        )
+        self.assertIn("translation_relationship_missing", [issue["issue_id"] for issue in report["content_issues"]])
+
+    def test_artifact_entity_and_term_conflicts_fail_qa(self):
+        records = [
+            ("RepoClear updates collateral rules", "雷波克莱尔更新抵押品规则"),
+            ("FTSE Russell announces index changes", "瑞士证券交易所 (FTSE Russell) 宣布指数调整"),
+            ("ISS publishes a governance report", "国际空间站发布治理报告"),
+            ("OSC publishes a capital markets update", "欧安组织发布资本市场更新"),
+            ("Partior partners with LSEG", "企业与LSEG合作"),
+            ("Gold-i launches a platform", "黄金-i推出平台"),
+            ("Fiat and digital assets", "菲亚特与数字资产"),
+            ("Spot market trading", "零点市场交易"),
+            ("Digital asset custody support", "数字资产监管支持"),
+            ("CCP Default Fund Contribution", "CCP默认基金贡献"),
+        ]
+        report = self.evaluate(
+            weekly=payload(
+                items=[item(index, title_original=original, title_cn=translated) for index, (original, translated) in enumerate(records, 1)],
+                highlights=[],
+            )
+        )
+        issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+        self.assertIn("translation_entity_conflict", issue_ids)
+        self.assertIn("translation_material_term_conflict", issue_ids)
+
+    def test_impossible_translated_date_fails_qa(self):
+        report = self.evaluate(
+            weekly=payload(
+                items=[item(1, title_original="Rulebook amendment history", title_cn="规则修订历史：2026年13月42日")],
+                highlights=[],
+            )
+        )
+        self.assertIn("translation_date_corruption", [issue["issue_id"] for issue in report["content_issues"]])
+
 
 class QAPolicyTests(unittest.TestCase):
     def test_policy_source_ids_exist_in_sources_json(self):

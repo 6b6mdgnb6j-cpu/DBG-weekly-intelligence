@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v19"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v20"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -482,7 +482,15 @@ class TerminologyNormalizer:
         "Cboe": {"aliases": [], "bad": []},
         "Euronext": {"aliases": [], "bad": ["欧联网", "欧元联网", "欧元集团"]},
         "LSEG": {"aliases": ["London Stock Exchange Group"], "bad": []},
+        "RepoClear": {"aliases": [], "bad": ["雷波克莱尔"]},
+        "FTSE Russell": {"aliases": [], "bad": []},
         "FTSE": {"aliases": ["FTSE Russell"], "bad": ["FTC"]},
+        "ISS": {"aliases": [], "bad": ["国际空间站", "国际航天站"]},
+        "OSC": {"aliases": [], "bad": ["欧安组织"]},
+        "Partior": {"aliases": [], "bad": []},
+        "Gold-i": {"aliases": [], "bad": ["黄金-i", "黄金－i"]},
+        "HashKey": {"aliases": [], "bad": ["哈希基"]},
+        "Obita": {"aliases": [], "bad": []},
         "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": ["斯安普道斯指数"]},
         "Kaiko": {"aliases": [], "bad": ["凯科"]},
         "DTCC": {"aliases": [], "bad": []},
@@ -568,6 +576,13 @@ class TerminologyNormalizer:
         "FSC": ["financial services commission"],
     }
     TERM_RULES = [
+        ("fiat", r"菲亚特", "法定货币"),
+        ("spot market", r"零点市场", "现货市场"),
+        ("digital asset custody", r"数字资产监管", "数字资产托管"),
+        ("Chain of Custody", r"监管链", "托管链"),
+        ("Default Fund Contribution", r"默认基金贡献", "违约基金出资"),
+        ("FTSE Russell", r"^瑞士证券交易所(?=\s|[（(])", "FTSE Russell"),
+        ("Partior", r"^企业(?=与|和|、)", "Partior"),
         ("Commodity Pool Operator", r"商品库运营商", "商品基金运营商"),
         ("CFTC", r"欧盟CFTC|欧盟贸易交易委员会", "CFTC"),
         ("dematerialized Eurobond issuance", r"Clearstream的先驱将欧元债券发行物质化", "Clearstream率先完成无纸化欧洲债券发行"),
@@ -804,6 +819,10 @@ class TerminologyNormalizer:
                         continue
                     if canonical == "SIX" and bad in ("六", "六个") and re.search(r"\bsix\b", original or ""):
                         continue
+                    if canonical == "ISS" and bad in ("国际空间站", "国际航天站") and re.search(
+                        r"\bInternational Space Station\b", original or "", flags=re.I
+                    ):
+                        continue
                     if canonical == "FSC" and bad == "国际证券交易委员会" and re.search(
                         r"\bFinancial Services Commission\b", original or "", flags=re.I
                     ):
@@ -866,6 +885,7 @@ class TitleTranslator:
     RECOVERABLE_SEMANTIC_ISSUES = {
         "translation_title_proposition_missing",
         "translation_action_direction_missing",
+        "translation_relationship_missing",
         "translation_suspicious_compression",
     }
     SEMANTIC_SEGMENT_CAP = 6

@@ -318,6 +318,26 @@ class SGXAdapterTests(unittest.TestCase):
         self.assertEqual(meta["grouped_items_count"], 0)
         self.assertEqual(meta["package_groups"], [])
 
+    def test_sgx_rulebook_rejects_reference_only_regulatory_notice_appendix(self):
+        appendix_url = "https://rulebook.sgx.com/rulebook/appendix-regulatory-notice-4111"
+        html = page(
+            row(
+                "Appendix A To Regulatory Notice 4.1.11 (8 September 2026)",
+                "/rulebook/appendix-regulatory-notice-4111",
+                "Futures Trading Rules >> Regulatory Notices",
+            )
+        )
+
+        raw, filtered, meta = self.collect({SGX_RULEBOOK_URL: html})
+
+        self.assertEqual(len(raw), 1)
+        self.assertEqual(filtered, [])
+        self.assertEqual(meta["detail_pages_requested"], 0)
+        self.assertEqual(
+            meta["source_filter_rejected_samples"][0]["reason"],
+            "sgx_rulebook_package_grouped",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
