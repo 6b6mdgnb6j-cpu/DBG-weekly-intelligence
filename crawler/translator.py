@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v20"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v21"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -29,6 +29,13 @@ DEFAULT_GENERATION_CONFIG = {
 
 class TranslationUnavailableError(RuntimeError):
     pass
+
+
+class TranslationSemanticError(TranslationUnavailableError):
+    def __init__(self, message, candidate, issues):
+        super().__init__(message)
+        self.candidate = candidate
+        self.issues = issues
 
 
 @dataclass(frozen=True)
@@ -490,7 +497,7 @@ class TerminologyNormalizer:
         "Partior": {"aliases": [], "bad": []},
         "Gold-i": {"aliases": [], "bad": ["黄金-i", "黄金－i"]},
         "HashKey": {"aliases": [], "bad": ["哈希基"]},
-        "Obita": {"aliases": [], "bad": []},
+        "Obita": {"aliases": [], "bad": ["奥比塔"]},
         "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": ["斯安普道斯指数"]},
         "Kaiko": {"aliases": [], "bad": ["凯科"]},
         "DTCC": {"aliases": [], "bad": []},
@@ -772,6 +779,41 @@ class TerminologyNormalizer:
                 seen.add(canonical)
         return ordered
 
+    def protect_entity_occurrences(self, original):
+        matches = []
+        for canonical, spec in self.CANONICAL_ENTITIES.items():
+            for evidence in (canonical, *spec.get("aliases", [])):
+                for match in self._entity_matches(original, evidence):
+                    matches.append((match.start(), match.end(), canonical))
+        selected = []
+        occupied_until = -1
+        for start, end, canonical in sorted(matches, key=lambda value: (value[0], -(value[1] - value[0]))):
+            if start < occupied_until:
+                continue
+            selected.append((start, end, canonical))
+            occupied_until = end
+        if not selected:
+            return original, []
+        parts = []
+        mappings = []
+        cursor = 0
+        for index, (start, end, canonical) in enumerate(selected):
+            placeholder = f"XQZENT{index:03d}ZQX"
+            parts.extend((original[cursor:start], placeholder))
+            mappings.append((placeholder, canonical))
+            cursor = end
+        parts.append(original[cursor:])
+        return "".join(parts), mappings
+
+    @staticmethod
+    def restore_entity_occurrences(translated, mappings):
+        out = translated or ""
+        for placeholder, canonical in mappings:
+            if out.count(placeholder) != 1:
+                return translated or "", False
+            out = out.replace(placeholder, canonical, 1)
+        return out, True
+
     def _dedupe_protected_entities(self, text, original):
         out = text or ""
         changes = []
@@ -797,7 +839,7 @@ class TerminologyNormalizer:
             source_edits[source] = merged
         self.source_edits = source_edits
 
-    def normalize(self, translated, original, source):
+    def normalize(self, translated, original, source, restore_missing=True):
         out = translated or ""
         changes = []
         original_lower = (original or "").lower()
@@ -858,13 +900,14 @@ class TerminologyNormalizer:
         if self.INDEX_CONTEXT_RE.search(original or ""):
             replace(r"索引", "指数", "financial index")
 
-        missing_entities = []
-        for canonical in self._protected_entities_in_original_order(original):
-            if not self._contains_entity(out, canonical):
-                missing_entities.append(canonical)
-                changes.append(f"{canonical}:restore_missing_entity")
-        if missing_entities:
-            out = " ".join(missing_entities + [out]).strip()
+        if restore_missing:
+            missing_entities = []
+            for canonical in self._protected_entities_in_original_order(original):
+                if not self._contains_entity(out, canonical):
+                    missing_entities.append(canonical)
+                    changes.append(f"{canonical}:restore_missing_entity")
+            if missing_entities:
+                out = " ".join(missing_entities + [out]).strip()
 
         out, dedupe_changes = self._dedupe_protected_entities(out, original)
         changes.extend(dedupe_changes)
@@ -939,6 +982,15 @@ class TitleTranslator:
             "chunk_output_lengths": metadata.get("chunk_output_lengths", []),
         }
 
+    def _translate_protected(self, provider, text, chunk_token_limit):
+        protected, mappings = self.normalizer.protect_entity_occurrences(text)
+        provider.protected_entity_mappings = list(mappings)
+        raw = self._provider_translate(provider, protected, chunk_token_limit)
+        restored, complete = self.normalizer.restore_entity_occurrences(raw, mappings)
+        if mappings and not complete:
+            raise TranslationUnavailableError("protected entity occurrence missing from model output")
+        return restored
+
     @staticmethod
     def _semantic_field_issues(text, translated, field, source):
         from crawler.translation_quality import FAIL, validate_translation_field
@@ -958,6 +1010,13 @@ class TitleTranslator:
     def _recoverable_semantic_issues(self, text, translated, field, source):
         issues = self._semantic_field_issues(text, translated, field, source)
         return [issue for issue in issues if issue.get("issue_id") in self.RECOVERABLE_SEMANTIC_ISSUES]
+
+    def _final_candidate_issues(self, text, translated, field, source, assume_sanity_valid=False):
+        if not assume_sanity_valid:
+            sanity = TranslationSanityValidator.validate_with_reason(text, translated, source, field=field)
+            if not sanity.valid:
+                return [{"issue_id": f"sanity:{sanity.reason}", "severity": "FAIL"}]
+        return self._semantic_field_issues(text, translated, field, source)
 
     @staticmethod
     def _safe_semantic_split(pattern, text):
@@ -980,6 +1039,7 @@ class TitleTranslator:
         if not normalized:
             return []
         boundaries = [
+            r"(?<=[.!?])\s+",
             r"\s+\|\s+",
             r"\s+[—–]\s+",
             r";\s+",
@@ -1059,7 +1119,7 @@ class TitleTranslator:
         translated_segments = []
         try:
             for segment in segments:
-                translated = self._provider_translate(provider, segment, SOURCE_CHUNK_TOKEN_LIMIT)
+                translated = self._translate_protected(provider, segment, SOURCE_CHUNK_TOKEN_LIMIT)
                 if not translated:
                     self.last_semantic_recovery_metadata["recovery_validation_result"] = "provider_error"
                     self._log_semantic_recovery_diagnostics()
@@ -1071,8 +1131,8 @@ class TitleTranslator:
             return initial_translation, False, initial_issues
 
         recovered_raw = " ".join(translated_segments).strip()
-        recovered_normalized, _ = self.normalizer.normalize(recovered_raw, text, source)
-        recovered_issues = self._semantic_field_issues(text, recovered_normalized, field, source)
+        recovered_normalized, _ = self.normalizer.normalize(recovered_raw, text, source, restore_missing=False)
+        recovered_issues = self._final_candidate_issues(text, recovered_normalized, field, source)
         self.last_semantic_recovery_metadata["recovery_validation_result"] = "PASS" if not recovered_issues else "FAIL"
         if not recovered_issues:
             self.last_semantic_recovery_metadata["recovered_output_selected"] = True
@@ -1241,13 +1301,13 @@ class TitleTranslator:
         cached = self.cache.get(key)
         if isinstance(cached, dict) and "translation" in cached:
             value = cached.get("translation", "")
-            if value:
+            if value and not self._final_candidate_issues(text, value, field, source):
                 self.last_semantic_recovery_metadata = {"semantic_recovery_triggered": False, "cache_hit": True}
                 return value
             if cached.get("invalid") and self.logger:
                 self.logger.info("Ignoring invalid cached translation for source=%s field=%s", source, field)
 
-        raw = self._provider_translate(provider, text, SOURCE_CHUNK_TOKEN_LIMIT)
+        raw = self._translate_protected(provider, text, SOURCE_CHUNK_TOKEN_LIMIT)
         if not raw:
             if self.strict:
                 reason = getattr(provider, "last_error", "") or getattr(provider, "load_error", "") or "empty provider output"
@@ -1256,14 +1316,17 @@ class TitleTranslator:
                 )
             return ""
         initial_metadata = self._provider_metadata(provider)
-        normalized, changes = self.normalizer.normalize(raw, text, source)
+        normalized, changes = self.normalizer.normalize(raw, text, source, restore_missing=False)
         validation = TranslationSanityValidator.validate_with_reason(text, normalized, source, field=field)
         if not validation.valid:
             if validation.reason in ("length_ratio_low", "content_ratio_low"):
+                initial_failure_reason = validation.reason
                 recovery_chunk_limit = self._effective_recovery_chunk_limit(initial_metadata)
-                recovered_raw = self._provider_translate(provider, text, recovery_chunk_limit)
+                recovered_raw = self._translate_protected(provider, text, recovery_chunk_limit)
                 recovery_metadata = self._provider_metadata(provider)
-                recovered_normalized, recovered_changes = self.normalizer.normalize(recovered_raw, text, source)
+                recovered_normalized, recovered_changes = self.normalizer.normalize(
+                    recovered_raw, text, source, restore_missing=False
+                )
                 recovered_validation = TranslationSanityValidator.validate_with_reason(
                     text, recovered_normalized, source, field=field
                 )
@@ -1278,9 +1341,11 @@ class TitleTranslator:
                         configured_max=RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
                         min_limit=MIN_TIER2_SOURCE_CHUNK_TOKEN_LIMIT,
                     )
-                    tier2_raw = self._provider_translate(provider, text, tier2_chunk_limit)
+                    tier2_raw = self._translate_protected(provider, text, tier2_chunk_limit)
                     tier2_metadata = self._provider_metadata(provider)
-                    tier2_normalized, tier2_changes = self.normalizer.normalize(tier2_raw, text, source)
+                    tier2_normalized, tier2_changes = self.normalizer.normalize(
+                        tier2_raw, text, source, restore_missing=False
+                    )
                     tier2_validation = TranslationSanityValidator.validate_with_reason(
                         text, tier2_normalized, source, field=field
                     )
@@ -1303,50 +1368,58 @@ class TitleTranslator:
                     recovered_raw,
                     tier2_raw,
                 )
+                recovered_from = ""
                 if recovered_raw and recovered_validation.valid:
-                    self.cache[key] = {
-                        "translation": recovered_normalized,
-                        "raw_translation": recovered_raw,
-                        "terminology_changes": recovered_changes,
-                        "model": provider.model_name,
-                        "generation_config_version": GENERATION_CONFIG_VERSION,
-                        "glossary_version": self.normalizer.version,
-                        "recovered_from": validation.reason,
-                    }
-                    self.cache_dirty = True
-                    return recovered_normalized
-                if tier2_raw and tier2_validation and tier2_validation.valid:
-                    self.cache[key] = {
-                        "translation": tier2_normalized,
-                        "raw_translation": tier2_raw,
-                        "terminology_changes": tier2_changes,
-                        "model": provider.model_name,
-                        "generation_config_version": GENERATION_CONFIG_VERSION,
-                        "glossary_version": self.normalizer.version,
-                        "recovered_from": f"tier2:{recovered_validation.reason}",
-                    }
-                    self.cache_dirty = True
-                    return tier2_normalized
-                validation = recovered_validation
-                raw = recovered_raw
-                normalized = recovered_normalized
-                changes = recovered_changes
-                if tier2_validation is not None:
+                    validation = recovered_validation
+                    raw = recovered_raw
+                    normalized = recovered_normalized
+                    changes = recovered_changes
+                    recovered_from = initial_failure_reason
+                elif tier2_raw and tier2_validation and tier2_validation.valid:
                     validation = tier2_validation
                     raw = tier2_raw
                     normalized = tier2_normalized
                     changes = tier2_changes
+                    recovered_from = f"tier2:{recovered_validation.reason}"
+                else:
+                    validation = recovered_validation
+                    raw = recovered_raw
+                    normalized = recovered_normalized
+                    changes = recovered_changes
+                    if tier2_validation is not None:
+                        validation = tier2_validation
+                        raw = tier2_raw
+                        normalized = tier2_normalized
+                        changes = tier2_changes
 
-            self._log_rejection_diagnostics(source, field, text, raw, normalized, changes, validation)
-            if self.strict:
-                raise TranslationUnavailableError(
-                    f"translation rejected by sanity validator: reason={validation.reason} "
-                    f"source={source!r} field={field} text={text[:120]!r}"
-                )
-            return ""
+            if not validation.valid:
+                self._log_rejection_diagnostics(source, field, text, raw, normalized, changes, validation)
+                if self.strict:
+                    raise TranslationUnavailableError(
+                        f"translation rejected by sanity validator: reason={validation.reason} "
+                        f"source={source!r} field={field} text={text[:120]!r}"
+                    )
+                return ""
 
-        semantic_issues = self._recoverable_semantic_issues(text, normalized, field, source)
-        if semantic_issues:
+        final_issues = self._final_candidate_issues(
+            text,
+            normalized,
+            field,
+            source,
+            assume_sanity_valid=True,
+        )
+        if final_issues:
+            semantic_issues = [
+                issue for issue in final_issues if issue.get("issue_id") in self.RECOVERABLE_SEMANTIC_ISSUES
+            ]
+            if not semantic_issues or len(semantic_issues) != len(final_issues):
+                issue_ids = sorted({issue.get("issue_id") for issue in final_issues})
+                if self.strict:
+                    raise TranslationUnavailableError(
+                        f"translation rejected by final validator: issues={issue_ids} "
+                        f"source={source!r} field={field} text={text[:120]!r}"
+                    )
+                return ""
             semantic_recovered, selected, final_semantic_issues = self._semantic_recovery(
                 provider,
                 text,
@@ -1356,9 +1429,18 @@ class TitleTranslator:
                 semantic_issues,
             )
             semantic_issue_ids = sorted({issue.get("issue_id") for issue in final_semantic_issues or semantic_issues})
+            if not selected:
+                if self.strict:
+                    raise TranslationSemanticError(
+                        f"translation rejected by semantic validator: issues={semantic_issue_ids} "
+                        f"source={source!r} field={field} text={text[:120]!r}",
+                        normalized,
+                        final_semantic_issues or semantic_issues,
+                    )
+                return ""
             cache_value = {
                 "translation": semantic_recovered,
-                "raw_translation": raw,
+                "raw_translation": semantic_recovered,
                 "terminology_changes": changes,
                 "model": provider.model_name,
                 "generation_config_version": GENERATION_CONFIG_VERSION,
@@ -1388,6 +1470,8 @@ class TitleTranslator:
             "generation_config_version": GENERATION_CONFIG_VERSION,
             "glossary_version": self.normalizer.version,
         }
+        if locals().get("recovered_from"):
+            self.cache[key]["recovered_from"] = recovered_from
         self.cache_dirty = True
         return normalized
 
@@ -1425,7 +1509,17 @@ class TitleTranslator:
                 clean["summary_en"] = clean.get("summary_en", "")
             elif summary_lang == "en":
                 clean["summary_en"] = summary_original
-                clean["summary_cn"] = self._translate_text(summary_original, source, field="summary")
+                pending_semantic_error = None
+                try:
+                    clean["summary_cn"] = self._translate_text(summary_original, source, field="summary")
+                except TranslationSemanticError as exc:
+                    pending_semantic_error = exc
+                    clean["summary_cn"] = exc.candidate
+                    from crawler.translation_quality import apply_critical_action_safe_fallback
+
+                    clean, fallback_warning = apply_critical_action_safe_fallback(clean)
+                    if not fallback_warning:
+                        raise pending_semantic_error
                 if self.strict and summary_original.strip() and not clean["summary_cn"]:
                     raise TranslationUnavailableError(f"required summary translation missing for source={source!r}")
             else:

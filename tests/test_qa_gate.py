@@ -815,6 +815,31 @@ class QAGateTests(unittest.TestCase):
         )
         self.assertIn("translation_date_corruption", [issue["issue_id"] for issue in report["content_issues"]])
 
+    def test_allow_action_accepts_licensed_and_permitted_business_language(self):
+        original = "Within the scope of its licensed and permitted business, the exchange will provide custody support."
+        translated = "该交易所在经营许可和许可的业务范围内提供托管支持。"
+        report = self.evaluate(
+            weekly=payload(items=[item(1, summary_original=original, summary_cn=translated)], highlights=[])
+        )
+        allow_issues = [
+            issue for issue in report["content_issues"]
+            if issue["issue_id"] == "translation_action_direction_missing"
+            and issue.get("evidence", {}).get("action") == "allow"
+        ]
+        self.assertEqual(allow_issues, [])
+
+    def test_allow_action_still_fails_when_permission_meaning_is_missing(self):
+        original = "Within the scope of its licensed and permitted business, the exchange will provide custody support."
+        translated = "该交易所提供托管支持。"
+        report = self.evaluate(
+            weekly=payload(items=[item(1, summary_original=original, summary_cn=translated)], highlights=[])
+        )
+        self.assertTrue(any(
+            issue["issue_id"] == "translation_action_direction_missing"
+            and issue.get("evidence", {}).get("action") == "allow"
+            for issue in report["content_issues"]
+        ))
+
 
 class QAPolicyTests(unittest.TestCase):
     def test_policy_source_ids_exist_in_sources_json(self):

@@ -1,4 +1,5 @@
 import unittest
+import re
 from unittest.mock import Mock, patch
 
 import crawler.translator as translator
@@ -74,6 +75,7 @@ class RecordingProvider:
             }
         )
         output = self.outputs.pop(0) if self.outputs else ""
+        output = self._preserve_placeholders(text, output)
         token_count = len([token for token in str(text).split() if token])
         token_counts = []
         while token_count > 0:
@@ -85,6 +87,33 @@ class RecordingProvider:
             "chunk_token_counts": token_counts,
             "chunk_output_lengths": [len(output)],
         }
+        return output
+
+    def _preserve_placeholders(self, text, output):
+        if not output:
+            return output
+        normalizer = translator.TerminologyNormalizer()
+        missing_at_source_positions = []
+        for placeholder, canonical in getattr(self, "protected_entity_mappings", []):
+            if placeholder in output:
+                continue
+            pattern = normalizer._entity_pattern(canonical)
+            if re.search(pattern, output, flags=normalizer._entity_flags(canonical)):
+                output = re.sub(pattern, placeholder, output, count=1, flags=normalizer._entity_flags(canonical))
+                continue
+            replaced = False
+            for bad in normalizer.CANONICAL_ENTITIES.get(canonical, {}).get("bad", []):
+                if canonical == "ICE" and bad == "冰岛" and re.search(r"\bIceland(?:ic)?\b", str(text), flags=re.I):
+                    continue
+                bad_pattern = bad if bad.startswith("(?<") else re.escape(bad)
+                if re.search(bad_pattern, output):
+                    output = re.sub(bad_pattern, placeholder, output, count=1)
+                    replaced = True
+                    break
+            if not replaced:
+                missing_at_source_positions.append(placeholder)
+        if missing_at_source_positions:
+            output = " ".join(missing_at_source_positions + [output])
         return output
 
 
@@ -110,12 +139,36 @@ class ConditionalProvider(RecordingProvider):
             "chunk_token_counts": [token_count] if token_count else [],
             "chunk_output_lengths": [],
         }
+        match_text = str(text)
+        for placeholder, canonical in getattr(self, "protected_entity_mappings", []):
+            match_text = match_text.replace(placeholder, canonical)
         for needle, output in self.rules:
-            if needle in text:
+            if needle in match_text:
+                output = self._preserve_placeholders(text, output)
                 self.last_translation_metadata["chunk_output_lengths"].append(len(output))
                 return output
         self.last_translation_metadata["chunk_output_lengths"].append(0)
         return ""
+
+
+class ProductionFlowProvider(RecordingProvider):
+    def __init__(self, callbacks):
+        super().__init__([])
+        self.callbacks = list(callbacks)
+
+    def translate(self, text, source_lang="en", target_lang="zh", chunk_token_limit=None):
+        chunk_token_limit = chunk_token_limit or SOURCE_CHUNK_TOKEN_LIMIT
+        mappings = list(getattr(self, "protected_entity_mappings", []))
+        self.calls.append({"text": text, "mappings": mappings, "chunk_token_limit": chunk_token_limit})
+        callback = self.callbacks.pop(0)
+        output = callback(text, mappings)
+        self.last_translation_metadata = {
+            "chunk_token_limit": chunk_token_limit,
+            "chunk_count": 1,
+            "chunk_token_counts": [len(str(text).split())],
+            "chunk_output_lengths": [len(output)],
+        }
+        return output
 
 
 def fake_provider(model=None):
@@ -292,7 +345,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v20", GENERATION_CONFIG_VERSION)
+        self.assertIn("v21", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -1779,8 +1832,8 @@ class LongTextTranslationTests(unittest.TestCase):
         provider = RecordingProvider(["EEX新的货运数据产品", "EEX", "新的货运数据产品", "基于欧洲市场数据", "不应调用"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
-        output = title_translator._translate_text(original, "EEX", "title")
-        self.assertNotIn("推出", output)
+        with self.assertRaises(TranslationUnavailableError):
+            title_translator._translate_text(original, "EEX", "title")
         self.assertEqual(len(provider.calls), 3)
         self.assertFalse(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
         self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
@@ -1790,8 +1843,8 @@ class LongTextTranslationTests(unittest.TestCase):
         provider = RecordingProvider(["EEX新的货运数据产品"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
-        output = title_translator._translate_text(original, "EEX", "title")
-        self.assertEqual(output, "EEX新的货运数据产品")
+        with self.assertRaises(TranslationUnavailableError):
+            title_translator._translate_text(original, "EEX", "title")
         self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "provider_error")
 
     def test_semantic_recovery_segment_cap_limits_provider_calls(self):
@@ -1904,6 +1957,127 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("合作", output)
         self.assertIn("数字资产托管支持", output)
         self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+
+    @staticmethod
+    def _entity_placeholders(mappings, canonical):
+        return [placeholder for placeholder, entity in mappings if entity == canonical]
+
+    def test_full_hashkey_failed_recovery_is_not_returned_or_cached(self):
+        original = (
+            "Hong Kong, Sep. 15, 2026 — HashKey Exchange, a licensed trading platform under "
+            "HashKey Holdings Limited (3887.HK), an Asian comprehensive digital asset company, "
+            "announced that it has reached a partnership with Obita, a global payment service provider. "
+            "Within the scope of its licensed and permitted business, HashKey Exchange will provide "
+            "institutional-grade digital asset custody support […]"
+        )
+
+        def initial(_text, mappings):
+            hashkeys = self._entity_placeholders(mappings, "HashKey")
+            obita = self._entity_placeholders(mappings, "Obita")[0]
+            return (
+                f"{obita} 香港，2026年9月15日，{hashkeys[0]} Exchange是{hashkeys[1]} Holdings Limited旗下授权交易平台；"
+                f"{hashkeys[2]} Exchange将在经营许可和许可的业务范围内提供机构级数字资产托管支持。"
+            )
+
+        provider = ProductionFlowProvider(
+            [
+                initial,
+                lambda _text, _m: "香港，9月",
+                lambda _text, _m: "2026年15日",
+                lambda _text, m: f"{m[0][0]} Exchange是{m[1][0]} Holdings Limited旗下授权交易平台并宣布",
+                lambda _text, m: f"{m[0][0]}是一家全球支付服务提供商",
+                lambda _text, m: f"在经营许可和许可的业务范围内，{m[0][0]} Exchange将提供机构级数字资产托管支持",
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        with self.assertRaises(TranslationUnavailableError):
+            title_translator._translate_text(original, "HashKey", field="summary")
+
+        self.assertEqual(len(provider.calls), 6)
+        self.assertFalse(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
+        self.assertEqual(title_translator.cache, {})
+
+    def test_full_hashkey_successful_recovery_is_selected_validated_and_cached(self):
+        original = (
+            "Hong Kong, Sep. 15, 2026 — HashKey Exchange, a licensed trading platform under "
+            "HashKey Holdings Limited (3887.HK), an Asian comprehensive digital asset company, "
+            "announced that it has reached a partnership with Obita, a global payment service provider. "
+            "Within the scope of its licensed and permitted business, HashKey Exchange will provide "
+            "institutional-grade digital asset custody support […]"
+        )
+
+        def initial(_text, mappings):
+            hashkeys = self._entity_placeholders(mappings, "HashKey")
+            obita = self._entity_placeholders(mappings, "Obita")[0]
+            return (
+                f"{obita} 香港，2026年9月15日，{hashkeys[0]} Exchange是{hashkeys[1]} Holdings Limited旗下授权交易平台；"
+                f"{hashkeys[2]} Exchange将在经营许可和许可的业务范围内提供机构级数字资产托管支持。"
+            )
+
+        provider = ProductionFlowProvider(
+            [
+                initial,
+                lambda _text, _m: "香港，9月",
+                lambda _text, _m: "2026年15日",
+                lambda _text, m: f"{m[0][0]} Exchange是{m[1][0]} Holdings Limited旗下授权交易平台并宣布",
+                lambda _text, m: f"其已与{m[0][0]}达成合作，后者是一家全球支付服务提供商",
+                lambda _text, m: f"在经营许可和许可的业务范围内，{m[0][0]} Exchange将提供机构级数字资产托管支持",
+            ]
+        )
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "HashKey", field="summary")
+
+        self.assertIn("HashKey Exchange", output)
+        self.assertIn("与Obita达成合作", output)
+        self.assertIn("经营许可和许可的业务范围内", output)
+        self.assertIn("数字资产托管支持", output)
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "PASS")
+        self.assertEqual(len(title_translator.cache), 1)
+        self.assertEqual(next(iter(title_translator.cache.values()))["translation"], output)
+
+    def test_partior_occurrence_placeholders_preserve_both_semantic_positions(self):
+        original = (
+            "Partior and LSEG DiSH Collaborate to Bring Always-On Settlement Bank Liquidity "
+            "to Partior’s Cross-Border Payments Network"
+        )
+
+        def translated(_text, mappings):
+            partior = self._entity_placeholders(mappings, "Partior")
+            lseg = self._entity_placeholders(mappings, "LSEG")[0]
+            return f"{partior[0]}与{lseg} DiSH合作，向{partior[1]}的跨境支付网络提供全天候结算银行流动性"
+
+        provider = ProductionFlowProvider([translated])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "Partior", field="title")
+
+        self.assertEqual(output.count("Partior"), 2)
+        self.assertIn("向Partior的跨境支付网络", output)
+        self.assertNotIn("企业的跨境支付网络", output)
+
+    def test_obita_placeholder_dedupes_model_transliteration_at_occurrence(self):
+        original = "HashKey Exchange partners with Obita to provide digital asset custody support"
+
+        def translated(_text, mappings):
+            hashkey = self._entity_placeholders(mappings, "HashKey")[0]
+            obita = self._entity_placeholders(mappings, "Obita")[0]
+            return f"{hashkey} Exchange与{obita} 奥比塔合作，提供数字资产托管支持"
+
+        provider = ProductionFlowProvider([translated])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "HashKey", field="title")
+
+        self.assertEqual(output.count("Obita"), 1)
+        self.assertNotIn("奥比塔", output)
 
     def test_artifact_entities_and_financial_terms_are_normalized_from_source_evidence(self):
         normalizer = translator.TerminologyNormalizer()

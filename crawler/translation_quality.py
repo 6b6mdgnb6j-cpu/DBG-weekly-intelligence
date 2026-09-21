@@ -42,7 +42,16 @@ ACTION_DIRECTION_RULES = [
     ("extend", (r"\bextend(?:s|ed|ing)?\b",), ("延长", "延期", "扩大", "扩展")),
     ("approve", (r"\bapprov(?:e|es|ed|ing|al)\b",), ("批准", "核准", "获批", "被批准", "认可")),
     ("ban", (r"\bban(?:s|ned|ning)?\b", r"\bprohibit(?:s|ed|ing)?\b"), ("禁止",)),
-    ("allow", (r"\ballow(?:s|ed|ing)?\b", r"\bpermit(?:s|ted|ting)?\b"), ("允许",)),
+    (
+        "allow",
+        (
+            r"\ballow(?:s|ed|ing)?\b",
+            r"\bpermit(?:s|ted|ting)?\b",
+            r"\blicen[cs](?:e|es|ed|ing)?\b",
+            r"\bauthoriz(?:e|es|ed|ing|ation)\b",
+        ),
+        ("允许", "许可", "经许可", "获准", "准许", "授权", "经授权", "持牌"),
+    ),
     ("increase", (r"\bincreas(?:e|es|ed|ing)\b",), ("增加", "上升", "提高")),
     ("decrease", (r"\bdecreas(?:e|es|ed|ing)\b", r"\breduc(?:e|es|ed|ing)\b"), ("减少", "下降", "降低")),
 ]
@@ -222,6 +231,8 @@ def _entity_issues(index, item, normalizer):
                     )
                 )
             for bad in dangerous_variants:
+                if canonical == "ICE" and bad == "冰岛" and re.search(r"\bIceland(?:ic)?\b", original, flags=re.I):
+                    continue
                 if _contains_bad_variant(translated, bad):
                     issues.append(
                         _issue(
