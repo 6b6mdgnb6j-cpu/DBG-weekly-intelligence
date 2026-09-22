@@ -806,6 +806,57 @@ class QAGateTests(unittest.TestCase):
             [issue["issue_id"] for issue in report["content_issues"]],
         )
 
+    def test_mixed_review_artifact_with_finra_and_entity_failures_is_blocked(self):
+        finra_original = (
+            "Agreement establishes a pathway built on SEC-registered broker-dealer infrastructure "
+            "through HashKey’s licensed exchange network. Prometheum Capital is an SEC-registered, "
+            "FINRA member crypto asset custodian."
+        )
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="HashKey",
+                    title_cn="HashKey与Prometheum达成合作",
+                    summary_original=finra_original,
+                    summary_cn="该协议通过HashKey持牌交易网络向合格国际投资者提供美国股票。",
+                    translation_quality_issues=[
+                        {
+                            "issue_id": "translation_sanity_quality_failure",
+                            "severity": "FAIL",
+                            "evidence": {
+                                "reason": "critical_term_missing:FINRA",
+                                "field": "summary",
+                                "source": "HashKey",
+                            },
+                        }
+                    ],
+                ),
+                item(
+                    2,
+                    source="Partior",
+                    title_original="Partior launches a settlement platform",
+                    title_cn="该公司推出结算平台",
+                ),
+                item(3, title_cn="市场基础设施更新"),
+            ],
+            highlights=[],
+        )
+
+        report = self.evaluate(weekly=weekly)
+        issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+        sanity_reasons = [
+            issue.get("evidence", {}).get("sanity_reason")
+            for issue in report["content_issues"]
+        ]
+
+        self.assertEqual(len(weekly["items"]), 3)
+        self.assertTrue(weekly["items"][0]["summary_cn"])
+        self.assertEqual(report["status"], FAIL)
+        self.assertEqual(report["publish_recommendation"], "do_not_publish")
+        self.assertIn("critical_term_missing:FINRA", sanity_reasons)
+        self.assertIn("translation_entity_alignment_failure", issue_ids)
+
     def test_artifact_entity_and_term_conflicts_fail_qa(self):
         records = [
             ("RepoClear updates collateral rules", "雷波克莱尔更新抵押品规则"),

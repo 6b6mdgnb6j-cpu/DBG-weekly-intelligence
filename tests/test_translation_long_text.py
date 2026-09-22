@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v25", GENERATION_CONFIG_VERSION)
+        self.assertIn("v26", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -462,7 +462,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(output, "甲 乙 丙 丁")
         self.assertEqual([call["text"] for call in provider.calls], [original, original])
 
-    def test_length_ratio_recovery_failure_strict_mode_fails(self):
+    def test_length_ratio_recovery_failure_returns_best_review_candidate(self):
         provider = RecordingProvider(["短", "仍短"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
@@ -474,9 +474,13 @@ class LongTextTranslationTests(unittest.TestCase):
                 translator.ValidationResult(False, "length_ratio_low"),
             ],
         ):
-            with self.assertRaises(TranslationUnavailableError) as ctx:
-                title_translator._translate_text(" ".join(["market"] * 60), "Source", "summary")
-        self.assertIn("length_ratio_low", str(ctx.exception))
+            output = title_translator._translate_text(" ".join(["market"] * 60), "Source", "summary")
+        self.assertEqual(output, "仍短")
+        self.assertEqual(
+            title_translator.last_translation_quality_issues[0]["evidence"]["reason"],
+            "length_ratio_low",
+        )
+        self.assertEqual(title_translator.cache, {})
         self.assertEqual(len(provider.calls), 2)
 
     def test_bad_term_failure_does_not_trigger_recovery(self):
@@ -489,7 +493,12 @@ class LongTextTranslationTests(unittest.TestCase):
             return_value=translator.ValidationResult(False, "bad_term:外汇清算"),
         ):
             output = title_translator._translate_text("Market update", "Source", "title")
-        self.assertEqual(output, "")
+        self.assertEqual(output, "外汇清算更新")
+        self.assertEqual(
+            title_translator.last_translation_quality_issues[0]["evidence"]["reason"],
+            "bad_term:外汇清算",
+        )
+        self.assertEqual(title_translator.cache, {})
         self.assertEqual(len(provider.calls), 1)
 
     def test_critical_term_missing_does_not_trigger_recovery(self):
@@ -502,7 +511,12 @@ class LongTextTranslationTests(unittest.TestCase):
             return_value=translator.ValidationResult(False, "critical_term_missing:CFTC"),
         ):
             output = title_translator._translate_text("CFTC market rule", "Source", "title")
-        self.assertEqual(output, "")
+        self.assertEqual(output, "CFTC市场规则")
+        self.assertEqual(
+            title_translator.last_translation_quality_issues[0]["evidence"]["reason"],
+            "critical_term_missing:CFTC",
+        )
+        self.assertEqual(title_translator.cache, {})
         self.assertEqual(len(provider.calls), 1)
 
     def test_length_ratio_recovery_diagnostics_include_chunk_metadata(self):
@@ -1589,8 +1603,9 @@ class LongTextTranslationTests(unittest.TestCase):
                 translator.ValidationResult(False, "content_ratio_low"),
             ],
         ):
-            with self.assertRaises(TranslationUnavailableError):
-                title_translator._translate_text(" ".join(["market"] * 49), "Source", "summary")
+            output = title_translator._translate_text(" ".join(["market"] * 49), "Source", "summary")
+        self.assertEqual(output, "依然短")
+        self.assertEqual(title_translator.cache, {})
         self.assertEqual(len(provider.calls), 3)
 
     def test_tier2_does_not_run_for_bad_term_after_tier1(self):
@@ -1606,7 +1621,8 @@ class LongTextTranslationTests(unittest.TestCase):
             ],
         ):
             output = title_translator._translate_text(" ".join(["market"] * 49), "Source", "summary")
-        self.assertEqual(output, "")
+        self.assertEqual(output, "外汇清算更新")
+        self.assertEqual(title_translator.cache, {})
         self.assertEqual(len(provider.calls), 2)
 
     def test_tier2_does_not_run_for_critical_term_missing_after_tier1(self):
@@ -1622,7 +1638,8 @@ class LongTextTranslationTests(unittest.TestCase):
             ],
         ):
             output = title_translator._translate_text(" ".join(["CFTC"] + ["market"] * 48), "Source", "summary")
-        self.assertEqual(output, "")
+        self.assertEqual(output, "CFTC市场规则")
+        self.assertEqual(title_translator.cache, {})
         self.assertEqual(len(provider.calls), 2)
 
     def test_initial_success_never_runs_recovery(self):
@@ -1647,7 +1664,7 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(output, "完整中文翻译")
         self.assertEqual(len(provider.calls), 2)
 
-    def test_still_collapsed_recovery_fails_strict_mode(self):
+    def test_still_collapsed_recovery_returns_review_candidate(self):
         provider = RecordingProvider(["短", "仍短", "依然很短"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
@@ -1660,8 +1677,9 @@ class LongTextTranslationTests(unittest.TestCase):
                 translator.ValidationResult(False, "content_ratio_low"),
             ],
         ):
-            with self.assertRaises(TranslationUnavailableError):
-                title_translator._translate_text(" ".join(["market"] * 60), "Source", "summary")
+            output = title_translator._translate_text(" ".join(["market"] * 60), "Source", "summary")
+        self.assertEqual(output, "依然很短")
+        self.assertEqual(title_translator.cache, {})
         self.assertEqual(len(provider.calls), 3)
 
     def test_legitimate_shorter_chinese_summary_passes(self):
@@ -2055,6 +2073,40 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
         self.assertTrue(title_translator.last_translation_quality_issues)
         self.assertEqual(title_translator.cache, {})
+
+    def test_prometheum_finra_quality_failure_returns_review_candidate_without_cache(self):
+        original = (
+            "Agreement establishes a pathway built on SEC-registered broker-dealer "
+            "infrastructure to distribute U.S. equities to eligible international investors "
+            "through HashKey’s licensed exchange network. New York, Sep. 16, 2026 – "
+            "Prometheum Inc. (\"Prometheum\"), a market infrastructure provider for crypto "
+            "assets, today announced that its subsidiary Prometheum Capital LLC "
+            "(\"Prometheum Capital\"), an SEC-registered, FINRA member crypto asset custodian […]"
+        )
+        model_output = (
+            "该协议建立了一个基于SEC注册的经纪商-经销商基础设施的途径，"
+            "以通过HashKey的授权交易网络向有资格的国际投资者分配美国股票。"
+        )
+        provider = RecordingProvider([model_output])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "HashKey", field="summary")
+
+        self.assertEqual(output, model_output)
+        self.assertEqual(
+            title_translator.last_translation_quality_issues[0]["evidence"]["reason"],
+            "critical_term_missing:FINRA",
+        )
+        self.assertEqual(title_translator.cache, {})
+
+    def test_empty_provider_output_remains_fatal(self):
+        provider = RecordingProvider([""])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        with self.assertRaises(TranslationUnavailableError):
+            title_translator._translate_text("FINRA publishes a market update", "FINRA", field="title")
 
     def test_full_hashkey_successful_recovery_is_selected_validated_and_cached(self):
         original = (

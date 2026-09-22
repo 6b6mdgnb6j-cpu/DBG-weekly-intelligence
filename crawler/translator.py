@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v25"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v26"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -125,6 +125,14 @@ def _save_cache(cache, logger=None):
 class TranslationSanityValidator:
     BAD_GARBAGE_TERMS = ("买彩", "倍投")
     BAD_CONTROL_RATIO = 0.04
+    FATAL_REASON_PREFIXES = (
+        "empty_translation",
+        "garbage_term:",
+        "repeated_character",
+        "repeated_phrase",
+        "replacement_character",
+        "control_ratio",
+    )
     BAD_TERMS = (
         "清流",
         "希克克斯",
@@ -270,6 +278,10 @@ class TranslationSanityValidator:
     @classmethod
     def is_valid(cls, original, translated, source=""):
         return cls.validate_with_reason(original, translated, source).valid
+
+    @classmethod
+    def is_fatal_reason(cls, reason):
+        return any((reason or "").startswith(prefix) for prefix in cls.FATAL_REASON_PREFIXES)
 
 
 class LocalNLLBProvider:
@@ -1072,6 +1084,7 @@ class TitleTranslator:
                 field_type=field,
                 source=source,
                 title_original=text if field == "title" else "",
+                include_sanity=False,
             )
             if issue.get("severity") == FAIL
         ]
@@ -1398,6 +1411,7 @@ class TitleTranslator:
         initial_metadata = self._provider_metadata(provider)
         normalized, changes = self.normalizer.normalize(raw, text, source, restore_missing=False)
         validation = TranslationSanityValidator.validate_with_reason(text, normalized, source, field=field)
+        review_candidates = [(normalized, validation, raw, changes)]
         if not validation.valid:
             if validation.reason in ("length_ratio_low", "content_ratio_low"):
                 initial_failure_reason = validation.reason
@@ -1411,6 +1425,9 @@ class TitleTranslator:
                 )
                 recovered_validation = TranslationSanityValidator.validate_with_reason(
                     text, recovered_normalized, source, field=field
+                )
+                review_candidates.append(
+                    (recovered_normalized, recovered_validation, recovered_raw, recovered_changes)
                 )
                 tier2_raw = ""
                 tier2_normalized = ""
@@ -1433,6 +1450,7 @@ class TitleTranslator:
                     tier2_validation = TranslationSanityValidator.validate_with_reason(
                         text, tier2_normalized, source, field=field
                     )
+                    review_candidates.append((tier2_normalized, tier2_validation, tier2_raw, tier2_changes))
                 self._log_recovery_diagnostics(
                     source,
                     field,
@@ -1477,13 +1495,31 @@ class TitleTranslator:
                         changes = tier2_changes
 
             if not validation.valid:
-                self._log_rejection_diagnostics(source, field, text, raw, normalized, changes, validation)
-                if self.strict:
-                    raise TranslationUnavailableError(
-                        f"translation rejected by sanity validator: reason={validation.reason} "
-                        f"source={source!r} field={field} text={text[:120]!r}"
+                usable_candidates = [
+                    candidate
+                    for candidate in review_candidates
+                    if candidate[0]
+                    and not TranslationSanityValidator.is_fatal_reason(candidate[1].reason)
+                ]
+                if usable_candidates:
+                    normalized, validation, raw, changes = max(
+                        usable_candidates,
+                        key=lambda candidate: self._content_length(candidate[0]),
                     )
-                return ""
+                self._log_rejection_diagnostics(source, field, text, raw, normalized, changes, validation)
+                if TranslationSanityValidator.is_fatal_reason(validation.reason):
+                    if self.strict:
+                        raise TranslationUnavailableError(
+                            f"translation rejected by sanity validator: reason={validation.reason} "
+                            f"source={source!r} field={field} text={text[:120]!r}"
+                        )
+                    return ""
+                self.last_translation_quality_issues = [{
+                    "issue_id": "translation_sanity_quality_failure",
+                    "severity": "FAIL",
+                    "evidence": {"reason": validation.reason, "field": field, "source": source},
+                }]
+                return normalized
 
         final_issues = self._final_candidate_issues(
             text,
@@ -1555,6 +1591,7 @@ class TitleTranslator:
 
         for item in items:
             clean = dict(item)
+            translation_quality_issues = []
             title_original = clean.get("title_original", "")
             summary_original = clean.get("summary_original", clean.get("summary", ""))
             source = clean.get("source", "")
@@ -1571,6 +1608,7 @@ class TitleTranslator:
             elif title_lang == "en":
                 clean["title_en"] = title_original
                 clean["title_cn"] = self._translate_text(title_original, source, field="title")
+                translation_quality_issues.extend(self.last_translation_quality_issues)
                 if self.strict and not clean["title_cn"]:
                     raise TranslationUnavailableError(f"required title translation missing for source={source!r}")
             else:
@@ -1585,6 +1623,7 @@ class TitleTranslator:
                 pending_semantic_error = None
                 try:
                     clean["summary_cn"] = self._translate_text(summary_original, source, field="summary")
+                    translation_quality_issues.extend(self.last_translation_quality_issues)
                 except TranslationSemanticError as exc:
                     pending_semantic_error = exc
                     clean["summary_cn"] = exc.candidate
@@ -1603,6 +1642,8 @@ class TitleTranslator:
                 from crawler.translation_quality import apply_critical_action_safe_fallback
 
                 clean, _ = apply_critical_action_safe_fallback(clean)
+            if translation_quality_issues:
+                clean["translation_quality_issues"] = translation_quality_issues
             translated.append(clean)
 
         if self.enabled and self.cache_dirty:

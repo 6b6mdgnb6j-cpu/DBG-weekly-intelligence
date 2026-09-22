@@ -531,6 +531,7 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertNotIn("git push", workflow)
         self.assertIn("status = classify_quality_issues(issues)", script)
         self.assertIn('"status": "FATAL"', script)
+        self.assertIn('"name": "prometheum_finra_critical_term"', script)
 
     def test_smoke_quality_classification_marks_unresolved_entity_as_qa_fail(self):
         from crawler.translation_quality import FAIL as QUALITY_FAIL, validate_translation_field

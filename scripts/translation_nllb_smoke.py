@@ -55,6 +55,19 @@ FIXTURES = (
         "field": "title",
         "text": "FCA opens investigation into Euro Exchange Securities UK Ltd",
     },
+    {
+        "name": "prometheum_finra_critical_term",
+        "source": "HashKey",
+        "field": "summary",
+        "text": (
+            "Agreement establishes a pathway built on SEC-registered broker-dealer "
+            "infrastructure to distribute U.S. equities to eligible international investors "
+            "through HashKey’s licensed exchange network. New York, Sep. 16, 2026 – "
+            "Prometheum Inc. (\"Prometheum\"), a market infrastructure provider for crypto "
+            "assets, today announced that its subsidiary Prometheum Capital LLC "
+            "(\"Prometheum Capital\"), an SEC-registered, FINRA member crypto asset custodian […]"
+        ),
+    },
 )
 
 
@@ -95,6 +108,13 @@ def main():
                 "fixture": fixture["name"],
                 "status": "FATAL",
                 "error": str(exc),
+            }, ensure_ascii=False))
+        except Exception as exc:
+            failures += 1
+            print(json.dumps({
+                "fixture": fixture["name"],
+                "status": "FATAL",
+                "error": f"{type(exc).__name__}: {exc}",
             }, ensure_ascii=False))
 
     raise SystemExit(1 if failures else 0)

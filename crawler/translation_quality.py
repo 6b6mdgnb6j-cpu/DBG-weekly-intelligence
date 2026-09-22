@@ -1,7 +1,7 @@
 import re
 from datetime import date
 
-from crawler.translator import TerminologyNormalizer
+from crawler.translator import TerminologyNormalizer, TranslationSanityValidator
 
 
 FAIL = "FAIL"
@@ -298,6 +298,55 @@ def _entity_issues(index, item, normalizer):
     return issues
 
 
+def _sanity_quality_issues(index, item):
+    issues = []
+    for diagnostic in item.get("translation_quality_issues") or []:
+        if diagnostic.get("issue_id") != "translation_sanity_quality_failure":
+            continue
+        evidence = diagnostic.get("evidence") or {}
+        reason = evidence.get("reason") or "unknown"
+        field = evidence.get("field") or "text"
+        issues.append(
+            _issue(
+                index,
+                item,
+                field,
+                "translation_sanity_quality_failure",
+                FAIL,
+                {"sanity_reason": reason},
+                f"Translation sanity quality check failed: {reason}",
+            )
+        )
+    return issues
+
+
+def _standalone_sanity_quality_issues(index, item):
+    issues = []
+    for field, original, translated in _translated_fields(item):
+        if not original or not translated:
+            continue
+        validation = TranslationSanityValidator.validate_with_reason(
+            original,
+            translated,
+            item.get("source") or "",
+            field=field,
+        )
+        if validation.valid or TranslationSanityValidator.is_fatal_reason(validation.reason):
+            continue
+        issues.append(
+            _issue(
+                index,
+                item,
+                field,
+                "translation_sanity_quality_failure",
+                FAIL,
+                {"sanity_reason": validation.reason},
+                f"Translation sanity quality check failed: {validation.reason}",
+            )
+        )
+    return issues
+
+
 def _material_term_issues(index, item):
     issues = []
     source = item.get("source") or ""
@@ -588,6 +637,7 @@ def audit_translation_quality(items, translation_mode=""):
     issues = []
     for index, item in enumerate(items or []):
         issues.extend(_bilingual_completeness_issues(index, item, translation_mode))
+        issues.extend(_sanity_quality_issues(index, item))
         issues.extend(_entity_issues(index, item, normalizer))
         issues.extend(_material_term_issues(index, item))
         issues.extend(_proper_noun_issues(index, item))
@@ -602,7 +652,14 @@ def audit_translation_quality(items, translation_mode=""):
     return issues
 
 
-def validate_translation_field(original, translated, field_type="text", source="", title_original=""):
+def validate_translation_field(
+    original,
+    translated,
+    field_type="text",
+    source="",
+    title_original="",
+    include_sanity=True,
+):
     item = {
         "source": source or "",
         "title_original": title_original or (original if field_type == "title" else ""),
@@ -612,7 +669,8 @@ def validate_translation_field(original, translated, field_type="text", source="
     }
     if field_type == "title":
         return (
-            _entity_issues(0, item, TerminologyNormalizer())
+            (_standalone_sanity_quality_issues(0, item) if include_sanity else [])
+            + _entity_issues(0, item, TerminologyNormalizer())
             + _proper_noun_issues(0, item)
             + _title_proposition_issues(0, item)
             + _action_direction_issues(0, item)
@@ -621,7 +679,8 @@ def validate_translation_field(original, translated, field_type="text", source="
         )
     if field_type == "summary":
         return (
-            _entity_issues(0, item, TerminologyNormalizer())
+            (_standalone_sanity_quality_issues(0, item) if include_sanity else [])
+            + _entity_issues(0, item, TerminologyNormalizer())
             + _proper_noun_issues(0, item)
             + _action_direction_issues(0, item)
             + _relationship_issues(0, item)
@@ -638,6 +697,7 @@ def _summary_has_high_risk_action_failure(item):
         field_type="summary",
         source=item.get("source") or "",
         title_original=item.get("title_original") or item.get("title") or "",
+        include_sanity=False,
     )
     for issue in issues:
         if (
@@ -666,6 +726,7 @@ def _title_provides_safe_action_fallback(item, family):
         field_type="title",
         source=item.get("source") or "",
         title_original=title_original,
+        include_sanity=False,
     )
     return not any(issue.get("severity") == FAIL for issue in title_issues)
 
