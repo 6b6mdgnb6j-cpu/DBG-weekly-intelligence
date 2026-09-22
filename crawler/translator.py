@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v22"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v23"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -36,6 +36,17 @@ class TranslationSemanticError(TranslationUnavailableError):
         super().__init__(message)
         self.candidate = candidate
         self.issues = issues
+
+
+class ProtectedEntityError(TranslationUnavailableError):
+    def __init__(self, details):
+        self.details = details
+        super().__init__(
+            "protected entity occurrence missing: "
+            f"source={details.get('source', '')!r} field={details.get('field', '')} "
+            f"entity={details.get('entity', '')} occurrence={details.get('occurrence')} "
+            f"stage={details.get('stage', '')}"
+        )
 
 
 @dataclass(frozen=True)
@@ -449,6 +460,17 @@ class LocalNLLBProvider:
 
 
 class TerminologyNormalizer:
+    # Canonical literals are hard protected. Aliases are ordinary/localizable unless
+    # explicitly listed here based on a demonstrated identity-confusion regression.
+    HARD_PROTECTED_ALIASES = {
+        "Deutsche Börse": {"Deutsche Börse Group"},
+        "ISS STOXX": {"ISS-Corporate"},
+        "ICE": {"Intercontinental Exchange"},
+        "SIX": {"SIX Exchanges"},
+        "LSEG": {"London Stock Exchange Group"},
+        "S&P Dow Jones Indices": {"S&P DJI"},
+    }
+    SOFT_LOCALIZABLE_ALIASES = {"JPX", "HKMA"}
     CANONICAL_ENTITIES = {
         # Preserve the complete legal name; never whitelist its mistranslated prefix.
         "Euro Exchange Securities UK Ltd": {
@@ -787,38 +809,50 @@ class TerminologyNormalizer:
     def protected_entity_occurrences(self, original):
         matches = []
         for canonical, spec in self.CANONICAL_ENTITIES.items():
-            for evidence in (canonical, *spec.get("aliases", [])):
+            evidence_terms = [canonical, *self.HARD_PROTECTED_ALIASES.get(canonical, set())]
+            for evidence in evidence_terms:
                 for match in self._entity_matches(original, evidence):
-                    matches.append((match.start(), match.end(), canonical, canonical))
+                    matches.append((match.start(), match.end(), canonical, canonical, evidence))
         selected = []
         occupied_until = -1
-        for start, end, canonical, preserved in sorted(matches, key=lambda value: (value[0], -(value[1] - value[0]))):
+        for start, end, canonical, preserved, evidence in sorted(
+            matches, key=lambda value: (value[0], -(value[1] - value[0]))
+        ):
             if start < occupied_until:
                 continue
-            selected.append((canonical, preserved))
+            selected.append((canonical, preserved, evidence))
             occupied_until = end
         return selected
 
     def restore_entity_occurrences(self, translated, original):
         out = translated or ""
         cursor = 0
-        for canonical, preserved in self.protected_entity_occurrences(original):
+        occurrence_counts = {}
+        for canonical, preserved, evidence in self.protected_entity_occurrences(original):
+            occurrence_counts[canonical] = occurrence_counts.get(canonical, 0) + 1
             spec = self.CANONICAL_ENTITIES.get(canonical, {})
             variants = [canonical, *spec.get("aliases", []), *spec.get("bad", [])]
             variants.extend(self.ENTITY_TRANSPORT_VARIANTS.get(canonical, ()))
             matches = []
+            considered = []
             for variant in variants:
                 if not variant or variant.startswith("(?<"):
                     continue
+                considered.append(variant)
                 match = re.search(self._entity_pattern(variant), out[cursor:], flags=self._entity_flags(variant))
                 if match:
                     matches.append((cursor + match.start(), cursor + match.end()))
             if not matches:
-                return translated or "", False
+                return translated or "", False, {
+                    "entity": canonical,
+                    "evidence": evidence,
+                    "occurrence": occurrence_counts[canonical],
+                    "candidate_forms": considered,
+                }
             start, end = min(matches, key=lambda value: value[0])
             out = out[:start] + preserved + out[end:]
             cursor = start + len(preserved)
-        return out, True
+        return out, True, None
 
     def _dedupe_protected_entities(self, text, original):
         out = text or ""
@@ -861,6 +895,8 @@ class TerminologyNormalizer:
         for canonical, spec in self.CANONICAL_ENTITIES.items():
             aliases = spec.get("aliases", [])
             has_context = self._original_has_entity_evidence(original, canonical, aliases)
+            if canonical in self.SOFT_LOCALIZABLE_ALIASES and not self._contains_entity(original, canonical):
+                has_context = False
             if has_context:
                 for bad in spec.get("bad", []):
                     if canonical == "ICE" and bad == "冰岛" and re.search(r"\bIceland(?:ic)?\b", original or "", flags=re.I):
@@ -880,6 +916,8 @@ class TerminologyNormalizer:
         for brand, replacements in self.source_edits.items():
             aliases = self.CONTEXT_ALIASES.get(brand, [])
             has_context = self._original_has_entity_evidence(original, brand, aliases)
+            if brand in self.SOFT_LOCALIZABLE_ALIASES and not self._contains_entity(original, brand):
+                has_context = False
             if has_context:
                 for bad, good in replacements.items():
                     if brand == "ICE" and bad == "冰岛" and re.search(r"\bIceland(?:ic)?\b", original or "", flags=re.I):
@@ -988,11 +1026,32 @@ class TitleTranslator:
             "chunk_output_lengths": metadata.get("chunk_output_lengths", []),
         }
 
-    def _translate_protected(self, provider, text, chunk_token_limit):
+    def _translate_protected(self, provider, text, chunk_token_limit, source="", field="", stage="initial"):
         raw = self._provider_translate(provider, text, chunk_token_limit)
-        restored, complete = self.normalizer.restore_entity_occurrences(raw, text)
+        restored, complete, failure = self.normalizer.restore_entity_occurrences(raw, text)
         if self.normalizer.protected_entity_occurrences(text) and not complete:
-            raise TranslationUnavailableError("protected entity occurrence missing from model output")
+            details = dict(failure or {})
+            details.update({
+                "source": source,
+                "field": field,
+                "stage": stage,
+                "original_excerpt": (text or "")[:240],
+                "model_output_excerpt": (raw or "")[:240],
+            })
+            if self.logger:
+                self.logger.error(
+                    "Protected entity occurrence missing: source=%r field=%s entity=%s occurrence=%s "
+                    "stage=%s original=%r output=%r candidate_forms=%s",
+                    source,
+                    field,
+                    details.get("entity"),
+                    details.get("occurrence"),
+                    stage,
+                    details.get("original_excerpt"),
+                    details.get("model_output_excerpt"),
+                    details.get("candidate_forms"),
+                )
+            raise ProtectedEntityError(details)
         return restored
 
     @staticmethod
@@ -1123,7 +1182,14 @@ class TitleTranslator:
         translated_segments = []
         try:
             for segment in segments:
-                translated = self._translate_protected(provider, segment, SOURCE_CHUNK_TOKEN_LIMIT)
+                translated = self._translate_protected(
+                    provider,
+                    segment,
+                    SOURCE_CHUNK_TOKEN_LIMIT,
+                    source=source,
+                    field=field,
+                    stage="semantic_recovery",
+                )
                 if not translated:
                     self.last_semantic_recovery_metadata["recovery_validation_result"] = "provider_error"
                     self._log_semantic_recovery_diagnostics()
@@ -1311,7 +1377,9 @@ class TitleTranslator:
             if cached.get("invalid") and self.logger:
                 self.logger.info("Ignoring invalid cached translation for source=%s field=%s", source, field)
 
-        raw = self._translate_protected(provider, text, SOURCE_CHUNK_TOKEN_LIMIT)
+        raw = self._translate_protected(
+            provider, text, SOURCE_CHUNK_TOKEN_LIMIT, source=source, field=field, stage="initial"
+        )
         if not raw:
             if self.strict:
                 reason = getattr(provider, "last_error", "") or getattr(provider, "load_error", "") or "empty provider output"
@@ -1326,7 +1394,9 @@ class TitleTranslator:
             if validation.reason in ("length_ratio_low", "content_ratio_low"):
                 initial_failure_reason = validation.reason
                 recovery_chunk_limit = self._effective_recovery_chunk_limit(initial_metadata)
-                recovered_raw = self._translate_protected(provider, text, recovery_chunk_limit)
+                recovered_raw = self._translate_protected(
+                    provider, text, recovery_chunk_limit, source=source, field=field, stage="length_recovery"
+                )
                 recovery_metadata = self._provider_metadata(provider)
                 recovered_normalized, recovered_changes = self.normalizer.normalize(
                     recovered_raw, text, source, restore_missing=False
@@ -1345,7 +1415,9 @@ class TitleTranslator:
                         configured_max=RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT,
                         min_limit=MIN_TIER2_SOURCE_CHUNK_TOKEN_LIMIT,
                     )
-                    tier2_raw = self._translate_protected(provider, text, tier2_chunk_limit)
+                    tier2_raw = self._translate_protected(
+                        provider, text, tier2_chunk_limit, source=source, field=field, stage="tier2_recovery"
+                    )
                     tier2_metadata = self._provider_metadata(provider)
                     tier2_normalized, tier2_changes = self.normalizer.normalize(
                         tier2_raw, text, source, restore_missing=False

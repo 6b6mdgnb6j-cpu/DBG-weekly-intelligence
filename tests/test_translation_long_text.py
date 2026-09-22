@@ -6,6 +6,7 @@ import crawler.translator as translator
 from crawler.translator import (
     GENERATION_CONFIG_VERSION,
     LocalNLLBProvider,
+    ProtectedEntityError,
     TitleTranslator,
     TranslationSanityValidator,
     TranslationUnavailableError,
@@ -362,7 +363,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v22", GENERATION_CONFIG_VERSION)
+        self.assertIn("v23", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -832,6 +833,52 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertLess(output.index("ICE"), output.index("Cboe"))
         self.assertEqual(output.count("ICE"), 1)
         self.assertEqual(output.count("Cboe"), 1)
+
+    def test_ordinary_jpx_alias_and_abn_amro_may_be_localized(self):
+        original = (
+            "Tokyo Commodity Exchange Welcomes ABN AMRO Clearing Tokyo Co., Ltd. as a "
+            "Broker Member for Trading TOCOM Electricity and Other Energy Futures | Japan Exchange Group"
+        )
+        provider = RecordingProvider([
+            "东京商品交易所欢迎ABN AMRO清算东京股份有限公司成为TOCOM电力及其他能源期货交易经纪会员｜日本交易所集团"
+        ])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "JPX", "title")
+
+        self.assertIn("东京商品交易所", output)
+        self.assertIn("ABN AMRO清算东京股份有限公司", output)
+        self.assertIn("日本交易所集团", output)
+
+    def test_hong_kong_monetary_authority_may_be_localized(self):
+        original = "Hong Kong Monetary Authority publishes a banking supervision update"
+        provider = RecordingProvider(["香港金融管理局发布银行监管更新"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "HKMA", "title")
+
+        self.assertEqual(output, "香港金融管理局发布银行监管更新")
+
+    def test_hard_entity_failure_reports_actionable_occurrence_diagnostics(self):
+        original = "Partior connects settlement liquidity to Partior's payment network"
+        provider = RecordingProvider(["Partior将结算流动性连接至支付网络"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        with self.assertRaises(ProtectedEntityError) as caught:
+            title_translator._translate_text(original, "Partior", "title")
+
+        details = caught.exception.details
+        self.assertEqual(details["entity"], "Partior")
+        self.assertEqual(details["occurrence"], 2)
+        self.assertEqual(details["source"], "Partior")
+        self.assertEqual(details["field"], "title")
+        self.assertEqual(details["stage"], "initial")
+        self.assertIn("Partior connects", details["original_excerpt"])
+        self.assertIn("支付网络", details["model_output_excerpt"])
+        self.assertIn("Partior", details["candidate_forms"])
 
     def test_nasdaq_verafin_duplicate_preserves_composite_name(self):
         normalizer = translator.TerminologyNormalizer()

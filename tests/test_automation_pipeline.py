@@ -511,6 +511,24 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertIn("collect_web(source, week_start, week_end, logger)", workflow)
         self.assertIn("hkma-source-validation", workflow)
 
+    def test_real_nllb_smoke_workflow_is_manual_read_only_and_translation_only(self):
+        workflow = Path(".github/workflows/translation-nllb-smoke.yml").read_text(encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("schedule:", workflow)
+        self.assertNotIn("push:", workflow)
+        self.assertNotIn("pull_request:", workflow)
+        self.assertIn("requirements-translation.txt", workflow)
+        self.assertIn("python-version: '3.14'", workflow)
+        self.assertIn("scripts/translation_nllb_smoke.py", workflow)
+        self.assertIn("set -o pipefail", workflow)
+        self.assertNotIn("run_weekly.py", workflow)
+        self.assertNotIn("publish_weekly.py", workflow)
+        self.assertNotIn("published/", workflow)
+        self.assertNotIn("git add", workflow)
+        self.assertNotIn("git commit", workflow)
+        self.assertNotIn("git push", workflow)
+
     def test_review_upload_requires_bundle_validation_success_and_exit_zero(self):
         workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
         self.assertIn(
