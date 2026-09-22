@@ -2,7 +2,7 @@
 import json
 
 from crawler.translation_quality import FAIL, validate_translation_field
-from crawler.translator import ProtectedEntityError, TitleTranslator, TranslationUnavailableError
+from crawler.translator import TitleTranslator, TranslationUnavailableError
 
 
 FIXTURES = (
@@ -58,6 +58,10 @@ FIXTURES = (
 )
 
 
+def classify_quality_issues(issues):
+    return "PASS" if not issues else "QA_FAIL"
+
+
 def main():
     translator = TitleTranslator(enabled=True, strict=True)
     translator.cache = {}
@@ -77,7 +81,7 @@ def main():
                 )
                 if issue.get("severity") == FAIL
             ]
-            status = "PASS" if not issues else "FAIL"
+            status = classify_quality_issues(issues)
             failures += bool(issues)
             print(json.dumps({
                 "fixture": fixture["name"],
@@ -85,20 +89,14 @@ def main():
                 "translation": output,
                 "issues": issues,
             }, ensure_ascii=False))
-        except ProtectedEntityError as exc:
-            failures += 1
-            print(json.dumps({
-                "fixture": fixture["name"],
-                "status": "FAIL",
-                "entity_failure": exc.details,
-            }, ensure_ascii=False))
         except TranslationUnavailableError as exc:
             failures += 1
             print(json.dumps({
                 "fixture": fixture["name"],
-                "status": "FAIL",
+                "status": "FATAL",
                 "error": str(exc),
             }, ensure_ascii=False))
+
     raise SystemExit(1 if failures else 0)
 
 

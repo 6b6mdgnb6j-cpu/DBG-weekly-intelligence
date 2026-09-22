@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v24"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v25"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -472,6 +472,10 @@ class TerminologyNormalizer:
     }
     SOFT_LOCALIZABLE_ALIASES = {"JPX", "HKMA"}
     CANONICAL_ENTITIES = {
+        "HashKey Holdings Limited": {"aliases": [], "bad": []},
+        "HashKey Exchange": {"aliases": [], "bad": ["哈希基交易所", "哈什基交易所"]},
+        "LSEG DiSH": {"aliases": [], "bad": []},
+        "ABN AMRO": {"aliases": [], "bad": []},
         # Preserve the complete legal name; never whitelist its mistranslated prefix.
         "Euro Exchange Securities UK Ltd": {
             "aliases": [],
@@ -843,7 +847,7 @@ class TerminologyNormalizer:
                 if match:
                     matches.append((cursor + match.start(), cursor + match.end()))
             if not matches:
-                return translated or "", False, {
+                return out, False, {
                     "entity": canonical,
                     "evidence": evidence,
                     "occurrence": occurrence_counts[canonical],
@@ -986,6 +990,8 @@ class TitleTranslator:
         self.cache = {}
         self.cache_dirty = False
         self.last_semantic_recovery_metadata = {}
+        self.last_entity_alignment_failures = []
+        self.last_translation_quality_issues = []
         if self.enabled:
             self.cache = _load_cache(logger)
 
@@ -1051,7 +1057,7 @@ class TitleTranslator:
                     details.get("model_output_excerpt"),
                     details.get("candidate_forms"),
                 )
-            raise ProtectedEntityError(details)
+            self.last_entity_alignment_failures.append(details)
         return restored
 
     @staticmethod
@@ -1360,6 +1366,8 @@ class TitleTranslator:
         )
 
     def _translate_text(self, text, source, field="text"):
+        self.last_entity_alignment_failures = []
+        self.last_translation_quality_issues = []
         if not self.enabled or not text or detect_language(text) != "en":
             return ""
         provider = self.provider
@@ -1489,13 +1497,8 @@ class TitleTranslator:
                 issue for issue in final_issues if issue.get("issue_id") in self.RECOVERABLE_SEMANTIC_ISSUES
             ]
             if not semantic_issues or len(semantic_issues) != len(final_issues):
-                issue_ids = sorted({issue.get("issue_id") for issue in final_issues})
-                if self.strict:
-                    raise TranslationUnavailableError(
-                        f"translation rejected by final validator: issues={issue_ids} "
-                        f"source={source!r} field={field} text={text[:120]!r}"
-                    )
-                return ""
+                self.last_translation_quality_issues = list(final_issues)
+                return normalized
             semantic_recovered, selected, final_semantic_issues = self._semantic_recovery(
                 provider,
                 text,
@@ -1506,14 +1509,8 @@ class TitleTranslator:
             )
             semantic_issue_ids = sorted({issue.get("issue_id") for issue in final_semantic_issues or semantic_issues})
             if not selected:
-                if self.strict:
-                    raise TranslationSemanticError(
-                        f"translation rejected by semantic validator: issues={semantic_issue_ids} "
-                        f"source={source!r} field={field} text={text[:120]!r}",
-                        normalized,
-                        final_semantic_issues or semantic_issues,
-                    )
-                return ""
+                self.last_translation_quality_issues = list(final_semantic_issues or semantic_issues)
+                return normalized
             cache_value = {
                 "translation": semantic_recovered,
                 "raw_translation": semantic_recovered,

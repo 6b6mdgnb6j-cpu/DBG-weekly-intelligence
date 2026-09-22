@@ -6,7 +6,6 @@ import crawler.translator as translator
 from crawler.translator import (
     GENERATION_CONFIG_VERSION,
     LocalNLLBProvider,
-    ProtectedEntityError,
     TitleTranslator,
     TranslationSanityValidator,
     TranslationUnavailableError,
@@ -363,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v24", GENERATION_CONFIG_VERSION)
+        self.assertIn("v25", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -867,10 +866,11 @@ class LongTextTranslationTests(unittest.TestCase):
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
 
-        with self.assertRaises(ProtectedEntityError) as caught:
-            title_translator._translate_text(original, "Partior", "title")
+        output = title_translator._translate_text(original, "Partior", "title")
 
-        details = caught.exception.details
+        self.assertEqual(output, "Partior将结算流动性连接至支付网络")
+        self.assertEqual(len(title_translator.last_entity_alignment_failures), 1)
+        details = title_translator.last_entity_alignment_failures[0]
         self.assertEqual(details["entity"], "Partior")
         self.assertEqual(details["occurrence"], 2)
         self.assertEqual(details["source"], "Partior")
@@ -1896,20 +1896,24 @@ class LongTextTranslationTests(unittest.TestCase):
         provider = RecordingProvider(["EEX新的货运数据产品", "EEX", "新的货运数据产品", "基于欧洲市场数据", "不应调用"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
-        with self.assertRaises(TranslationUnavailableError):
-            title_translator._translate_text(original, "EEX", "title")
+        output = title_translator._translate_text(original, "EEX", "title")
+        self.assertEqual(output, "EEX新的货运数据产品")
         self.assertEqual(len(provider.calls), 3)
         self.assertFalse(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
         self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
+        self.assertTrue(title_translator.last_translation_quality_issues)
+        self.assertEqual(title_translator.cache, {})
 
     def test_semantic_recovery_provider_error_preserves_initial_translation(self):
         original = "EEX launches new freight data products based on European market data"
         provider = RecordingProvider(["EEX新的货运数据产品"])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
-        with self.assertRaises(TranslationUnavailableError):
-            title_translator._translate_text(original, "EEX", "title")
+        output = title_translator._translate_text(original, "EEX", "title")
+        self.assertEqual(output, "EEX新的货运数据产品")
         self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "provider_error")
+        self.assertTrue(title_translator.last_translation_quality_issues)
+        self.assertEqual(title_translator.cache, {})
 
     def test_semantic_recovery_segment_cap_limits_provider_calls(self):
         original = (
@@ -2042,11 +2046,14 @@ class LongTextTranslationTests(unittest.TestCase):
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
 
-        with self.assertRaises(TranslationUnavailableError):
-            title_translator._translate_text(original, "HashKey", field="summary")
+        output = title_translator._translate_text(original, "HashKey", field="summary")
 
+        self.assertIn("HashKey Exchange", output)
+        self.assertIn("HashKey Holdings Limited", output)
+        self.assertIn("Obita", output)
         self.assertFalse(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
         self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
+        self.assertTrue(title_translator.last_translation_quality_issues)
         self.assertEqual(title_translator.cache, {})
 
     def test_full_hashkey_successful_recovery_is_selected_validated_and_cached(self):
@@ -2123,10 +2130,24 @@ class LongTextTranslationTests(unittest.TestCase):
         output = title_translator._translate_text(original, "HashKey", field="summary")
 
         self.assertEqual(output.count("HashKey"), 2)
-        self.assertIn("HashKey交易所宣布", output)
+        self.assertIn("HashKey Exchange宣布", output)
         self.assertIn("Obita达成合作", output)
         self.assertNotIn("哈什基", output)
         self.assertNotIn("哈希基", output)
+
+    def test_hashkey_entity_extraction_uses_maximal_non_overlapping_spans(self):
+        original = (
+            "HashKey Exchange, under HashKey Holdings Limited, partners with Obita. "
+            "HashKey Exchange will provide custody support."
+        )
+
+        occurrences = translator.TerminologyNormalizer().protected_entity_occurrences(original)
+
+        self.assertEqual(
+            [canonical for canonical, _preserved, _evidence in occurrences],
+            ["HashKey Exchange", "HashKey Holdings Limited", "Obita", "HashKey Exchange"],
+        )
+        self.assertNotIn("HashKey", [canonical for canonical, _preserved, _evidence in occurrences])
 
     def test_real_nllb_iss_space_agency_alias_restores_financial_iss(self):
         original = "ISS publishes its latest institutional shareholder governance review"

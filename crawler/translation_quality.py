@@ -210,6 +210,38 @@ def _entity_issues(index, item, normalizer):
     for field, original, translated in _translated_fields(item):
         if not original or not translated:
             continue
+        checked_hard_entities = set()
+        for canonical, _preserved, evidence in normalizer.protected_entity_occurrences(original):
+            if canonical in checked_hard_entities:
+                continue
+            checked_hard_entities.add(canonical)
+            acceptable_renderings = ACCEPTABLE_ENTITY_RENDERINGS.get(canonical, (canonical,))
+            if _contains_any(translated, acceptable_renderings):
+                continue
+            spec = normalizer.CANONICAL_ENTITIES.get(canonical, {})
+            candidate_forms = [canonical, *spec.get("aliases", []), *spec.get("bad", [])]
+            candidate_forms.extend(normalizer.ENTITY_TRANSPORT_VARIANTS.get(canonical, ()))
+            issues.append(
+                _issue(
+                    index,
+                    item,
+                    field,
+                    "translation_entity_alignment_failure",
+                    FAIL,
+                    {
+                        "source": item.get("source") or "",
+                        "field": field,
+                        "entity": canonical,
+                        "occurrence": 1,
+                        "stage": "finalization",
+                        "original_excerpt": original[:240],
+                        "model_output_excerpt": translated[:240],
+                        "candidate_forms": candidate_forms,
+                        "evidence": evidence,
+                    },
+                    "A hard-protected business entity could not be confidently aligned in the translation.",
+                )
+            )
         for canonical, spec in normalizer.CANONICAL_ENTITIES.items():
             if not normalizer._original_has_entity_evidence(original, canonical, spec.get("aliases", [])):
                 continue
@@ -218,7 +250,12 @@ def _entity_issues(index, item, normalizer):
             acceptable_renderings = ACCEPTABLE_ENTITY_RENDERINGS.get(canonical, (canonical,))
             has_acceptable_rendering = _contains_any(translated, acceptable_renderings)
             original_has_canonical = normalizer._contains_entity(original, canonical)
-            if original_has_canonical and not normalizer._contains_entity(translated, canonical) and not has_acceptable_rendering:
+            if (
+                original_has_canonical
+                and canonical not in checked_hard_entities
+                and not normalizer._contains_entity(translated, canonical)
+                and not has_acceptable_rendering
+            ):
                 issues.append(
                     _issue(
                         index,

@@ -783,6 +783,29 @@ class QAGateTests(unittest.TestCase):
         )
         self.assertIn("translation_relationship_missing", [issue["issue_id"] for issue in report["content_issues"]])
 
+    def test_unresolved_hard_entity_remains_reviewable_and_fails_qa(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="Partior",
+                    title_original="Partior launches a settlement platform",
+                    title_cn="该公司推出结算平台",
+                )
+            ],
+            highlights=[],
+        )
+
+        report = self.evaluate(weekly=weekly)
+
+        self.assertEqual(weekly["items"][0]["title_cn"], "该公司推出结算平台")
+        self.assertEqual(report["status"], FAIL)
+        self.assertEqual(report["publish_recommendation"], "do_not_publish")
+        self.assertIn(
+            "translation_entity_alignment_failure",
+            [issue["issue_id"] for issue in report["content_issues"]],
+        )
+
     def test_artifact_entity_and_term_conflicts_fail_qa(self):
         records = [
             ("RepoClear updates collateral rules", "雷波克莱尔更新抵押品规则"),

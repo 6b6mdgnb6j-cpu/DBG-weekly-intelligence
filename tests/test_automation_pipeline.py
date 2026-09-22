@@ -513,6 +513,7 @@ class AutomationPipelineContractTests(unittest.TestCase):
 
     def test_real_nllb_smoke_workflow_is_manual_read_only_and_translation_only(self):
         workflow = Path(".github/workflows/translation-nllb-smoke.yml").read_text(encoding="utf-8")
+        script = Path("scripts/translation_nllb_smoke.py").read_text(encoding="utf-8")
 
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("schedule:", workflow)
@@ -528,6 +529,26 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertNotIn("git add", workflow)
         self.assertNotIn("git commit", workflow)
         self.assertNotIn("git push", workflow)
+        self.assertIn("status = classify_quality_issues(issues)", script)
+        self.assertIn('"status": "FATAL"', script)
+
+    def test_smoke_quality_classification_marks_unresolved_entity_as_qa_fail(self):
+        from crawler.translation_quality import FAIL as QUALITY_FAIL, validate_translation_field
+        from scripts.translation_nllb_smoke import classify_quality_issues
+
+        issues = [
+            issue
+            for issue in validate_translation_field(
+                "Partior launches a settlement platform",
+                "该公司推出结算平台",
+                "title",
+                "Partior",
+            )
+            if issue.get("severity") == QUALITY_FAIL
+        ]
+
+        self.assertEqual(classify_quality_issues(issues), "QA_FAIL")
+        self.assertIn("translation_entity_alignment_failure", [issue["issue_id"] for issue in issues])
 
     def test_review_upload_requires_bundle_validation_success_and_exit_zero(self):
         workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
