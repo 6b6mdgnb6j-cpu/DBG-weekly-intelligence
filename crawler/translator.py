@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v23"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v24"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -514,11 +514,11 @@ class TerminologyNormalizer:
         "RepoClear": {"aliases": [], "bad": ["雷波克莱尔"]},
         "FTSE Russell": {"aliases": [], "bad": []},
         "FTSE": {"aliases": ["FTSE Russell"], "bad": ["FTC"]},
-        "ISS": {"aliases": [], "bad": ["国际空间站", "国际航天站"]},
+        "ISS": {"aliases": [], "bad": ["国际空间站", "国际航天站", "国际航天局"]},
         "OSC": {"aliases": [], "bad": ["欧安组织"]},
         "Partior": {"aliases": [], "bad": []},
         "Gold-i": {"aliases": [], "bad": ["黄金-i", "黄金－i"]},
-        "HashKey": {"aliases": [], "bad": ["哈希基"]},
+        "HashKey": {"aliases": [], "bad": ["哈希基", "哈什基"]},
         "Obita": {"aliases": [], "bad": ["奥比塔"]},
         "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": ["斯安普道斯指数"]},
         "Kaiko": {"aliases": [], "bad": ["凯科"]},
@@ -544,7 +544,7 @@ class TerminologyNormalizer:
         "Clearstream": {"清流": "Clearstream"},
         "Deutsche Börse": {"德意志交易所": "Deutsche Börse", "德意志 Börse": "Deutsche Börse"},
         "ISS STOXX": {"伊斯斯斯托克斯": "ISS STOXX", "伊斯斯托克斯": "ISS STOXX"},
-        "HashKey": {"哈希基": "HashKey", "HachKey": "HashKey"},
+        "HashKey": {"哈希基": "HashKey", "哈什基": "HashKey", "HachKey": "HashKey"},
         "HKEX": {"希克克斯": "HKEX", "希克斯": "HKEX"},
         "Eurex": {"欧莱克斯": "Eurex", "欧雷克斯": "Eurex", "欧元交易所": "Eurex"},
         "Crypto Finance": {"加密金融": "Crypto Finance"},

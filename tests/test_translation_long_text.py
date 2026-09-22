@@ -363,7 +363,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v23", GENERATION_CONFIG_VERSION)
+        self.assertIn("v24", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2108,6 +2108,52 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(output.count("Obita"), 1)
         self.assertNotIn("奥比塔", output)
         self.assertNotRegex(provider.calls[0]["text"], r"XQZENT\d+ZQX")
+
+    def test_real_nllb_hashkey_hashiji_alias_restores_occurrence_in_place(self):
+        original = (
+            "HashKey Exchange, a licensed platform under HashKey Holdings Limited, "
+            "announced a partnership with Obita."
+        )
+        provider = RecordingProvider([
+            "HashKey Holdings Limited旗下许可证交易平台哈什基交易所宣布与全球支付服务提供商Obita达成合作。"
+        ])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "HashKey", field="summary")
+
+        self.assertEqual(output.count("HashKey"), 2)
+        self.assertIn("HashKey交易所宣布", output)
+        self.assertIn("Obita达成合作", output)
+        self.assertNotIn("哈什基", output)
+        self.assertNotIn("哈希基", output)
+
+    def test_real_nllb_iss_space_agency_alias_restores_financial_iss(self):
+        original = "ISS publishes its latest institutional shareholder governance review"
+        provider = RecordingProvider(["国际航天局公布其最新的机构股东治理审查"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "ISS STOXX", field="title")
+
+        self.assertEqual(output, "ISS公布其最新的机构股东治理审查")
+        self.assertNotIn("国际航天局", output)
+
+    def test_existing_hashkey_and_iss_alignment_variants_remain_supported(self):
+        cases = (
+            ("HashKey announces a custody service", "HashKey宣布托管服务", "HashKey"),
+            ("HashKey announces a custody service", "哈希基宣布托管服务", "HashKey"),
+            ("ISS publishes a governance review", "ISS发布治理审查", "ISS"),
+            ("ISS publishes a governance review", "国际空间站发布治理审查", "ISS"),
+            ("ISS publishes a governance review", "国际航天站发布治理审查", "ISS"),
+        )
+        for original, translated, expected in cases:
+            with self.subTest(translated=translated):
+                provider = RecordingProvider([translated])
+                title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+                title_translator.cache = {}
+                output = title_translator._translate_text(original, expected, field="title")
+                self.assertIn(expected, output)
 
     def test_artifact_entities_and_financial_terms_are_normalized_from_source_evidence(self):
         normalizer = translator.TerminologyNormalizer()
