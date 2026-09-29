@@ -40,6 +40,43 @@ class ArticleParserTests(unittest.TestCase):
         self.assertEqual(diagnostic["title"], expected)
         self.assertNotEqual(kept["title_original"], "Use of cookies")
 
+    def test_bafin_skips_generic_first_h1_for_later_article_heading(self):
+        response = Mock()
+        response.headers = {"Content-Type": "text/html"}
+        response.text = """
+            <html>
+              <head>
+                <meta property="og:title" content="Use of cookies">
+                <meta name="date" content="2026-09-23">
+              </head>
+              <body>
+                <div class="cookie-layer"><h1>Use of cookies</h1></div>
+                <main>
+                  <h1>Operation Heracles delivers another blow to international cyber investment fraud</h1>
+                  <p>BaFin and its partners took action against international cyber investment fraud.</p>
+                </main>
+              </body>
+            </html>
+        """
+        source = {"id": "SRC-025", "name": "德国联邦金融监管局", "url": "https://www.bafin.de"}
+
+        with patch("crawler.article_parser.request_get", return_value=response):
+            _, kept, _ = web_parser.parse_article(
+                "https://www.bafin.de/EN/PublikationenDaten/Heracles.html",
+                source,
+                date(2026, 9, 21),
+                date(2026, 9, 27),
+                Mock(),
+                list_title="Use of cookies",
+                list_date="2026-09-23",
+            )
+
+        self.assertEqual(
+            kept["title_original"],
+            "Operation Heracles delivers another blow to international cyber investment fraud",
+        )
+        self.assertNotEqual(kept["title_original"], "Use of cookies")
+
     def test_non_bafin_title_precedence_is_unchanged(self):
         response = Mock()
         response.headers = {"Content-Type": "text/html"}

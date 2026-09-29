@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v28"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v29"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -970,6 +970,12 @@ class TerminologyNormalizer:
 
         if self._contains_entity(original, "FINRA"):
             replace(r"(?i)WASHINGTON\s*[-—–:]?\s*FINRA", "华盛顿——FINRA", "FINRA:clean_washington_prefix")
+            if re.match(r"^\s*WASHINGTON\s*[-—–:]\s*FINRA\b", original or "", flags=re.I):
+                replace(
+                    r"^\s*华盛顿金融公司\s*[（(]\s*华盛顿——FINRA\s*[)）]\s*",
+                    "华盛顿——FINRA",
+                    "FINRA:clean_translated_dateline_prefix",
+                )
             replace(r"(?<![A-Za-z0-9])FINRA\s*FINRA(?![A-Za-z0-9])", "FINRA", "FINRA:dedupe_wrong_alias")
 
         if restore_missing:

@@ -93,10 +93,10 @@ def extract_source_title(soup, source):
     title = extract_title(soup)
     if source.get("id") != "SRC-025" or title.strip().lower() not in BAFIN_GENERIC_PAGE_TITLES:
         return title
-    h1 = soup.find("h1")
-    article_heading = h1.get_text(" ", strip=True) if h1 else ""
-    if article_heading and article_heading.strip().lower() not in BAFIN_GENERIC_PAGE_TITLES:
-        return article_heading
+    for heading in soup.find_all(lambda tag: tag.name in {"h1", "h2", "h3"} or tag.get("role") == "heading"):
+        article_heading = heading.get_text(" ", strip=True)
+        if article_heading and article_heading.strip().lower() not in BAFIN_GENERIC_PAGE_TITLES:
+            return article_heading
     return title
 
 

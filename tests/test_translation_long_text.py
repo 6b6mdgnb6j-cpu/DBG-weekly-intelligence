@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v28", GENERATION_CONFIG_VERSION)
+        self.assertIn("v29", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2260,6 +2260,34 @@ class LongTextTranslationTests(unittest.TestCase):
 
         self.assertTrue(output.startswith("华盛顿——FINRA"))
         self.assertNotIn("WASHINGTONFINRA", output)
+
+    def test_finra_translated_corporate_prefix_around_raw_dateline_is_collapsed(self):
+        original = "WASHINGTON—FINRA has ordered a firm to pay restitution."
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize(
+            "华盛顿金融公司 (WASHINGTONFINRA) 已命令一家公司支付赔偿。",
+            original,
+            "FINRA",
+        )
+
+        self.assertEqual(output, "华盛顿——FINRA已命令一家公司支付赔偿。")
+        self.assertNotIn("华盛顿金融公司", output)
+        self.assertEqual(output.count("FINRA"), 1)
+
+    def test_finra_translated_corporate_prefix_around_normalized_dateline_is_collapsed(self):
+        original = "WASHINGTON—FINRA has ordered a firm to pay restitution."
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize(
+            "华盛顿金融公司 (华盛顿——FINRA) 已命令一家公司支付赔偿。",
+            original,
+            "FINRA",
+        )
+
+        self.assertEqual(output, "华盛顿——FINRA已命令一家公司支付赔偿。")
+        self.assertNotIn("华盛顿金融公司", output)
+        self.assertEqual(output.count("FINRA"), 1)
 
     def test_ccp_global_is_preserved_as_canonical_entity(self):
         original = (
