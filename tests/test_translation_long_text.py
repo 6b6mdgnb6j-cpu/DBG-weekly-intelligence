@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v30", GENERATION_CONFIG_VERSION)
+        self.assertIn("v31", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2119,6 +2119,97 @@ class LongTextTranslationTests(unittest.TestCase):
             "critical_term_missing:FINRA",
         )
         self.assertEqual(title_translator.cache, {})
+
+    def test_smart_quote_prometheum_summary_recovers_missing_critical_entities(self):
+        original = (
+            "Agreement establishes a pathway built on SEC-registered broker-dealer infrastructure "
+            "to distribute U.S. equities to eligible international investors through HashKey’s "
+            "licensed exchange network. New York, Sep. 16, 2026 – Prometheum Inc. (“Prometheum”), "
+            "a market infrastructure provider for crypto assets, today announced that its subsidiary "
+            "Prometheum Capital LLC (“Prometheum Capital”), an SEC-registered, FINRA member crypto "
+            "asset custodian […]"
+        )
+        provider = RecordingProvider([
+            "该协议建立了一个基于SEC注册的经纪商-经销商基础设施的途径,以通过HashKey的授权交易网络向有资格的国际投资者分配美国股票.",
+            "该协议建立了基于SEC注册经纪商基础设施的路径，用于分配美国",
+            "股票，并通过HashKey持牌交易网络服务合资格国际投资者。",
+            "纽约，2026年9月16日",
+            "Prometheum Inc.",
+            "Prometheum是一家加密资产市场基础设施提供商，并宣布",
+            "其子公司Prometheum Capital LLC（Prometheum Capital）是SEC注册、FINRA会员的加密资产托管机构。",
+        ])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "HashKey", field="summary")
+
+        for entity in ("SEC", "Prometheum", "Prometheum Capital", "FINRA", "HashKey"):
+            self.assertIn(entity, output)
+        self.assertNotEqual(output, "该协议建立了一个基于SEC注册的经纪商-经销商基础设施的途径,以通过HashKey的授权交易网络向有资格的国际投资者分配美国股票.")
+        self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertFalse(any(
+            issue.get("evidence", {}).get("reason") == "critical_term_missing:FINRA"
+            for issue in title_translator.last_translation_quality_issues
+        ))
+
+    def test_iss_sec_summary_recovers_actor_relationship(self):
+        original = (
+            "ROCKVILLE, Md. (September 18, 2026) – Institutional Shareholder Services (ISS) today "
+            "submitted a brief in the U.S. District Court for the Eastern District of Pennsylvania "
+            "challenging an unconstitutional demand in a U.S. Securities & Exchange Commission "
+            "subpoena that would require the company to hand over millions of lines of data "
+            "reflecting its clients’ votes on […]"
+        )
+        provider = RecordingProvider([
+            "2026年9月18日,SEC提出违宪要求并要求该公司提交客户投票数据。",
+            (
+                "2026年9月18日，ISS向美国宾夕法尼亚州东区联邦地区法院提交简报，"
+                "挑战SEC传票中的违宪要求；该要求将迫使公司交出反映客户投票的数百万行数据。"
+            ),
+        ])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "ISS STOXX", field="summary")
+
+        self.assertIn("ISS", output)
+        self.assertIn("SEC", output)
+        self.assertRegex(output, r"ISS.{0,80}(?:提交|递交).{0,160}(?:挑战|质疑|反对|抗辩)")
+        self.assertEqual(next(iter(title_translator.cache.values()))["recovered_from"], "content_ratio_low")
+
+    def test_failed_critical_entity_recovery_remains_nonfatal_qa_failure(self):
+        original = (
+            "Prometheum announced that Prometheum Capital is an SEC-registered, FINRA member "
+            "crypto asset custodian serving eligible investors."
+        )
+        initial = "Prometheum宣布Prometheum Capital是一家SEC注册的加密资产托管机构。"
+        provider = RecordingProvider([initial, "Prometheum宣布", "Prometheum Capital是SEC注册的托管机构。"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "Prometheum", field="summary")
+
+        self.assertEqual(output, initial)
+        self.assertEqual(
+            title_translator.last_translation_quality_issues[0]["evidence"]["reason"],
+            "critical_term_missing:FINRA",
+        )
+        self.assertFalse(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(title_translator.cache, {})
+
+    def test_lch_default_fund_reduction_uses_financial_direction_term(self):
+        original = "RepoClear LTD Sponsored Clearing Minimum Default Fund Contribution Reduction"
+        provider = RecordingProvider(["RepoClear LTD赞助的清算最低违约基金贡献减小"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "LCH", field="title")
+
+        self.assertIn("RepoClear LTD", output)
+        self.assertIn("违约基金出资", output)
+        self.assertIn("下调", output)
+        self.assertNotIn("减小", output)
+        self.assertEqual(title_translator._final_candidate_issues(original, output, "title", "LCH"), [])
 
     def test_empty_provider_output_remains_fatal(self):
         provider = RecordingProvider([""])

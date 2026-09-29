@@ -533,6 +533,7 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertIn('"status": "FATAL"', script)
         self.assertIn('"name": "prometheum_finra_critical_term"', script)
         self.assertIn('"name": "hashkey_exchange_obita_title"', script)
+        self.assertIn('"name": "iss_sec_client_voting_summary"', script)
         self.assertIn('"name": "sec_ipo_increase_title"', script)
 
     def test_approved_publish_workflow_supports_archive_only_backfill_scope(self):

@@ -37,7 +37,7 @@ SUBSTANTIVE_TITLE_ANCHORS = [
     (
         "decrease",
         (r"\breduc(?:e|es|ed|ing|tion)\b", r"\bdecreas(?:e|es|ed|ing)\b", r"\bdeclin(?:e|es|ed|ing)\b", r"\bfall\b", r"\bcut(?:s|ting)?\b"),
-        ("下降", "减少", "下滑", "降低"),
+        ("下降", "减少", "下滑", "降低", "下调"),
     ),
     ("partner", (r"\bpartner(?:s|ed|ing|ship)?\b",), ("合作", "伙伴")),
     ("clear", (r"\bclear(?:s|ed|ing)?\b", r"\bclearing\b"), ("清算",)),
@@ -61,7 +61,7 @@ ACTION_DIRECTION_RULES = [
         ("允许", "许可", "经许可", "获准", "准许", "授权", "经授权", "持牌"),
     ),
     ("increase", (r"\bincreas(?:e|es|ed|ing)\b", r"\brais(?:e|es|ed|ing)\b"), ("增长", "增加", "上升", "提升", "提高")),
-    ("decrease", (r"\bdecreas(?:e|es|ed|ing)\b", r"\breduc(?:e|es|ed|ing|tion)\b", r"\bcut(?:s|ting)?\b"), ("下降", "减少", "下滑", "降低")),
+    ("decrease", (r"\bdecreas(?:e|es|ed|ing)\b", r"\breduc(?:e|es|ed|ing|tion)\b", r"\bcut(?:s|ting)?\b"), ("下降", "减少", "下滑", "降低", "下调")),
 ]
 
 TREND_PROPOSITION_RULES = (
@@ -596,6 +596,35 @@ def _relationship_issues(index, item):
     for field, original, translated in _translated_fields(item):
         if field != "summary" or not original or not translated:
             continue
+        if re.search(
+            r"\bISS\b.{0,240}\bsubmitted\s+a\s+brief\b.{0,320}\bchalleng(?:e|es|ed|ing)\b.{0,320}(?:\bSEC\b|\bSecurities\s*&\s*Exchange\s+Commission\b)",
+            original,
+            flags=re.I | re.S,
+        ):
+            iss_index = translated.find("ISS")
+            sec_index = translated.find("SEC")
+            submit_indices = [translated.find(term) for term in ("提交", "递交") if term in translated]
+            challenge_present = _contains_any(translated, ("挑战", "质疑", "反对", "抗辩"))
+            relationship_preserved = (
+                iss_index >= 0
+                and sec_index >= 0
+                and submit_indices
+                and iss_index < min(submit_indices)
+                and sec_index > min(submit_indices)
+                and challenge_present
+            )
+            if not relationship_preserved:
+                issues.append(
+                    _issue(
+                        index,
+                        item,
+                        field,
+                        "translation_relationship_missing",
+                        FAIL,
+                        {"relationship": "ISS_challenges_SEC_demand", "translated_prefix": translated[:200]},
+                        "Translation does not preserve ISS as the party submitting a brief challenging an SEC demand.",
+                    )
+                )
         if not re.search(r"\b(?:partner(?:s|ed|ing|ship)?|collaborat(?:e|es|ed|ing|ion))\b", original, flags=re.I):
             continue
         if _contains_any(translated, ("合作", "伙伴", "协作", "携手")):

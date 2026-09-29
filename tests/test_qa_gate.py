@@ -824,6 +824,32 @@ class QAGateTests(unittest.TestCase):
         )
         self.assertIn("translation_relationship_missing", [issue["issue_id"] for issue in report["content_issues"]])
 
+    def test_iss_sec_actor_inversion_fails_relationship_qa(self):
+        original = (
+            "Institutional Shareholder Services (ISS) submitted a brief challenging an "
+            "unconstitutional demand in an SEC subpoena."
+        )
+        report = self.evaluate(
+            weekly=payload(
+                items=[
+                    item(
+                        1,
+                        source="ISS STOXX",
+                        summary_original=original,
+                        summary_cn="SEC提交简报挑战ISS的要求。",
+                    )
+                ],
+                highlights=[],
+            )
+        )
+
+        relationship_issues = [
+            issue for issue in report["content_issues"]
+            if issue["issue_id"] == "translation_relationship_missing"
+        ]
+        self.assertEqual(len(relationship_issues), 1)
+        self.assertEqual(relationship_issues[0]["evidence"]["relationship"], "ISS_challenges_SEC_demand")
+
     def test_sec_ipo_increase_title_accepts_growth_equivalence(self):
         report = self.evaluate(
             weekly=payload(

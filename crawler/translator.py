@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v30"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v31"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -631,6 +631,8 @@ class TerminologyNormalizer:
         ("digital asset custody", r"数字资产监管", "数字资产托管"),
         ("Chain of Custody", r"监管链", "托管链"),
         ("Default Fund Contribution", r"默认基金贡献", "违约基金出资"),
+        ("Default Fund Contribution", r"违约基金贡献", "违约基金出资"),
+        ("Default Fund Contribution Reduction", r"(违约基金出资)减小", r"\1下调"),
         ("FTSE Russell", r"^瑞士证券交易所(?=\s|[（(])", "FTSE Russell"),
         ("Partior", r"^企业(?=与|和|、)", "Partior"),
         ("Commodity Pool Operator", r"商品库运营商", "商品基金运营商"),
@@ -1011,6 +1013,7 @@ class TitleTranslator:
         "translation_action_direction_missing",
         "translation_relationship_missing",
         "translation_suspicious_compression",
+        "translation_entity_alignment_failure",
     }
     SEMANTIC_SEGMENT_CAP = 6
 
@@ -1112,7 +1115,12 @@ class TitleTranslator:
 
     def _recoverable_semantic_issues(self, text, translated, field, source):
         issues = self._semantic_field_issues(text, translated, field, source)
-        return [issue for issue in issues if issue.get("issue_id") in self.RECOVERABLE_SEMANTIC_ISSUES]
+        return [
+            issue
+            for issue in issues
+            if issue.get("issue_id") in self.RECOVERABLE_SEMANTIC_ISSUES
+            and (issue.get("issue_id") != "translation_entity_alignment_failure" or field == "summary")
+        ]
 
     def _final_candidate_issues(self, text, translated, field, source, assume_sanity_valid=False):
         if not assume_sanity_valid:
@@ -1515,6 +1523,39 @@ class TitleTranslator:
                         normalized = tier2_normalized
                         changes = tier2_changes
 
+            if (
+                not validation.valid
+                and field == "summary"
+                and validation.reason.startswith("critical_term_missing:")
+            ):
+                sanity_issue = {
+                    "issue_id": "translation_sanity_quality_failure",
+                    "severity": "FAIL",
+                    "evidence": {"reason": validation.reason, "field": field, "source": source},
+                }
+                semantic_recovered, selected, _ = self._semantic_recovery(
+                    provider,
+                    text,
+                    source,
+                    field,
+                    normalized,
+                    [sanity_issue],
+                )
+                if selected and semantic_recovered != normalized:
+                    self.cache[key] = {
+                        "translation": semantic_recovered,
+                        "raw_translation": semantic_recovered,
+                        "terminology_changes": changes,
+                        "model": provider.model_name,
+                        "generation_config_version": GENERATION_CONFIG_VERSION,
+                        "glossary_version": self.normalizer.version,
+                        "semantic_recovery_triggered": True,
+                        "semantic_recovery_selected": True,
+                        "semantic_issue_ids": [sanity_issue["issue_id"]],
+                    }
+                    self.cache_dirty = True
+                    return semantic_recovered
+
             if not validation.valid:
                 usable_candidates = [
                     candidate
@@ -1551,7 +1592,10 @@ class TitleTranslator:
         )
         if final_issues:
             semantic_issues = [
-                issue for issue in final_issues if issue.get("issue_id") in self.RECOVERABLE_SEMANTIC_ISSUES
+                issue
+                for issue in final_issues
+                if issue.get("issue_id") in self.RECOVERABLE_SEMANTIC_ISSUES
+                and (issue.get("issue_id") != "translation_entity_alignment_failure" or field == "summary")
             ]
             if not semantic_issues or len(semantic_issues) != len(final_issues):
                 self.last_translation_quality_issues = list(final_issues)

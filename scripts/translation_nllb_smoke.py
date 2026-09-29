@@ -74,10 +74,25 @@ FIXTURES = (
             "Agreement establishes a pathway built on SEC-registered broker-dealer "
             "infrastructure to distribute U.S. equities to eligible international investors "
             "through HashKey’s licensed exchange network. New York, Sep. 16, 2026 – "
-            "Prometheum Inc. (\"Prometheum\"), a market infrastructure provider for crypto "
+            "Prometheum Inc. (“Prometheum”), a market infrastructure provider for crypto "
             "assets, today announced that its subsidiary Prometheum Capital LLC "
-            "(\"Prometheum Capital\"), an SEC-registered, FINRA member crypto asset custodian […]"
+            "(“Prometheum Capital”), an SEC-registered, FINRA member crypto asset custodian […]"
         ),
+        "must_contain": ("SEC", "Prometheum", "Prometheum Capital", "FINRA", "HashKey"),
+    },
+    {
+        "name": "iss_sec_client_voting_summary",
+        "source": "ISS STOXX",
+        "field": "summary",
+        "text": (
+            "ROCKVILLE, Md. (September 18, 2026) – Institutional Shareholder Services (ISS) "
+            "today submitted a brief in the U.S. District Court for the Eastern District of "
+            "Pennsylvania challenging an unconstitutional demand in a U.S. Securities & Exchange "
+            "Commission subpoena that would require the company to hand over millions of lines of "
+            "data reflecting its clients’ votes on […]"
+        ),
+        "must_contain": ("ISS", "SEC"),
+        "relationship": "iss_challenges_sec",
     },
     {
         "name": "sec_ipo_increase_title",
@@ -134,6 +149,19 @@ def fixture_constraint_issues(fixture, output):
     for value in fixture.get("must_not_contain", ()):
         if value in output:
             issues.append({"issue_id": "smoke_forbidden_text_present", "evidence": value})
+    if fixture.get("relationship") == "iss_challenges_sec":
+        iss_index = output.find("ISS")
+        sec_index = output.find("SEC")
+        submit_indices = [output.find(term) for term in ("提交", "递交") if term in output]
+        if not (
+            iss_index >= 0
+            and sec_index >= 0
+            and submit_indices
+            and iss_index < min(submit_indices)
+            and sec_index > min(submit_indices)
+            and any(term in output for term in ("挑战", "质疑", "反对", "抗辩"))
+        ):
+            issues.append({"issue_id": "smoke_relationship_failure", "evidence": "ISS_challenges_SEC"})
     return issues
 
 
