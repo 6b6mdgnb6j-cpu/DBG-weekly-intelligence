@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v27"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v28"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -760,8 +760,10 @@ class TerminologyNormalizer:
         ("stablecoin", r"稳定coin", "稳定币"),
         ("TOPIX", r"东(?=银行)", "TOPIX"),
         ("leveraged", r"(?<=银行)杆", "杠杆"),
-        ("corporate treasurer", r"企业财政部长", "企业财资负责人"),
-        ("corporate treasurers", r"企业财政部长", "企业财资负责人"),
+        ("OTC equity", r"超市股票", "场外股票"),
+        ("OTC equities", r"超市股票", "场外股票"),
+        ("corporate treasurer", r"企业(?:财务员|财政部长)", "企业财资负责人"),
+        ("corporate treasurers", r"企业(?:财务员|财政部长)", "企业财资负责人"),
     ]
 
     PROPER_NOUN_RULES = [

@@ -85,6 +85,8 @@ FIXTURES = (
         "source": "FINRA",
         "field": "title",
         "text": "FINRA Updates the OTC Equities High Price Dissemination List",
+        "must_contain": ("FINRA", "场外股票"),
+        "must_not_contain": ("超市股票", "国际金融局", "芬拉"),
     },
     {
         "name": "ccp_global_chile_comment_letter",
@@ -103,12 +105,25 @@ FIXTURES = (
         "source": "Clearstream",
         "field": "title",
         "text": "Why Secured Short-Term Investing Is Gaining Relevance for Corporate Treasurers",
+        "must_contain": ("企业财资负责人",),
+        "must_not_contain": ("企业财务员", "企业财政部长"),
     },
 )
 
 
 def classify_quality_issues(issues):
     return "PASS" if not issues else "QA_FAIL"
+
+
+def fixture_constraint_issues(fixture, output):
+    issues = []
+    for value in fixture.get("must_contain", ()):
+        if value not in output:
+            issues.append({"issue_id": "smoke_required_text_missing", "evidence": value})
+    for value in fixture.get("must_not_contain", ()):
+        if value in output:
+            issues.append({"issue_id": "smoke_forbidden_text_present", "evidence": value})
+    return issues
 
 
 def main():
@@ -130,6 +145,7 @@ def main():
                 )
                 if issue.get("severity") == FAIL
             ]
+            issues.extend(fixture_constraint_issues(fixture, output))
             status = classify_quality_issues(issues)
             failures += bool(issues)
             print(json.dumps({

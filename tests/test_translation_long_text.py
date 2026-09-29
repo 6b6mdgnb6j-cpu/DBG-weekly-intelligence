@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v27", GENERATION_CONFIG_VERSION)
+        self.assertIn("v28", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2300,6 +2300,59 @@ class LongTextTranslationTests(unittest.TestCase):
 
         self.assertIn("企业财资负责人", output)
         self.assertNotIn("财政部长", output)
+
+    def test_otc_equities_uses_financial_market_term(self):
+        original = "FINRA Updates the OTC Equities High Price Dissemination List"
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize("FINRA更新了超市股票高价传播清单", original, "FINRA")
+
+        self.assertIn("FINRA", output)
+        self.assertIn("场外股票", output)
+        self.assertNotIn("超市股票", output)
+
+    def test_corporate_treasurers_normalizes_real_model_finance_clerk_form(self):
+        original = "Why Secured Short-Term Investing Is Gaining Relevance for Corporate Treasurers"
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize(
+            "为什么短期投资对企业财务员来说越来越重要",
+            original,
+            "Clearstream",
+        )
+
+        self.assertIn("企业财资负责人", output)
+        self.assertNotIn("企业财务员", output)
+
+    def test_corporate_treasurer_singular_normalizes_finance_minister_form(self):
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize(
+            "企业财政部长负责短期投资",
+            "A Corporate Treasurer oversees short-term investing",
+            "Clearstream",
+        )
+
+        self.assertIn("企业财资负责人", output)
+        self.assertNotIn("企业财政部长", output)
+
+    def test_otc_and_treasurer_rules_do_not_rewrite_unrelated_contexts(self):
+        normalizer = translator.TerminologyNormalizer()
+
+        otc_output, _ = normalizer.normalize(
+            "超市股票和场外衍生品交易增长",
+            "OTC derivatives trading increased",
+            "Exchange",
+        )
+        treasurer_output, _ = normalizer.normalize(
+            "州财政部长发表声明",
+            "The State Treasurer issued a statement",
+            "Regulator",
+        )
+
+        self.assertIn("超市股票", otc_output)
+        self.assertNotIn("场外股票", otc_output)
+        self.assertEqual(treasurer_output, "州财政部长发表声明")
 
     def test_artifact_entities_and_financial_terms_are_normalized_from_source_evidence(self):
         normalizer = translator.TerminologyNormalizer()
