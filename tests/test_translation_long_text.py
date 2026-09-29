@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v29", GENERATION_CONFIG_VERSION)
+        self.assertIn("v30", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2043,6 +2043,26 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("合作", output)
         self.assertIn("数字资产托管支持", output)
         self.assertTrue(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+
+    def test_historical_hashkey_obita_title_restores_entities_and_custody_term(self):
+        original = (
+            "HashKey Exchange Partners with Obita to Provide Institutional-Grade Digital "
+            "Asset Custody Support"
+        )
+        provider = RecordingProvider([
+            "哈希基交换与奥比塔合作,提供机构级数字资产监管支持",
+        ])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "HashKey", field="title")
+
+        self.assertIn("HashKey Exchange", output)
+        self.assertIn("Obita", output)
+        self.assertIn("数字资产托管", output)
+        self.assertNotIn("哈希基交换", output)
+        self.assertNotIn("奥比塔", output)
+        self.assertNotIn("数字资产监管", output)
 
     def test_full_hashkey_failed_recovery_is_not_returned_or_cached(self):
         original = (

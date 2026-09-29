@@ -29,6 +29,17 @@ FIXTURES = (
         ),
     },
     {
+        "name": "hashkey_exchange_obita_title",
+        "source": "HashKey",
+        "field": "title",
+        "text": (
+            "HashKey Exchange Partners with Obita to Provide Institutional-Grade Digital "
+            "Asset Custody Support"
+        ),
+        "must_contain": ("HashKey Exchange", "Obita", "数字资产托管"),
+        "must_not_contain": ("哈希基交换", "奥比塔", "数字资产监管"),
+    },
+    {
         "name": "partior_two_occurrences",
         "source": "Partior",
         "field": "title",

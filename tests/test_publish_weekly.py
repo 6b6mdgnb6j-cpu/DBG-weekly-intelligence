@@ -701,6 +701,233 @@ class PublishWeeklyGuardTests(unittest.TestCase):
             self.assertIn("older than published latest", str(ctx.exception))
             self.assertFalse(archive.exists())
 
+    def test_archive_only_backfill_creates_archive_and_preserves_latest_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_latest_state(latest, weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            latest_before = latest.read_bytes()
+
+            _, _, _, _, wrote, plan = publish_weekly.publish_weekly(
+                weekly,
+                qa_report_path=qa,
+                published_dir=published_dir,
+                archive_only_backfill=True,
+                return_plan=True,
+            )
+
+            self.assertTrue(wrote)
+            self.assertEqual(plan, "archive_backfill")
+            self.assertEqual(archive.read_bytes(), published_bytes(weekly_payload()))
+            self.assertEqual(latest.read_bytes(), latest_before)
+
+    def test_archive_only_backfill_qa_fail_blocks_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "FAIL")
+            published_dir, archive, latest = published_paths(tmp)
+            write_latest_state(latest, weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            latest_before = latest.read_bytes()
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    archive_only_backfill=True,
+                    approve_warning=True,
+                )
+
+            self.assertEqual(ctx.exception.exit_code, 3)
+            self.assertFalse(archive.exists())
+            self.assertEqual(latest.read_bytes(), latest_before)
+
+    def test_archive_only_backfill_warning_requires_explicit_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "WARNING")
+            published_dir, archive, latest = published_paths(tmp)
+            write_latest_state(latest, weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            latest_before = latest.read_bytes()
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    archive_only_backfill=True,
+                )
+
+            self.assertEqual(ctx.exception.exit_code, 2)
+            self.assertFalse(archive.exists())
+            self.assertEqual(latest.read_bytes(), latest_before)
+
+    def test_archive_only_backfill_warning_with_approval_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "WARNING")
+            published_dir, archive, latest = published_paths(tmp)
+            write_latest_state(latest, weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            latest_before = latest.read_bytes()
+
+            publish_weekly.publish_weekly(
+                weekly,
+                qa_report_path=qa,
+                published_dir=published_dir,
+                archive_only_backfill=True,
+                approve_warning=True,
+            )
+
+            self.assertTrue(archive.exists())
+            self.assertEqual(latest.read_bytes(), latest_before)
+
+    def test_archive_only_backfill_identical_archive_is_noop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_exact_archive_state(archive)
+            write_latest_state(latest, weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            latest_before = latest.read_bytes()
+
+            _, _, _, _, wrote, plan = publish_weekly.publish_weekly(
+                weekly,
+                qa_report_path=qa,
+                published_dir=published_dir,
+                archive_only_backfill=True,
+                return_plan=True,
+            )
+
+            self.assertFalse(wrote)
+            self.assertEqual(plan, "noop_identical")
+            self.assertEqual(latest.read_bytes(), latest_before)
+
+    def test_archive_only_backfill_different_archive_requires_replace_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_exact_archive_state(archive, weekly_payload(item_count=2))
+            archive_before = archive.read_bytes()
+            write_latest_state(latest, weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            latest_before = latest.read_bytes()
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    archive_only_backfill=True,
+                )
+
+            self.assertIn("historical archive differs", str(ctx.exception))
+            self.assertEqual(archive.read_bytes(), archive_before)
+            self.assertEqual(latest.read_bytes(), latest_before)
+
+    def test_archive_only_backfill_replace_changes_only_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_exact_archive_state(archive, weekly_payload(item_count=2))
+            write_latest_state(latest, weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            latest_before = latest.read_bytes()
+
+            _, _, _, _, wrote, plan = publish_weekly.publish_weekly(
+                weekly,
+                qa_report_path=qa,
+                published_dir=published_dir,
+                archive_only_backfill=True,
+                replace_same_week=True,
+                return_plan=True,
+            )
+
+            self.assertTrue(wrote)
+            self.assertEqual(plan, "replace_archive_backfill")
+            self.assertEqual(archive.read_bytes(), published_bytes(weekly_payload()))
+            self.assertEqual(latest.read_bytes(), latest_before)
+
+    def test_archive_only_backfill_blocks_target_equal_to_latest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_latest_state(latest, weekly_payload())
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    archive_only_backfill=True,
+                )
+
+            self.assertIn("requires artifact week older", str(ctx.exception))
+            self.assertFalse(archive.exists())
+
+    def test_archive_only_backfill_blocks_target_newer_than_latest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_latest_state(latest, weekly_payload(week_start="2019-12-25", week_end="2019-12-31"))
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    archive_only_backfill=True,
+                )
+
+            self.assertIn("requires artifact week older", str(ctx.exception))
+            self.assertFalse(archive.exists())
+
+    def test_archive_only_backfill_requires_existing_latest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, _ = published_paths(tmp)
+
+            with self.assertRaises(publish_weekly.PublishBlockedError) as ctx:
+                publish_weekly.publish_weekly(
+                    weekly,
+                    qa_report_path=qa,
+                    published_dir=published_dir,
+                    archive_only_backfill=True,
+                )
+
+            self.assertIn("requires existing published latest", str(ctx.exception))
+            self.assertFalse(archive.exists())
+
+    def test_archive_only_backfill_write_failure_never_changes_latest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            weekly = write_weekly(tmp)
+            qa = write_qa(tmp, weekly, "PASS")
+            published_dir, archive, latest = published_paths(tmp)
+            write_latest_state(latest, weekly_payload(week_start="2020-01-08", week_end="2020-01-14"))
+            latest_before = latest.read_bytes()
+
+            with patch.object(
+                publish_weekly,
+                "atomic_write_json_bytes",
+                side_effect=publish_weekly.PublishFailedError(
+                    "historical archive write failed",
+                    stage="archive_backfill_replace",
+                ),
+            ):
+                with self.assertRaises(publish_weekly.PublishFailedError):
+                    publish_weekly.publish_weekly(
+                        weekly,
+                        qa_report_path=qa,
+                        published_dir=published_dir,
+                        archive_only_backfill=True,
+                    )
+
+            self.assertFalse(archive.exists())
+            self.assertEqual(latest.read_bytes(), latest_before)
+
     def test_new_archive_creation_success(self):
         with tempfile.TemporaryDirectory() as tmp:
             weekly = write_weekly(tmp)

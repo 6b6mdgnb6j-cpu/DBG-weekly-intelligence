@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v29"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v30"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -485,7 +485,10 @@ class TerminologyNormalizer:
     SOFT_LOCALIZABLE_ALIASES = {"JPX", "HKMA"}
     CANONICAL_ENTITIES = {
         "HashKey Holdings Limited": {"aliases": [], "bad": []},
-        "HashKey Exchange": {"aliases": [], "bad": ["哈希基交易所", "哈什基交易所"]},
+        "HashKey Exchange": {
+            "aliases": [],
+            "bad": ["哈希基交易所", "哈什基交易所", "哈希基交换", "哈什基交换"],
+        },
         "LSEG DiSH": {"aliases": [], "bad": []},
         "ABN AMRO": {"aliases": [], "bad": []},
         # Preserve the complete legal name; never whitelist its mistranslated prefix.

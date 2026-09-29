@@ -21,6 +21,11 @@ on:
         required: false
         default: false
         type: boolean
+      archive_only_backfill:
+        description: Publish an older reviewed week to archive without changing latest.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -167,6 +172,7 @@ jobs:
           WEEK_START: ${{ steps.inputs.outputs.week_start }}
           COMPACT_WEEK_START: ${{ steps.inputs.outputs.compact_week_start }}
           REPLACE_SAME_WEEK: ${{ github.event.inputs.replace_same_week }}
+          ARCHIVE_ONLY_BACKFILL: ${{ github.event.inputs.archive_only_backfill }}
         run: |
           set +e
           approve_args=""
@@ -177,17 +183,22 @@ jobs:
           if [ "$REPLACE_SAME_WEEK" = "true" ]; then
             replace_args="--replace-same-week"
           fi
+          backfill_args=""
+          if [ "$ARCHIVE_ONLY_BACKFILL" = "true" ]; then
+            backfill_args="--archive-only-backfill"
+          fi
           python3 publish_weekly.py \
             "review-bundle/weekly_data_${COMPACT_WEEK_START}.json" \
             --qa-report "review-bundle/qa_report_${COMPACT_WEEK_START}.json" \
             $approve_args \
-            $replace_args
+            $replace_args \
+            $backfill_args
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           if [ "$code" -ne 0 ]; then
             exit "$code"
           fi
-          if git diff --quiet -- published/; then
+          if [ -z "$(git status --porcelain --untracked-files=all -- published/)" ]; then
             echo "result=noop_identical" >> "$GITHUB_OUTPUT"
           else
             echo "result=published" >> "$GITHUB_OUTPUT"
@@ -195,13 +206,21 @@ jobs:
 
       - name: Validate publish diff scope
         if: steps.publish.outputs.result == 'published'
+        env:
+          ARCHIVE_ONLY_BACKFILL: ${{ github.event.inputs.archive_only_backfill }}
+          COMPACT_WEEK_START: ${{ steps.inputs.outputs.compact_week_start }}
         run: |
-          git diff --name-only > changed_files.txt
+          git status --porcelain --untracked-files=all -- published/ | sed 's/^...//' > changed_files.txt
           python3 - <<'PY'
+          import os
           from automation_pipeline import validate_published_diff_paths
 
           paths = [line.strip() for line in open("changed_files.txt", encoding="utf-8") if line.strip()]
           validate_published_diff_paths(paths)
+          archive = f"published/archive/weekly_{os.environ['COMPACT_WEEK_START']}.json"
+          expected = {archive} if os.environ["ARCHIVE_ONLY_BACKFILL"] == "true" else {archive, "published/latest.json"}
+          if set(paths) != expected:
+              raise SystemExit(f"unexpected publish diff scope: {paths}")
           PY
 
       - name: Commit and push published report
@@ -210,6 +229,7 @@ jobs:
         env:
           GENERATION_SHA: ${{ steps.source_run.outputs.generation_sha }}
           WEEK_START: ${{ steps.inputs.outputs.week_start }}
+          ARCHIVE_ONLY_BACKFILL: ${{ github.event.inputs.archive_only_backfill }}
         run: |
           git fetch origin main
           current_sha="$(git rev-parse origin/main)"
@@ -219,12 +239,20 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add published/latest.json "published/archive/weekly_${{ steps.inputs.outputs.compact_week_start }}.json"
+          if [ "$ARCHIVE_ONLY_BACKFILL" = "true" ]; then
+            git add "published/archive/weekly_${{ steps.inputs.outputs.compact_week_start }}.json"
+          else
+            git add published/latest.json "published/archive/weekly_${{ steps.inputs.outputs.compact_week_start }}.json"
+          fi
           git diff --cached --quiet && {
             echo "result=noop_identical" >> "$GITHUB_OUTPUT"
             exit 0
           }
-          git commit -m "Publish weekly report ${WEEK_START}"
+          if [ "$ARCHIVE_ONLY_BACKFILL" = "true" ]; then
+            git commit -m "Backfill weekly report ${WEEK_START}"
+          else
+            git commit -m "Publish weekly report ${WEEK_START}"
+          fi
           commit_sha="$(git rev-parse HEAD)"
           echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
           echo "result=published" >> "$GITHUB_OUTPUT"

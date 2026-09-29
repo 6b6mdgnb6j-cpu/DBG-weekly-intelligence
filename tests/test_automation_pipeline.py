@@ -532,7 +532,20 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertIn("status = classify_quality_issues(issues)", script)
         self.assertIn('"status": "FATAL"', script)
         self.assertIn('"name": "prometheum_finra_critical_term"', script)
+        self.assertIn('"name": "hashkey_exchange_obita_title"', script)
         self.assertIn('"name": "sec_ipo_increase_title"', script)
+
+    def test_approved_publish_workflow_supports_archive_only_backfill_scope(self):
+        workflow = Path(".github/workflows/publish-weekly-approved.yml").read_text(encoding="utf-8")
+
+        self.assertIn("archive_only_backfill:", workflow)
+        self.assertIn('backfill_args="--archive-only-backfill"', workflow)
+        self.assertIn('if [ "$ARCHIVE_ONLY_BACKFILL" = "true" ]; then', workflow)
+        self.assertIn('git add "published/archive/weekly_${{ steps.inputs.outputs.compact_week_start }}.json"', workflow)
+        self.assertIn('git add published/latest.json "published/archive/weekly_${{ steps.inputs.outputs.compact_week_start }}.json"', workflow)
+        self.assertIn('git commit -m "Backfill weekly report ${WEEK_START}"', workflow)
+        self.assertIn('expected = {archive} if os.environ["ARCHIVE_ONLY_BACKFILL"] == "true"', workflow)
+        self.assertIn("git status --porcelain --untracked-files=all -- published/", workflow)
 
     def test_smoke_quality_classification_marks_unresolved_entity_as_qa_fail(self):
         from crawler.translation_quality import FAIL as QUALITY_FAIL, validate_translation_field

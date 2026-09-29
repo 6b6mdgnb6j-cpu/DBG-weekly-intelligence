@@ -223,6 +223,26 @@ def ensure_publish_idempotency(archive_path, latest_path, serialized, published,
     return "publish", old_archive, old_archive_payload
 
 
+def ensure_archive_backfill_idempotency(archive_path, latest_path, serialized, published, replace_same_week=False):
+    old_latest, old_latest_payload = read_existing_payload(latest_path)
+    if old_latest is None or old_latest_payload is None:
+        raise PublishBlockedError("archive-only backfill requires existing published latest", 4)
+
+    target_week = parse_payload_week(published)
+    latest_week = parse_payload_week(old_latest_payload)
+    if target_week >= latest_week:
+        raise PublishBlockedError("archive-only backfill requires artifact week older than published latest", 4)
+
+    old_archive, old_archive_payload = read_existing_payload(archive_path)
+    if old_archive is None:
+        return "archive_backfill", old_archive, old_archive_payload
+    if old_archive == serialized:
+        return "noop_identical", old_archive, old_archive_payload
+    if not replace_same_week:
+        raise PublishBlockedError("historical archive differs from artifact; refusing overwrite", 4)
+    return "replace_archive_backfill", old_archive, old_archive_payload
+
+
 def restore_published_path(path, old_data, old_expected_payload, stage):
     path = Path(path)
     if old_data is None:
@@ -286,6 +306,7 @@ def publish_weekly(
     qa_report_path=None,
     published_dir=PUBLISHED_DIR,
     replace_same_week=False,
+    archive_only_backfill=False,
     return_plan=False,
 ):
     payload = load_json(source_path)
@@ -303,6 +324,23 @@ def publish_weekly(
 
     week_key = str(published["week_start"]).replace("-", "")
     archive_path = archive_dir / f"weekly_{week_key}.json"
+
+    if archive_only_backfill:
+        serialized = serialize_published_payload(published)
+        validate_published_bytes(serialized, published)
+        plan, _, _ = ensure_archive_backfill_idempotency(
+            archive_path,
+            latest_path,
+            serialized,
+            published,
+            replace_same_week=replace_same_week,
+        )
+        if dry_run or plan == "noop_identical":
+            result = (archive_path, latest_path, qa_report_path, qa_report, False)
+            return result + (("dry_run" if dry_run else plan),) if return_plan else result
+        atomic_write_json_bytes(archive_path, serialized, published, "archive_backfill_replace")
+        result = (archive_path, latest_path, qa_report_path, qa_report, True)
+        return result + (plan,) if return_plan else result
 
     if dry_run:
         result = (archive_path, latest_path, qa_report_path, qa_report, False)
@@ -351,6 +389,11 @@ def parse_args(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="Run QA guard without writing published files.")
     parser.add_argument("--qa-report", help="Override QA report path for testing or review.")
     parser.add_argument("--replace-same-week", action="store_true", help="Explicitly replace an already published report for the same week.")
+    parser.add_argument(
+        "--archive-only-backfill",
+        action="store_true",
+        help="Publish an older reviewed week to archive without changing latest.",
+    )
     return parser.parse_args(argv)
 
 
@@ -371,6 +414,7 @@ def main(argv=None):
             dry_run=args.dry_run,
             qa_report_path=args.qa_report,
             replace_same_week=args.replace_same_week,
+            archive_only_backfill=args.archive_only_backfill,
             return_plan=True,
         )
     except PublishBlockedError as exc:
@@ -405,7 +449,19 @@ def main(argv=None):
 
     if not wrote:
         print("NO-OP IDENTICAL")
-        print("Published archive/latest already match reviewed artifact.")
+        if args.archive_only_backfill:
+            print("Historical archive already matches reviewed artifact; latest unchanged.")
+        else:
+            print("Published archive/latest already match reviewed artifact.")
+        return 0
+
+    if args.archive_only_backfill:
+        if plan == "replace_archive_backfill":
+            print("BACKFILL REPLACEMENT ALLOWED: explicit historical archive replacement")
+        print("Publishing historical archive...")
+        print(f"Archive: updated ({archive_path})")
+        print("Latest: unchanged")
+        print("PUBLISH SUCCESS: archive-only backfill")
         return 0
 
     if plan == "replace_same_week":
