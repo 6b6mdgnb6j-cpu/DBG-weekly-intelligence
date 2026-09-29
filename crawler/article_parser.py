@@ -25,6 +25,7 @@ BAFIN_GENERIC_PAGE_TITLES = {
     "home",
     "bafin",
     "welcome",
+    "information",
 }
 
 

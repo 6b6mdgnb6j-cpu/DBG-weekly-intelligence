@@ -51,6 +51,7 @@ class ArticleParserTests(unittest.TestCase):
               </head>
               <body>
                 <div class="cookie-layer"><h1>Use of cookies</h1></div>
+                <aside><h2>Information</h2></aside>
                 <main>
                   <h1>Operation Heracles delivers another blow to international cyber investment fraud</h1>
                   <p>BaFin and its partners took action against international cyber investment fraud.</p>
@@ -76,6 +77,7 @@ class ArticleParserTests(unittest.TestCase):
             "Operation Heracles delivers another blow to international cyber investment fraud",
         )
         self.assertNotEqual(kept["title_original"], "Use of cookies")
+        self.assertNotEqual(kept["title_original"], "Information")
 
     def test_non_bafin_title_precedence_is_unchanged(self):
         response = Mock()
