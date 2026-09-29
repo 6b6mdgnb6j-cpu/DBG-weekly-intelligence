@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v26", GENERATION_CONFIG_VERSION)
+        self.assertIn("v27", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2227,6 +2227,79 @@ class LongTextTranslationTests(unittest.TestCase):
                 title_translator.cache = {}
                 output = title_translator._translate_text(original, expected, field="title")
                 self.assertIn(expected, output)
+
+    def test_finra_wrong_aliases_are_removed_after_canonical_restoration(self):
+        cases = (
+            (
+                "FINRA Orders American Portfolios to Pay $1.2 Million in Restitution and $400,000 in Fines for UIT Supervision Failures",
+                "FINRA 国际金融局命令美国投资组合支付120万美元的退款和40万美元罚款",
+            ),
+            (
+                "FINRA Updates the OTC Equities High Price Dissemination List",
+                "FINRA 芬拉更新了超市股票高价传播清单",
+            ),
+        )
+        for original, model_output in cases:
+            with self.subTest(original=original):
+                provider = RecordingProvider([model_output])
+                title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+                title_translator.cache = {}
+
+                output = title_translator._translate_text(original, "FINRA", field="title")
+
+                self.assertIn("FINRA", output)
+                self.assertNotIn("国际金融局", output)
+                self.assertNotIn("芬拉", output)
+                self.assertNotIn("FINRA FINRA", output)
+
+    def test_finra_washington_summary_prefix_is_separated_cleanly(self):
+        original = "WASHINGTON—FINRA announced an update to its member supervision requirements."
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize("WASHINGTONFINRA宣布更新会员监管要求。", original, "FINRA")
+
+        self.assertTrue(output.startswith("华盛顿——FINRA"))
+        self.assertNotIn("WASHINGTONFINRA", output)
+
+    def test_ccp_global_is_preserved_as_canonical_entity(self):
+        original = (
+            "CCP Global submits a comment letter to the Ministry of Finance of Chile on "
+            "central clearing of government bond and repo market"
+        )
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize(
+            "中央银行全球向智利财政部提交关于政府债券和回购市场中央清算的评论信",
+            original,
+            "CCP Global",
+        )
+
+        self.assertIn("CCP Global", output)
+        self.assertNotIn("中央银行全球", output)
+
+    def test_topix_banks_leveraged_inverse_uses_financial_terminology(self):
+        original = "TOPIX Banks Leveraged and Inverse Index Series to be Launched"
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize("东银行杆和反向指数系列将推出", original, "JPX")
+
+        for expected in ("TOPIX", "银行", "杠杆", "反向"):
+            self.assertIn(expected, output)
+        self.assertNotIn("东银行", output)
+        self.assertNotIn("银行杆", output)
+
+    def test_corporate_treasurers_uses_finance_specific_term(self):
+        original = "Why Secured Short-Term Investing Is Gaining Relevance for Corporate Treasurers"
+        normalizer = translator.TerminologyNormalizer()
+
+        output, _ = normalizer.normalize(
+            "为什么有担保的短期投资对企业财政部长越来越重要",
+            original,
+            "Clearstream",
+        )
+
+        self.assertIn("企业财资负责人", output)
+        self.assertNotIn("财政部长", output)
 
     def test_artifact_entities_and_financial_terms_are_normalized_from_source_evidence(self):
         normalizer = translator.TerminologyNormalizer()

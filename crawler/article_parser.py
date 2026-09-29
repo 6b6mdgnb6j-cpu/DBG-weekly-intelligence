@@ -13,6 +13,21 @@ HEADERS = {
 }
 
 
+BAFIN_GENERIC_PAGE_TITLES = {
+    "use of cookies",
+    "cookies",
+    "cookie settings",
+    "privacy settings",
+    "privacy policy",
+    "accessibility",
+    "navigation",
+    "search",
+    "home",
+    "bafin",
+    "welcome",
+}
+
+
 DATE_PATTERNS = [
     r"\b\d{4}-\d{2}-\d{2}\b",
     r"\b\d{4}/\d{2}/\d{2}\b",
@@ -72,6 +87,17 @@ def extract_title(soup):
         return soup.title.get_text(" ", strip=True)
 
     return ""
+
+
+def extract_source_title(soup, source):
+    title = extract_title(soup)
+    if source.get("id") != "SRC-025" or title.strip().lower() not in BAFIN_GENERIC_PAGE_TITLES:
+        return title
+    h1 = soup.find("h1")
+    article_heading = h1.get_text(" ", strip=True) if h1 else ""
+    if article_heading and article_heading.strip().lower() not in BAFIN_GENERIC_PAGE_TITLES:
+        return article_heading
+    return title
 
 
 def extract_summary(soup):
@@ -149,7 +175,7 @@ def parse_article(url, source, week_start, week_end, logger, list_title="", list
         soup = BeautifulSoup(response.text, "html.parser")
         page_text = soup.get_text(" ", strip=True)
         raw_date = list_date or extract_metadata_date(soup) or extract_date(page_text[:3000])
-        title = extract_title(soup) or list_title
+        title = extract_source_title(soup, source) or list_title
 
         item = standardize_news(
             source=source,

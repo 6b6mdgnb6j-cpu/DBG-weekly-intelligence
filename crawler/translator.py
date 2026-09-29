@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v26"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v27"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -539,7 +539,9 @@ class TerminologyNormalizer:
         "S&P Dow Jones Indices": {"aliases": ["S&P DJI"], "bad": ["斯安普道斯指数"]},
         "Kaiko": {"aliases": [], "bad": ["凯科"]},
         "DTCC": {"aliases": [], "bad": []},
-        "FINRA": {"aliases": [], "bad": ["国际金融基金会", "FINA"]},
+        "FINRA": {"aliases": [], "bad": ["国际金融局", "芬拉", "国际金融基金会", "FINA"]},
+        "CCP Global": {"aliases": [], "bad": ["中央银行全球"]},
+        "TOPIX": {"aliases": [], "bad": []},
         "SEC": {"aliases": ["Securities and Exchange Commission"], "bad": ["美国证券交易委员会", "证券交易委员会"]},
         "CFTC": {
             "aliases": ["Commodity Futures Trading Commission"],
@@ -583,7 +585,7 @@ class TerminologyNormalizer:
         "OCC": {"欧盟委员会": "OCC", "欧盟银行": "OCC"},
         "SIX": {"六个交易所": "SIX Exchanges", "六个": "SIX", "六": "SIX", "西克斯": "SIX"},
         "ICE": {"冰岛": "ICE", "欧元交易所": "ICE", "国际大陆交易所": "ICE", "跨大陆交易": "ICE"},
-        "FINRA": {"国际金融基金会": "FINRA"},
+        "FINRA": {"国际金融局": "FINRA", "芬拉": "FINRA", "国际金融基金会": "FINRA", "FINA": "FINRA"},
         "FTSE": {"FTC": "FTSE"},
         "MAS": {"马斯": "MAS"},
         "FSC": {"国际SEC": "FSC", "联邦书商管理局": "FSC", "国际证券交易委员会": "FSC"},
@@ -756,6 +758,10 @@ class TerminologyNormalizer:
         ("intraday margin", r"日内利(?=要求|规定|规则|安排|计算|管理|模型|框架|更新|适用|$)", "日内保证金"),
         ("intraday margin", r"日内利润(?=要求|规定|规则|安排|计算|管理|模型|框架|更新|适用|$)", "日内保证金"),
         ("stablecoin", r"稳定coin", "稳定币"),
+        ("TOPIX", r"东(?=银行)", "TOPIX"),
+        ("leveraged", r"(?<=银行)杆", "杠杆"),
+        ("corporate treasurer", r"企业财政部长", "企业财资负责人"),
+        ("corporate treasurers", r"企业财政部长", "企业财资负责人"),
     ]
 
     PROPER_NOUN_RULES = [
@@ -959,6 +965,10 @@ class TerminologyNormalizer:
 
         if self.INDEX_CONTEXT_RE.search(original or ""):
             replace(r"索引", "指数", "financial index")
+
+        if self._contains_entity(original, "FINRA"):
+            replace(r"(?i)WASHINGTON\s*[-—–:]?\s*FINRA", "华盛顿——FINRA", "FINRA:clean_washington_prefix")
+            replace(r"(?<![A-Za-z0-9])FINRA\s*FINRA(?![A-Za-z0-9])", "FINRA", "FINRA:dedupe_wrong_alias")
 
         if restore_missing:
             missing_entities = []

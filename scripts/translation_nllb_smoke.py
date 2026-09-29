@@ -74,6 +74,36 @@ FIXTURES = (
         "field": "title",
         "text": "SEC Publishes Updated Market Statistics, Highlighting Increase in IPOs and Proceeds Raised",
     },
+    {
+        "name": "finra_restitution_fines",
+        "source": "FINRA",
+        "field": "title",
+        "text": "FINRA Orders American Portfolios to Pay $1.2 Million in Restitution and $400,000 in Fines for UIT Supervision Failures",
+    },
+    {
+        "name": "finra_otc_high_price_list",
+        "source": "FINRA",
+        "field": "title",
+        "text": "FINRA Updates the OTC Equities High Price Dissemination List",
+    },
+    {
+        "name": "ccp_global_chile_comment_letter",
+        "source": "CCP Global",
+        "field": "title",
+        "text": "CCP Global submits a comment letter to the Ministry of Finance of Chile on central clearing of government bond and repo market",
+    },
+    {
+        "name": "topix_banks_leveraged_inverse",
+        "source": "JPX",
+        "field": "title",
+        "text": "TOPIX Banks Leveraged and Inverse Index Series to be Launched",
+    },
+    {
+        "name": "corporate_treasurers_secured_investing",
+        "source": "Clearstream",
+        "field": "title",
+        "text": "Why Secured Short-Term Investing Is Gaining Relevance for Corporate Treasurers",
+    },
 )
 
 

@@ -332,6 +332,47 @@ class QAGateTests(unittest.TestCase):
         report = self.evaluate(weekly=weekly)
         self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
 
+    def test_publish_candidate_entity_and_terminology_repairs_are_non_blocking(self):
+        weekly = payload(
+            items=[
+                item(
+                    1,
+                    source="BaFin",
+                    title_original="Operation Heracles: Another strike against international online investment fraud",
+                    title_cn="“赫拉克勒斯行动”再次打击国际网络投资欺诈",
+                ),
+                item(
+                    2,
+                    source="FINRA",
+                    title_original="FINRA Orders American Portfolios to Pay $1.2 Million in Restitution and $400,000 in Fines",
+                    title_cn="FINRA命令American Portfolios支付120万美元赔偿及40万美元罚款",
+                ),
+                item(
+                    3,
+                    source="CCP Global",
+                    title_original="CCP Global submits comment letter to the Central Bank of Chile",
+                    title_cn="CCP Global向智利中央银行提交意见函",
+                ),
+                item(
+                    4,
+                    source="JPX",
+                    title_original="TOPIX Banks Leveraged and Inverse Index Series will launch",
+                    title_cn="TOPIX银行杠杆和反向指数系列将推出",
+                ),
+                item(
+                    5,
+                    title_original="Why secured short-term investing matters more for corporate treasurers",
+                    title_cn="为什么有担保的短期投资对企业财资负责人越来越重要",
+                ),
+            ],
+            highlights=[],
+        )
+
+        report = self.evaluate(weekly=weekly)
+
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+        self.assertFalse(any(issue["severity"] == FAIL for issue in report["content_issues"]))
+
     def test_translation_quality_short_title_proposition_missing_fails(self):
         weekly = payload(
             items=[
