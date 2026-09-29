@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v34", GENERATION_CONFIG_VERSION)
+        self.assertIn("v35", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2259,6 +2259,15 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertTrue(any("U.S. District Court" in segment for segment in segments))
         self.assertTrue(any("U.S. Securities & Exchange Commission" in segment for segment in segments))
         self.assertTrue(any("ISS" in segment and "submitted a brief" in segment for segment in segments))
+        self.assertIn(
+            "challenging an unconstitutional demand in a U.S. Securities & Exchange Commission subpoena",
+            segments,
+        )
+        self.assertTrue(any(segment.startswith("that would require") for segment in segments))
+        self.assertTrue(any(
+            "challenging" in segment and "Securities & Exchange Commission" in segment
+            for segment in segments
+        ))
 
     def test_iss_content_recovery_failure_bridges_to_semantic_recovery(self):
         original = (
@@ -2272,8 +2281,9 @@ class LongTextTranslationTests(unittest.TestCase):
             "2026年9月18日,SEC提出违宪要求并要求该公司提交客户投票数据。",
             "SEC要求该公司提交客户投票数据。",
             "马里兰州罗克维尔，2026年9月18日。",
-            "ISS今日向美国宾夕法尼亚州东区联邦地区法院提交简报，挑战SEC传票中的一项违宪要求。",
-            "并要求公司交出反映客户投票的数百万行数据。",
+            "ISS今日向美国宾夕法尼亚州东区联邦地区法院提交简报。",
+            "挑战SEC传票中的一项违宪要求。",
+            "该要求将要求公司交出反映客户投票的数百万行数据。",
         ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
@@ -2286,7 +2296,7 @@ class LongTextTranslationTests(unittest.TestCase):
         cache_value = next(iter(title_translator.cache.values()))
         self.assertEqual(cache_value["recovered_from"], "sanity_then_semantic:content_ratio_low")
         self.assertTrue(cache_value["semantic_recovery_selected"])
-        self.assertEqual(len(provider.calls), 5)
+        self.assertEqual(len(provider.calls), 6)
 
     def test_failed_sanity_then_semantic_recovery_keeps_review_candidate_uncached(self):
         original = (
@@ -2299,8 +2309,8 @@ class LongTextTranslationTests(unittest.TestCase):
             initial,
             "SEC要求提交客户数据。",
             "马里兰州，2026年9月18日。",
-            "该机构今日向法院提交简报并挑战监管要求。",
-            "公司被要求提交客户投票数据。",
+            "该机构今日向法院提交简报。",
+            "该机构反对监管要求。",
         ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}

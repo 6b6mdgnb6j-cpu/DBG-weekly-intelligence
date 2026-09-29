@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v34"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v35"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -1190,6 +1190,7 @@ class TitleTranslator:
             r"\s+(?=\bwith\s+(?:a|an|the)\b)",
             r"\s+(?=\bto\s+(?:rescind|repeal|revoke|suspend|approve|extend)\b)",
             r"\s+(?=\b(?:launch(?:es|ed|ing)?|introduc(?:es|ed|ing)?|offer(?:s|ed|ing)?)\b)",
+            r"\s+(?=\b(?:challenging|contesting|opposing)\b)",
             r"\s+(?=\bbased\s+on\b)",
         ]
         segments = self._split_sentences_abbreviation_aware(normalized)
