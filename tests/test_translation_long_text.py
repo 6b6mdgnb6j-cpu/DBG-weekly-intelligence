@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v32", GENERATION_CONFIG_VERSION)
+        self.assertIn("v33", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2131,11 +2131,9 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         provider = RecordingProvider([
             "该协议建立了一个基于SEC注册的经纪商-经销商基础设施的途径,以通过HashKey的授权交易网络向有资格的国际投资者分配美国股票.",
-            "该协议建立了基于SEC注册经纪商基础设施的路径，用于分配美国",
-            "股票，并通过HashKey持牌交易网络服务合资格国际投资者。",
+            "该协议建立了基于SEC注册经纪商基础设施的路径，用于分配美国股票，并通过HashKey持牌交易网络服务合资格国际投资者。",
             "纽约，2026年9月16日",
-            "Prometheum Inc.",
-            "Prometheum是一家加密资产市场基础设施提供商，并宣布",
+            "Prometheum Inc.（Prometheum）是一家加密资产市场基础设施提供商，并宣布",
             "其子公司Prometheum Capital LLC（Prometheum Capital）是SEC注册、FINRA会员的加密资产托管机构。",
         ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
@@ -2152,6 +2150,44 @@ class LongTextTranslationTests(unittest.TestCase):
             for issue in title_translator.last_translation_quality_issues
         ))
 
+    def test_semantic_segments_preserve_common_abbreviations(self):
+        title_translator = TitleTranslator(enabled=False)
+        cases = (
+            (
+                "U.S. Securities and Exchange Commission issued an update. Another sentence follows.",
+                "U.S. Securities and Exchange Commission issued an update.",
+            ),
+            (
+                "Example Inc. announced a new service. Another company responded.",
+                "Example Inc. announced a new service.",
+            ),
+            (
+                "ROCKVILLE, Md. (September 18, 2026) – An organization issued an update.",
+                "ROCKVILLE, Md. (September 18, 2026)",
+            ),
+        )
+
+        for original, expected_segment in cases:
+            with self.subTest(original=original):
+                segments = title_translator._semantic_segments(original)
+                self.assertIn(expected_segment, segments)
+
+    def test_iss_semantic_segments_preserve_abbreviations_and_actor_action(self):
+        original = (
+            "ROCKVILLE, Md. (September 18, 2026) – Institutional Shareholder Services (ISS) today "
+            "submitted a brief in the U.S. District Court for the Eastern District of Pennsylvania "
+            "challenging an unconstitutional demand in a U.S. Securities & Exchange Commission "
+            "subpoena that would require the company to hand over millions of lines of data "
+            "reflecting its clients’ votes on […]"
+        )
+        segments = TitleTranslator(enabled=False)._semantic_segments(original)
+
+        self.assertFalse(any(segment.endswith("in the U.S.") for segment in segments))
+        self.assertFalse(any(segment.endswith("in a U.S.") for segment in segments))
+        self.assertTrue(any("U.S. District Court" in segment for segment in segments))
+        self.assertTrue(any("U.S. Securities & Exchange Commission" in segment for segment in segments))
+        self.assertTrue(any("ISS" in segment and "submitted a brief" in segment for segment in segments))
+
     def test_iss_content_recovery_failure_bridges_to_semantic_recovery(self):
         original = (
             "ROCKVILLE, Md. (September 18, 2026) – Institutional Shareholder Services (ISS) today "
@@ -2163,11 +2199,8 @@ class LongTextTranslationTests(unittest.TestCase):
         provider = RecordingProvider([
             "2026年9月18日,SEC提出违宪要求并要求该公司提交客户投票数据。",
             "SEC要求该公司提交客户投票数据。",
-            "马里兰州罗克维尔。",
-            "2026年9月18日。",
-            "ISS今日向美国",
-            "宾夕法尼亚州东区联邦地区法院提交简报，挑战一项违宪要求。",
-            "该要求来自SEC传票",
+            "马里兰州罗克维尔，2026年9月18日。",
+            "ISS今日向美国宾夕法尼亚州东区联邦地区法院提交简报，挑战SEC传票中的一项违宪要求。",
             "并要求公司交出反映客户投票的数百万行数据。",
         ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
@@ -2181,7 +2214,7 @@ class LongTextTranslationTests(unittest.TestCase):
         cache_value = next(iter(title_translator.cache.values()))
         self.assertEqual(cache_value["recovered_from"], "sanity_then_semantic:content_ratio_low")
         self.assertTrue(cache_value["semantic_recovery_selected"])
-        self.assertEqual(len(provider.calls), 8)
+        self.assertEqual(len(provider.calls), 5)
 
     def test_failed_sanity_then_semantic_recovery_keeps_review_candidate_uncached(self):
         original = (
@@ -2193,11 +2226,8 @@ class LongTextTranslationTests(unittest.TestCase):
         provider = RecordingProvider([
             initial,
             "SEC要求提交客户数据。",
-            "马里兰州。",
-            "2026年9月18日。",
-            "该机构今日提交简报。",
-            "法院收到文件。",
-            "该要求来自监管传票。",
+            "马里兰州，2026年9月18日。",
+            "该机构今日向法院提交简报并挑战监管要求。",
             "公司被要求提交客户投票数据。",
         ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
@@ -2292,8 +2322,7 @@ class LongTextTranslationTests(unittest.TestCase):
 
         provider = RecordingProvider([
             "香港，2026年9月15日，HashKey Exchange是HashKey Holdings Limited旗下授权交易平台；Obita是一家全球支付服务提供商。HashKey Exchange将在经营许可和许可的业务范围内提供机构级数字资产托管支持。",
-            "香港，9月",
-            "2026年15日",
+            "香港，2026年9月15日",
             "HashKey Exchange是HashKey Holdings Limited旗下授权交易平台并宣布",
             "其已与奥比塔达成合作，后者是一家全球支付服务提供商",
             "在经营许可和许可的业务范围内，HashKey Exchange将提供机构级数字资产托管支持",

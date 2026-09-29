@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v32"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v33"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -1138,6 +1138,24 @@ class TitleTranslator:
                 pieces.append(stripped)
         return pieces
 
+    @staticmethod
+    def _split_sentences_abbreviation_aware(text):
+        period_marker = "\ue000"
+        abbreviation_pattern = re.compile(
+            r"\b(?:(?:[A-Za-z]\.){2,}|(?:Md|Inc|Ltd|Co|Corp|Mr|Ms|Dr|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.)",
+            flags=re.I,
+        )
+
+        protected = abbreviation_pattern.sub(
+            lambda match: match.group(0).replace(".", period_marker),
+            text or "",
+        )
+        return [
+            piece.replace(period_marker, ".").strip()
+            for piece in re.split(r"(?<=[.!?])\s+", protected)
+            if piece.strip()
+        ]
+
     def _merge_semantic_segments_to_cap(self, segments):
         merged = [segment for segment in segments if segment and segment.strip()]
         while len(merged) > self.SEMANTIC_SEGMENT_CAP:
@@ -1150,7 +1168,6 @@ class TitleTranslator:
         if not normalized:
             return []
         boundaries = [
-            r"(?<=[.!?])\s+",
             r"\s+\|\s+",
             r"\s+[—–]\s+",
             r";\s+",
@@ -1161,7 +1178,7 @@ class TitleTranslator:
             r"\s+(?=\b(?:launch(?:es|ed|ing)?|introduc(?:es|ed|ing)?|offer(?:s|ed|ing)?)\b)",
             r"\s+(?=\bbased\s+on\b)",
         ]
-        segments = [normalized]
+        segments = self._split_sentences_abbreviation_aware(normalized)
         for boundary in boundaries:
             next_segments = []
             for segment in segments:
