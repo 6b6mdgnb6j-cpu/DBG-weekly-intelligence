@@ -2,7 +2,44 @@
 import json
 
 from crawler.translation_quality import FAIL, validate_translation_field
-from crawler.translator import TitleTranslator, TranslationUnavailableError
+from crawler.translator import LocalNLLBProvider, TitleTranslator, TranslationUnavailableError
+
+
+class TracingProvider:
+    def __init__(self, provider):
+        self.provider = provider
+        self.model_name = provider.model_name
+        self.calls = []
+
+    def __getattr__(self, name):
+        return getattr(self.provider, name)
+
+    @property
+    def last_translation_metadata(self):
+        return self.provider.last_translation_metadata
+
+    def translate(self, text, source_lang="en", target_lang="zh", chunk_token_limit=None):
+        output = self.provider.translate(
+            text,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            chunk_token_limit=chunk_token_limit,
+        )
+        self.calls.append({
+            "call_number": len(self.calls) + 1,
+            "source_input": text,
+            "chunk_token_limit": chunk_token_limit,
+            "raw_output": output,
+        })
+        return output
+
+
+def failure_debug(translator, provider, call_start):
+    return {
+        "provider_calls": provider.calls[call_start:],
+        "semantic_recovery": translator.last_semantic_recovery_metadata,
+        "entity_alignment_failures": translator.last_entity_alignment_failures,
+    }
 
 
 FIXTURES = (
@@ -166,10 +203,14 @@ def fixture_constraint_issues(fixture, output):
 
 
 def main():
-    translator = TitleTranslator(enabled=True, strict=True)
+    provider = TracingProvider(LocalNLLBProvider())
+    translator = TitleTranslator(enabled=True, strict=True, provider=provider)
     translator.cache = {}
     failures = 0
     for fixture in FIXTURES:
+        call_start = len(provider.calls)
+        translator.last_semantic_recovery_metadata = {}
+        translator.last_entity_alignment_failures = []
         try:
             output = translator._translate_text(
                 fixture["text"], fixture["source"], field=fixture["field"]
@@ -187,18 +228,22 @@ def main():
             issues.extend(fixture_constraint_issues(fixture, output))
             status = classify_quality_issues(issues)
             failures += bool(issues)
-            print(json.dumps({
+            result = {
                 "fixture": fixture["name"],
                 "status": status,
                 "translation": output,
                 "issues": issues,
-            }, ensure_ascii=False))
+            }
+            if issues:
+                result["debug"] = failure_debug(translator, provider, call_start)
+            print(json.dumps(result, ensure_ascii=False))
         except TranslationUnavailableError as exc:
             failures += 1
             print(json.dumps({
                 "fixture": fixture["name"],
                 "status": "FATAL",
                 "error": str(exc),
+                "debug": failure_debug(translator, provider, call_start),
             }, ensure_ascii=False))
         except Exception as exc:
             failures += 1
@@ -206,6 +251,7 @@ def main():
                 "fixture": fixture["name"],
                 "status": "FATAL",
                 "error": f"{type(exc).__name__}: {exc}",
+                "debug": failure_debug(translator, provider, call_start),
             }, ensure_ascii=False))
 
     raise SystemExit(1 if failures else 0)

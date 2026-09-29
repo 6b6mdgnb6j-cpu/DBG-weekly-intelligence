@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v33", GENERATION_CONFIG_VERSION)
+        self.assertIn("v34", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -1227,6 +1227,78 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         self.assertIn("CFTC与SEC联合发布最终规则", normalized)
         self.assertNotIn("SEC (CFTC)", normalized)
+
+    def test_sec_ampersand_full_name_is_hard_protected_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+
+        occurrences = normalizer.protected_entity_occurrences(
+            "A U.S. Securities & Exchange Commission subpoena requested records."
+        )
+
+        self.assertIn(
+            ("SEC", "SEC", "Securities & Exchange Commission"),
+            occurrences,
+        )
+
+    def test_sec_observed_real_nllb_forms_normalize_with_source_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+        original = "A Securities & Exchange Commission subpoena requested records."
+
+        for bad_form in ("美国联邦证券交易委员会", "美国证券和交易委员会"):
+            with self.subTest(bad_form=bad_form):
+                normalized, _ = normalizer.normalize(
+                    f"该要求来自{bad_form}的传票。",
+                    original,
+                    "ISS STOXX",
+                    restore_missing=False,
+                )
+                self.assertEqual(normalized, "该要求来自SEC的传票。")
+
+    def test_sec_chinese_forms_are_not_rewritten_without_source_evidence(self):
+        normalizer = translator.TerminologyNormalizer()
+
+        for phrase in ("美国联邦证券交易委员会", "美国证券和交易委员会"):
+            with self.subTest(phrase=phrase):
+                normalized, _ = normalizer.normalize(
+                    f"文章提到{phrase}。",
+                    "The article describes a regulator.",
+                    "Example",
+                    restore_missing=False,
+                )
+                self.assertIn(phrase, normalized)
+                self.assertNotIn("SEC", normalized)
+
+    def test_sec_existing_and_full_name_alias_remains_supported(self):
+        normalizer = translator.TerminologyNormalizer()
+        normalized, _ = normalizer.normalize(
+            "美国证券交易委员会发布更新。",
+            "The Securities and Exchange Commission issued an update.",
+            "SEC",
+            restore_missing=False,
+        )
+
+        self.assertEqual(normalized, "SEC发布更新。")
+
+    def test_iss_relationship_accepts_ampersand_sec_alias_canonicalization(self):
+        original = (
+            "Institutional Shareholder Services (ISS) submitted a brief challenging an "
+            "unconstitutional demand in a Securities & Exchange Commission subpoena."
+        )
+        normalized, _ = translator.TerminologyNormalizer().normalize(
+            "ISS提交简报，挑战美国联邦证券交易委员会传票中的违宪要求。",
+            original,
+            "ISS STOXX",
+            restore_missing=False,
+        )
+
+        self.assertIn("ISS", normalized)
+        self.assertIn("SEC", normalized)
+        self.assertEqual(
+            TitleTranslator(enabled=False)._final_candidate_issues(
+                original, normalized, "summary", "ISS STOXX"
+            ),
+            [],
+        )
 
     def test_editorial_polish_dedupes_full_width_entity_parentheses(self):
         normalizer = translator.TerminologyNormalizer()

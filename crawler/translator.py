@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v33"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v34"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -481,6 +481,7 @@ class TerminologyNormalizer:
         "SIX": {"SIX Exchanges"},
         "LSEG": {"London Stock Exchange Group"},
         "S&P Dow Jones Indices": {"S&P DJI"},
+        "SEC": {"Securities and Exchange Commission", "Securities & Exchange Commission"},
     }
     SOFT_LOCALIZABLE_ALIASES = {"JPX", "HKMA"}
     CANONICAL_ENTITIES = {
@@ -545,7 +546,15 @@ class TerminologyNormalizer:
         "FINRA": {"aliases": [], "bad": ["国际金融局", "芬拉", "国际金融基金会", "FINA"]},
         "CCP Global": {"aliases": [], "bad": ["中央银行全球"]},
         "TOPIX": {"aliases": [], "bad": []},
-        "SEC": {"aliases": ["Securities and Exchange Commission"], "bad": ["美国证券交易委员会", "证券交易委员会"]},
+        "SEC": {
+            "aliases": ["Securities and Exchange Commission", "Securities & Exchange Commission"],
+            "bad": [
+                "美国联邦证券交易委员会",
+                "美国证券和交易委员会",
+                "美国证券交易委员会",
+                "证券交易委员会",
+            ],
+        },
         "CFTC": {
             "aliases": ["Commodity Futures Trading Commission"],
             "bad": ["欧盟货币交易委员会", "欧盟CFTC", "欧盟贸易交易委员会", "美国央行", "金融交易委员会", "商品期货交易委员会"],
@@ -578,7 +587,12 @@ class TerminologyNormalizer:
             "金融交易委员会": "CFTC",
             "商品期货交易委员会": "CFTC",
         },
-        "SEC": {"美国证券交易委员会": "SEC", "证券交易委员会": "SEC"},
+        "SEC": {
+            "美国联邦证券交易委员会": "SEC",
+            "美国证券和交易委员会": "SEC",
+            "美国证券交易委员会": "SEC",
+            "证券交易委员会": "SEC",
+        },
         "ECB": {"欧洲央行": "ECB"},
         "FOMC": {"联邦开放市场委员会": "FOMC"},
         "HKMA": {"香港货币管理局": "HKMA", "香港金融管理局": "HKMA"},
@@ -603,7 +617,7 @@ class TerminologyNormalizer:
         "CFTC": ["commodity futures trading commission", "商品期货交易委员会"],
         "FDIC": ["fdic", "federal deposit insurance corporation", "联邦存款保险公司"],
         "FSC": ["fsc", "fscma", "financial services commission", "韩国金融监督委员会"],
-        "SEC": ["securities and exchange commission", "证券交易委员会"],
+        "SEC": ["securities and exchange commission", "securities & exchange commission", "证券交易委员会"],
         "HKMA": ["hong kong monetary authority", "香港金融管理局", "香港货币管理局"],
         "ECB": ["european central bank", "欧洲中央银行"],
         "FOMC": ["federal open market committee", "联邦储备系统"],

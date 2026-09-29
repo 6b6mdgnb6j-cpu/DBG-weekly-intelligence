@@ -566,6 +566,33 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertEqual(classify_quality_issues(issues), "QA_FAIL")
         self.assertIn("translation_entity_alignment_failure", [issue["issue_id"] for issue in issues])
 
+    def test_real_nllb_smoke_trace_is_failure_only_and_fixture_bounded(self):
+        from scripts.translation_nllb_smoke import TracingProvider, failure_debug
+
+        class FakeProvider:
+            model_name = "fake-model"
+            last_translation_metadata = {"chunk_count": 1}
+
+            def translate(self, text, source_lang="en", target_lang="zh", chunk_token_limit=None):
+                return f"译文:{text}"
+
+        provider = TracingProvider(FakeProvider())
+        provider.translate("earlier fixture", chunk_token_limit=256)
+        call_start = len(provider.calls)
+        provider.translate("failed fixture segment", chunk_token_limit=128)
+        fake_translator = type("FakeTranslator", (), {
+            "last_semantic_recovery_metadata": {"recovery_validation_result": "FAIL"},
+            "last_entity_alignment_failures": [{"entity": "SEC"}],
+        })()
+
+        debug = failure_debug(fake_translator, provider, call_start)
+
+        self.assertEqual(len(debug["provider_calls"]), 1)
+        self.assertEqual(debug["provider_calls"][0]["source_input"], "failed fixture segment")
+        self.assertEqual(debug["provider_calls"][0]["raw_output"], "译文:failed fixture segment")
+        self.assertEqual(debug["provider_calls"][0]["chunk_token_limit"], 128)
+        self.assertEqual(debug["entity_alignment_failures"][0]["entity"], "SEC")
+
     def test_review_upload_requires_bundle_validation_success_and_exit_zero(self):
         workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
         self.assertIn(
