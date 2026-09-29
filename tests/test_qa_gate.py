@@ -783,6 +783,150 @@ class QAGateTests(unittest.TestCase):
         )
         self.assertIn("translation_relationship_missing", [issue["issue_id"] for issue in report["content_issues"]])
 
+    def test_sec_ipo_increase_title_accepts_growth_equivalence(self):
+        report = self.evaluate(
+            weekly=payload(
+                items=[
+                    item(
+                        1,
+                        source="SEC",
+                        title_original=(
+                            "SEC Publishes Updated Market Statistics, Highlighting Increase in IPOs "
+                            "and Proceeds Raised"
+                        ),
+                        title_cn="SEC发布了最新的市场统计数据,突出了IPO增长和收益增长",
+                    )
+                ],
+                highlights=[],
+            )
+        )
+        issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+
+        self.assertNotIn("translation_title_proposition_missing", issue_ids)
+        self.assertNotIn("translation_action_direction_missing", issue_ids)
+        self.assertEqual(self.check(report, "translation_quality_failures")["result"], PASS)
+
+    def test_descriptive_decrease_in_is_content_not_agentive_action(self):
+        report = self.evaluate(
+            weekly=payload(
+                items=[
+                    item(
+                        1,
+                        title_original="Statistics show a notable decline in settlement failures",
+                        title_cn="统计数据显示结算失败显著下降",
+                    )
+                ],
+                highlights=[],
+            )
+        )
+        issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+
+        self.assertNotIn("translation_title_proposition_missing", issue_ids)
+        self.assertNotIn("translation_action_direction_missing", issue_ids)
+
+    def test_agentive_increase_and_decrease_still_require_direction(self):
+        cases = (
+            ("SEC increases filing fees", "SEC调整申报费用", "increase"),
+            ("Regulator raises capital requirements", "监管机构调整资本要求", "increase"),
+            ("Authority reduces margin requirements", "主管机构调整保证金要求", "decrease"),
+            ("Central bank cuts the policy rate", "中央银行调整政策利率", "decrease"),
+        )
+        for original, translated, action in cases:
+            with self.subTest(original=original):
+                report = self.evaluate(
+                    weekly=payload(
+                        items=[item(1, title_original=original, title_cn=translated)],
+                        highlights=[],
+                    )
+                )
+                self.assertTrue(any(
+                    issue["issue_id"] == "translation_action_direction_missing"
+                    and issue.get("evidence", {}).get("action") == action
+                    for issue in report["content_issues"]
+                ))
+
+    def test_noun_form_policy_trends_remain_action_direction_sensitive(self):
+        cases = (
+            ("SEC Announces Increase in Filing Fees", "SEC宣布调整申报费用", "increase"),
+            (
+                "Regulator Approves Reduction in Margin Requirements",
+                "监管机构批准调整保证金要求",
+                "decrease",
+            ),
+            (
+                "Authority Imposes an Increase in Capital Requirements",
+                "主管机构实施资本要求调整",
+                "increase",
+            ),
+            (
+                "Central Bank Announces a Decrease in the Policy Rate",
+                "中央银行宣布调整政策利率",
+                "decrease",
+            ),
+        )
+        for original, translated, action in cases:
+            with self.subTest(original=original):
+                report = self.evaluate(
+                    weekly=payload(
+                        items=[item(1, title_original=original, title_cn=translated)],
+                        highlights=[],
+                    )
+                )
+                self.assertTrue(any(
+                    issue["issue_id"] == "translation_action_direction_missing"
+                    and issue.get("evidence", {}).get("action") == action
+                    for issue in report["content_issues"]
+                ))
+
+    def test_reporting_context_noun_form_trends_remain_descriptive(self):
+        cases = (
+            ("Statistics show an increase in issuance", "统计数据显示发行量增长"),
+            ("Report reveals a decline in trading volume", "报告显示交易量下降"),
+        )
+        for original, translated in cases:
+            with self.subTest(original=original):
+                report = self.evaluate(
+                    weekly=payload(
+                        items=[item(1, title_original=original, title_cn=translated)],
+                        highlights=[],
+                    )
+                )
+                issue_ids = [issue["issue_id"] for issue in report["content_issues"]]
+                self.assertNotIn("translation_title_proposition_missing", issue_ids)
+                self.assertNotIn("translation_action_direction_missing", issue_ids)
+
+    def test_summary_missing_descriptive_increase_is_nonblocking_warning(self):
+        report = self.evaluate(
+            weekly=payload(
+                items=[
+                    item(
+                        1,
+                        source="SEC",
+                        summary_original=(
+                            "SEC economic analysts published updated statistics covering key parts "
+                            "of U.S. capital markets, including a notable increase in the number of "
+                            "initial public offerings."
+                        ),
+                        summary_cn="SEC经济分析部门发布了更新的统计数据，涵盖美国资本市场的关键部分。",
+                    )
+                ],
+                highlights=[],
+            )
+        )
+        trend_issues = [
+            issue for issue in report["content_issues"]
+            if issue["issue_id"] == "translation_trend_proposition_missing"
+        ]
+        action_issues = [
+            issue for issue in report["content_issues"]
+            if issue["issue_id"] == "translation_action_direction_missing"
+            and issue.get("evidence", {}).get("action") == "increase"
+        ]
+
+        self.assertEqual(len(trend_issues), 1)
+        self.assertEqual(trend_issues[0]["severity"], WARNING)
+        self.assertEqual(action_issues, [])
+
     def test_unresolved_hard_entity_remains_reviewable_and_fails_qa(self):
         weekly = payload(
             items=[

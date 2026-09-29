@@ -29,8 +29,16 @@ SUBSTANTIVE_TITLE_ANCHORS = [
     ("approve", (r"\bapprov(?:e|es|ed|ing|al)\b",), ("批准", "核准", "获批", "被批准", "认可")),
     ("suspend", (r"\bsuspend(?:s|ed|ing)?\b",), ("暂停", "中止")),
     ("extend", (r"\bextend(?:s|ed|ing)?\b",), ("延长", "延期", "扩大", "扩展")),
-    ("increase", (r"\bincreas(?:e|es|ed|ing)\b", r"\brecord\b"), ("增加", "上升", "提高", "创纪录")),
-    ("decrease", (r"\breduc(?:e|es|ed|ing)\b", r"\bdecreas(?:e|es|ed|ing)\b"), ("减少", "下降", "降低")),
+    (
+        "increase",
+        (r"\bincreas(?:e|es|ed|ing)\b", r"\bgrowth\b", r"\brise\b", r"\brais(?:e|es|ed|ing)\b", r"\brecord\b"),
+        ("增长", "增加", "上升", "提升", "提高", "创纪录"),
+    ),
+    (
+        "decrease",
+        (r"\breduc(?:e|es|ed|ing|tion)\b", r"\bdecreas(?:e|es|ed|ing)\b", r"\bdeclin(?:e|es|ed|ing)\b", r"\bfall\b", r"\bcut(?:s|ting)?\b"),
+        ("下降", "减少", "下滑", "降低"),
+    ),
     ("partner", (r"\bpartner(?:s|ed|ing|ship)?\b",), ("合作", "伙伴")),
     ("clear", (r"\bclear(?:s|ed|ing)?\b", r"\bclearing\b"), ("清算",)),
     ("settle", (r"\bsettle(?:s|d|ment)?\b", r"\bsettlement\b"), ("结算",)),
@@ -52,9 +60,43 @@ ACTION_DIRECTION_RULES = [
         ),
         ("允许", "许可", "经许可", "获准", "准许", "授权", "经授权", "持牌"),
     ),
-    ("increase", (r"\bincreas(?:e|es|ed|ing)\b",), ("增加", "上升", "提高")),
-    ("decrease", (r"\bdecreas(?:e|es|ed|ing)\b", r"\breduc(?:e|es|ed|ing)\b"), ("减少", "下降", "降低")),
+    ("increase", (r"\bincreas(?:e|es|ed|ing)\b", r"\brais(?:e|es|ed|ing)\b"), ("增长", "增加", "上升", "提升", "提高")),
+    ("decrease", (r"\bdecreas(?:e|es|ed|ing)\b", r"\breduc(?:e|es|ed|ing|tion)\b", r"\bcut(?:s|ting)?\b"), ("下降", "减少", "下滑", "降低")),
 ]
+
+TREND_PROPOSITION_RULES = (
+    (
+        "increase",
+        (r"\b(?:notable\s+)?(?:increase|growth|rise)\s+in\b",),
+        ("增长", "增加", "上升", "提升", "提高"),
+    ),
+    (
+        "decrease",
+        (r"\b(?:notable\s+)?(?:decrease|decline|fall|reduction)\s+in\b",),
+        ("下降", "减少", "下滑", "降低"),
+    ),
+)
+
+DESCRIPTIVE_TREND_CONTEXT = (
+    r"\bhighlight(?:s|ed|ing)?\b",
+    r"\bshow(?:s|ed|ing)?\b",
+    r"\breport(?:s|ed|ing)?\b",
+    r"\bstatistics?\b",
+    r"\bdata\b",
+    r"\bindicat(?:e|es|ed|ing)\b",
+    r"\breveal(?:s|ed|ing)?\b",
+    r"\bobserv(?:e|es|ed|ing|ation)\b",
+)
+
+AGENTIVE_TREND_CONTEXT = (
+    r"\bannounc(?:e|es|ed|ing|ement)\b",
+    r"\bapprov(?:e|es|ed|ing|al)\b",
+    r"\bimpos(?:e|es|ed|ing)\b",
+    r"\badopt(?:s|ed|ing|ion)?\b",
+    r"\bset(?:s|ting)?\b",
+    r"\bmandat(?:e|es|ed|ing|ory)\b",
+    r"\brequir(?:e|es|ed|ing|ement)\b",
+)
 
 CRITICAL_ACTION_FALLBACK_FAMILIES = {
     "rescind": {
@@ -472,6 +514,38 @@ def _consultation_on_proposed_modifier_is_preserved(original, translated):
     return _contains_any(translated, ("咨询",)) and _contains_any(translated, ("修正案", "修订", "修订案", "修法"))
 
 
+def _descriptive_trend_family(original, action_id):
+    for family, patterns, _signals in TREND_PROPOSITION_RULES:
+        if family != action_id or not _contains_english(original, patterns):
+            continue
+        if _contains_english(original, AGENTIVE_TREND_CONTEXT):
+            return False
+        return _contains_english(original, DESCRIPTIVE_TREND_CONTEXT)
+    return False
+
+
+def _trend_proposition_issues(index, item):
+    original = item.get("summary_original") or item.get("summary") or ""
+    translated = item.get("summary_cn") or ""
+    if not original or not translated:
+        return []
+    issues = []
+    for family, patterns, translated_signals in TREND_PROPOSITION_RULES:
+        if _contains_english(original, patterns) and not _contains_any(translated, translated_signals):
+            issues.append(
+                _issue(
+                    index,
+                    item,
+                    "summary",
+                    "translation_trend_proposition_missing",
+                    WARNING,
+                    {"trend": family, "translated_prefix": translated[:160]},
+                    "Translated summary appears to omit a descriptive statistical trend from the original.",
+                )
+            )
+    return issues
+
+
 def _action_direction_issues(index, item):
     issues = []
     for field, original, translated in _translated_fields(item):
@@ -484,6 +558,8 @@ def _action_direction_issues(index, item):
             ):
                 continue
             if not _contains_english(original, original_patterns):
+                continue
+            if action_id in {"increase", "decrease"} and _descriptive_trend_family(original, action_id):
                 continue
             if action_id == "propose" and _consultation_on_proposed_modifier_is_preserved(original, translated):
                 continue
@@ -642,6 +718,7 @@ def audit_translation_quality(items, translation_mode=""):
         issues.extend(_material_term_issues(index, item))
         issues.extend(_proper_noun_issues(index, item))
         issues.extend(_title_proposition_issues(index, item))
+        issues.extend(_trend_proposition_issues(index, item))
         issues.extend(_action_direction_issues(index, item))
         issues.extend(_relationship_issues(index, item))
         issues.extend(_suspicious_compression_issues(index, item))
@@ -673,6 +750,7 @@ def validate_translation_field(
             + _entity_issues(0, item, TerminologyNormalizer())
             + _proper_noun_issues(0, item)
             + _title_proposition_issues(0, item)
+            + _trend_proposition_issues(0, item)
             + _action_direction_issues(0, item)
             + _relationship_issues(0, item)
             + _corruption_issues(0, item)
@@ -682,6 +760,7 @@ def validate_translation_field(
             (_standalone_sanity_quality_issues(0, item) if include_sanity else [])
             + _entity_issues(0, item, TerminologyNormalizer())
             + _proper_noun_issues(0, item)
+            + _trend_proposition_issues(0, item)
             + _action_direction_issues(0, item)
             + _relationship_issues(0, item)
             + _suspicious_compression_issues(0, item)

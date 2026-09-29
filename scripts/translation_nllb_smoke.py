@@ -68,6 +68,12 @@ FIXTURES = (
             "(\"Prometheum Capital\"), an SEC-registered, FINRA member crypto asset custodian […]"
         ),
     },
+    {
+        "name": "sec_ipo_increase_title",
+        "source": "SEC",
+        "field": "title",
+        "text": "SEC Publishes Updated Market Statistics, Highlighting Increase in IPOs and Proceeds Raised",
+    },
 )
 
 
