@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v35"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v36"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -1242,6 +1242,21 @@ class TitleTranslator:
             metadata.get("recovered_output_selected"),
         )
 
+    @staticmethod
+    def _relation_participle_segment(segment):
+        return bool(re.match(r"^(?:challenging|contesting|opposing)\b", segment or "", flags=re.I))
+
+    @staticmethod
+    def _has_relationship_signal(translated):
+        return any(term in (translated or "") for term in ("挑战", "质疑", "反对", "抗辩"))
+
+    def _unambiguous_context_actor(self, preceding_segment):
+        actors = []
+        for canonical, _, _ in self.normalizer.protected_entity_occurrences(preceding_segment):
+            if canonical not in actors:
+                actors.append(canonical)
+        return actors[0] if len(actors) == 1 else ""
+
     def _semantic_recovery(self, provider, text, source, field, initial_translation, initial_issues):
         segments = self._semantic_segments(text)
         issue_ids = sorted({issue.get("issue_id") for issue in initial_issues})
@@ -1261,7 +1276,8 @@ class TitleTranslator:
 
         translated_segments = []
         try:
-            for segment in segments:
+            contextual_retries = 0
+            for index, segment in enumerate(segments):
                 translated = self._translate_protected(
                     provider,
                     segment,
@@ -1274,6 +1290,27 @@ class TitleTranslator:
                     self.last_semantic_recovery_metadata["recovery_validation_result"] = "provider_error"
                     self._log_semantic_recovery_diagnostics()
                     return initial_translation, False, initial_issues
+                if self._relation_participle_segment(segment) and not self._has_relationship_signal(translated):
+                    actor = self._unambiguous_context_actor(segments[index - 1] if index else "")
+                    if actor:
+                        contextual_input = f"{actor} is {segment}"
+                        contextual_retry = self._translate_protected(
+                            provider,
+                            contextual_input,
+                            SOURCE_CHUNK_TOKEN_LIMIT,
+                            source=source,
+                            field=field,
+                            stage="semantic_relation_context_recovery",
+                        )
+                        contextual_retries += 1
+                        retry_issues = self._final_candidate_issues(
+                            contextual_input,
+                            contextual_retry,
+                            field,
+                            source,
+                        ) if contextual_retry else [{"issue_id": "empty_contextual_retry"}]
+                        if self._has_relationship_signal(contextual_retry) and not retry_issues:
+                            translated = contextual_retry
                 translated_segments.append(translated)
         except Exception:
             self.last_semantic_recovery_metadata["recovery_validation_result"] = "provider_error"
@@ -1281,6 +1318,7 @@ class TitleTranslator:
             return initial_translation, False, initial_issues
 
         recovered_raw = " ".join(translated_segments).strip()
+        self.last_semantic_recovery_metadata["contextual_relation_retries"] = contextual_retries
         recovered_normalized, _ = self.normalizer.normalize(recovered_raw, text, source, restore_missing=False)
         recovered_issues = self._final_candidate_issues(text, recovered_normalized, field, source)
         self.last_semantic_recovery_metadata["recovery_validation_result"] = "PASS" if not recovered_issues else "FAIL"

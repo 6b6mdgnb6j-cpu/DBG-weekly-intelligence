@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v35", GENERATION_CONFIG_VERSION)
+        self.assertIn("v36", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2282,7 +2282,8 @@ class LongTextTranslationTests(unittest.TestCase):
             "SEC要求该公司提交客户投票数据。",
             "马里兰州罗克维尔，2026年9月18日。",
             "ISS今日向美国宾夕法尼亚州东区联邦地区法院提交简报。",
-            "挑战SEC传票中的一项违宪要求。",
+            "在SEC传票中提出违宪要求。",
+            "ISS正在挑战SEC传票中的一项违宪要求。",
             "该要求将要求公司交出反映客户投票的数百万行数据。",
         ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
@@ -2296,7 +2297,12 @@ class LongTextTranslationTests(unittest.TestCase):
         cache_value = next(iter(title_translator.cache.values()))
         self.assertEqual(cache_value["recovered_from"], "sanity_then_semantic:content_ratio_low")
         self.assertTrue(cache_value["semantic_recovery_selected"])
-        self.assertEqual(len(provider.calls), 6)
+        self.assertEqual(len(provider.calls), 7)
+        self.assertEqual(
+            provider.calls[5]["text"],
+            "ISS is challenging an unconstitutional demand in a U.S. Securities & Exchange Commission subpoena",
+        )
+        self.assertEqual(title_translator.last_semantic_recovery_metadata["contextual_relation_retries"], 1)
 
     def test_failed_sanity_then_semantic_recovery_keeps_review_candidate_uncached(self):
         original = (
@@ -2310,7 +2316,8 @@ class LongTextTranslationTests(unittest.TestCase):
             "SEC要求提交客户数据。",
             "马里兰州，2026年9月18日。",
             "该机构今日向法院提交简报。",
-            "该机构反对监管要求。",
+            "监管机构提出要求。",
+            "ISS提出监管要求。",
         ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
@@ -2322,6 +2329,55 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
         self.assertTrue(title_translator.last_translation_quality_issues)
         self.assertEqual(title_translator.cache, {})
+        self.assertEqual(title_translator.last_semantic_recovery_metadata["contextual_relation_retries"], 1)
+
+    def test_relation_context_retry_does_not_invent_ambiguous_actor(self):
+        original = (
+            "ISS and SEC submitted filings opposing an unconstitutional demand in a regulator subpoena."
+        )
+        provider = RecordingProvider([
+            "ISS和SEC提交了文件。",
+            "监管机构提出违宪要求。",
+        ])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+
+        title_translator._semantic_recovery(
+            provider,
+            original,
+            "ISS STOXX",
+            "summary",
+            "初始候选",
+            [{"issue_id": "translation_relationship_missing"}],
+        )
+
+        self.assertEqual(len(provider.calls), 2)
+        self.assertEqual(title_translator.last_semantic_recovery_metadata["contextual_relation_retries"], 0)
+
+    def test_contesting_and_opposing_segments_use_bounded_context_retry(self):
+        for participle in ("contesting", "opposing"):
+            with self.subTest(participle=participle):
+                original = f"ISS submitted a brief {participle} an SEC demand."
+                provider = RecordingProvider([
+                    "ISS提交了一份简报。",
+                    "SEC提出了一项要求。",
+                    "ISS正在反对SEC的一项要求。",
+                ])
+                title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+
+                recovered, selected, _ = title_translator._semantic_recovery(
+                    provider,
+                    original,
+                    "ISS STOXX",
+                    "summary",
+                    "初始候选",
+                    [{"issue_id": "translation_relationship_missing"}],
+                )
+
+                self.assertTrue(selected)
+                self.assertIn("ISS", recovered)
+                self.assertIn("SEC", recovered)
+                self.assertEqual(provider.calls[2]["text"], f"ISS is {participle} an SEC demand.")
+                self.assertEqual(title_translator.last_semantic_recovery_metadata["contextual_relation_retries"], 1)
 
     def test_non_summary_sanity_failure_does_not_bridge_to_semantic_recovery(self):
         original = "ISS challenges an SEC demand concerning institutional shareholder voting records"
