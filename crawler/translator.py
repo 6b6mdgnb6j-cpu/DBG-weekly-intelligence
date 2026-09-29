@@ -12,7 +12,7 @@ CACHE_FILE = BASE_DIR / "cache" / "translation_cache.json"
 GLOSSARY_FILE = BASE_DIR / "config" / "glossary.json"
 
 NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v31"
+GENERATION_CONFIG_VERSION = "nllb-v1-norepeat-terminology-chunked-recovery-quality-v32"
 SOURCE_CHUNK_TOKEN_LIMIT = 256
 RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 128
 MIN_RECOVERY_SOURCE_CHUNK_TOKEN_LIMIT = 16
@@ -1441,9 +1441,11 @@ class TitleTranslator:
         normalized, changes = self.normalizer.normalize(raw, text, source, restore_missing=False)
         validation = TranslationSanityValidator.validate_with_reason(text, normalized, source, field=field)
         review_candidates = [(normalized, validation, raw, changes)]
+        ordinary_recovery_reason = ""
         if not validation.valid:
             if validation.reason in ("length_ratio_low", "content_ratio_low"):
                 initial_failure_reason = validation.reason
+                ordinary_recovery_reason = initial_failure_reason
                 recovery_chunk_limit = self._effective_recovery_chunk_limit(initial_metadata)
                 recovered_raw = self._translate_protected(
                     provider, text, recovery_chunk_limit, source=source, field=field, stage="length_recovery"
@@ -1568,6 +1570,43 @@ class TitleTranslator:
                         usable_candidates,
                         key=lambda candidate: self._content_length(candidate[0]),
                     )
+                if (
+                    field == "summary"
+                    and ordinary_recovery_reason
+                    and not TranslationSanityValidator.is_fatal_reason(validation.reason)
+                ):
+                    semantic_issues = self._recoverable_semantic_issues(
+                        text,
+                        normalized,
+                        field,
+                        source,
+                    )
+                    if semantic_issues:
+                        semantic_recovered, selected, _ = self._semantic_recovery(
+                            provider,
+                            text,
+                            source,
+                            field,
+                            normalized,
+                            semantic_issues,
+                        )
+                        if selected and semantic_recovered != normalized:
+                            self.cache[key] = {
+                                "translation": semantic_recovered,
+                                "raw_translation": semantic_recovered,
+                                "terminology_changes": changes,
+                                "model": provider.model_name,
+                                "generation_config_version": GENERATION_CONFIG_VERSION,
+                                "glossary_version": self.normalizer.version,
+                                "recovered_from": f"sanity_then_semantic:{ordinary_recovery_reason}",
+                                "semantic_recovery_triggered": True,
+                                "semantic_recovery_selected": True,
+                                "semantic_issue_ids": sorted({
+                                    issue.get("issue_id") for issue in semantic_issues
+                                }),
+                            }
+                            self.cache_dirty = True
+                            return semantic_recovered
                 self._log_rejection_diagnostics(source, field, text, raw, normalized, changes, validation)
                 if TranslationSanityValidator.is_fatal_reason(validation.reason):
                     if self.strict:

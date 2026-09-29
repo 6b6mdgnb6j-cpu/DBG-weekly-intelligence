@@ -362,7 +362,7 @@ class LongTextTranslationTests(unittest.TestCase):
     def test_cache_key_changes_with_chunked_pipeline_version(self):
         key = _cache_key("model", "en", "zh", "text", 1)
         self.assertIn("chunked", GENERATION_CONFIG_VERSION)
-        self.assertIn("v31", GENERATION_CONFIG_VERSION)
+        self.assertIn("v32", GENERATION_CONFIG_VERSION)
         self.assertEqual(len(key), 64)
 
     def test_old_invalid_cached_entry_cannot_poison_new_recovery_key(self):
@@ -2152,7 +2152,7 @@ class LongTextTranslationTests(unittest.TestCase):
             for issue in title_translator.last_translation_quality_issues
         ))
 
-    def test_iss_sec_summary_recovers_actor_relationship(self):
+    def test_iss_content_recovery_failure_bridges_to_semantic_recovery(self):
         original = (
             "ROCKVILLE, Md. (September 18, 2026) – Institutional Shareholder Services (ISS) today "
             "submitted a brief in the U.S. District Court for the Eastern District of Pennsylvania "
@@ -2162,10 +2162,13 @@ class LongTextTranslationTests(unittest.TestCase):
         )
         provider = RecordingProvider([
             "2026年9月18日,SEC提出违宪要求并要求该公司提交客户投票数据。",
-            (
-                "2026年9月18日，ISS向美国宾夕法尼亚州东区联邦地区法院提交简报，"
-                "挑战SEC传票中的违宪要求；该要求将迫使公司交出反映客户投票的数百万行数据。"
-            ),
+            "SEC要求该公司提交客户投票数据。",
+            "马里兰州罗克维尔。",
+            "2026年9月18日。",
+            "ISS今日向美国",
+            "宾夕法尼亚州东区联邦地区法院提交简报，挑战一项违宪要求。",
+            "该要求来自SEC传票",
+            "并要求公司交出反映客户投票的数百万行数据。",
         ])
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
@@ -2175,7 +2178,63 @@ class LongTextTranslationTests(unittest.TestCase):
         self.assertIn("ISS", output)
         self.assertIn("SEC", output)
         self.assertRegex(output, r"ISS.{0,80}(?:提交|递交).{0,160}(?:挑战|质疑|反对|抗辩)")
-        self.assertEqual(next(iter(title_translator.cache.values()))["recovered_from"], "content_ratio_low")
+        cache_value = next(iter(title_translator.cache.values()))
+        self.assertEqual(cache_value["recovered_from"], "sanity_then_semantic:content_ratio_low")
+        self.assertTrue(cache_value["semantic_recovery_selected"])
+        self.assertEqual(len(provider.calls), 8)
+
+    def test_failed_sanity_then_semantic_recovery_keeps_review_candidate_uncached(self):
+        original = (
+            "ROCKVILLE, Md. (September 18, 2026) – Institutional Shareholder Services (ISS) today "
+            "submitted a brief in the U.S. District Court challenging an unconstitutional demand "
+            "in a U.S. Securities & Exchange Commission subpoena concerning its clients’ votes."
+        )
+        initial = "2026年9月18日，SEC要求该公司提交客户投票数据。"
+        provider = RecordingProvider([
+            initial,
+            "SEC要求提交客户数据。",
+            "马里兰州。",
+            "2026年9月18日。",
+            "该机构今日提交简报。",
+            "法院收到文件。",
+            "该要求来自监管传票。",
+            "公司被要求提交客户投票数据。",
+        ])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(original, "ISS STOXX", field="summary")
+
+        self.assertEqual(output, initial)
+        self.assertFalse(title_translator.last_semantic_recovery_metadata["recovered_output_selected"])
+        self.assertEqual(title_translator.last_semantic_recovery_metadata["recovery_validation_result"], "FAIL")
+        self.assertTrue(title_translator.last_translation_quality_issues)
+        self.assertEqual(title_translator.cache, {})
+
+    def test_non_summary_sanity_failure_does_not_bridge_to_semantic_recovery(self):
+        original = "ISS challenges an SEC demand concerning institutional shareholder voting records"
+        provider = RecordingProvider(["SEC提出要求。", "SEC提出要求。", "SEC要求。"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        with patch.object(title_translator, "_semantic_recovery") as semantic_recovery:
+            title_translator._translate_text(original, "ISS STOXX", field="title")
+
+        semantic_recovery.assert_not_called()
+
+    def test_summary_sanity_failure_without_semantic_evidence_does_not_bridge(self):
+        original = (
+            "The quarterly report contains updated descriptive statistics and background information "
+            "for readers interested in the publication."
+        )
+        provider = RecordingProvider(["季度报告。", "统计报告。", "报告。"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        with patch.object(title_translator, "_semantic_recovery") as semantic_recovery:
+            title_translator._translate_text(original, "Example", field="summary")
+
+        semantic_recovery.assert_not_called()
 
     def test_failed_critical_entity_recovery_remains_nonfatal_qa_failure(self):
         original = (
@@ -2216,8 +2275,11 @@ class LongTextTranslationTests(unittest.TestCase):
         title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
         title_translator.cache = {}
 
-        with self.assertRaises(TranslationUnavailableError):
-            title_translator._translate_text("FINRA publishes a market update", "FINRA", field="title")
+        with patch.object(title_translator, "_semantic_recovery") as semantic_recovery:
+            with self.assertRaises(TranslationUnavailableError):
+                title_translator._translate_text("FINRA publishes a market update", "FINRA", field="title")
+
+        semantic_recovery.assert_not_called()
 
     def test_full_hashkey_successful_recovery_is_selected_validated_and_cached(self):
         original = (
