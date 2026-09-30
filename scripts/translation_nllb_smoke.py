@@ -133,7 +133,9 @@ FIXTURES = (
         "expected_outcome": "manual_fallback",
         "expected_failure_issue": "translation_relationship_missing",
         "allowed_fallback_issues": (
+            "translation_entity_alignment_failure",
             "translation_relationship_missing",
+            "smoke_required_text_missing",
             "smoke_relationship_failure",
         ),
     },

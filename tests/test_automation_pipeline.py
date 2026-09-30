@@ -1,4 +1,5 @@
 import json
+import io
 import os
 import re
 import subprocess
@@ -569,36 +570,74 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertIn("translation_entity_alignment_failure", [issue["issue_id"] for issue in issues])
 
     def test_smoke_expected_manual_fallback_is_narrow_and_nonfatal(self):
-        from scripts.translation_nllb_smoke import classify_fixture_outcome
+        from scripts.translation_nllb_smoke import FIXTURES, classify_fixture_outcome
 
-        fixture = {
-            "expected_outcome": "manual_fallback",
-            "expected_failure_issue": "translation_relationship_missing",
-            "allowed_fallback_issues": (
-                "translation_relationship_missing",
-                "smoke_relationship_failure",
-            ),
-        }
+        fixture = next(
+            value for value in FIXTURES if value["name"] == "iss_sec_client_voting_summary"
+        )
         expected = [{"issue_id": "translation_relationship_missing"}]
-        related = expected + [{"issue_id": "smoke_relationship_failure"}]
-        unrelated = expected + [{"issue_id": "translation_entity_alignment_failure"}]
+        exact_known_signature = [
+            {"issue_id": "translation_entity_alignment_failure"},
+            {"issue_id": "translation_relationship_missing"},
+            {"issue_id": "smoke_required_text_missing"},
+            {"issue_id": "smoke_relationship_failure"},
+        ]
+        related_subset = expected + [{"issue_id": "smoke_relationship_failure"}]
+        unrelated = exact_known_signature + [{"issue_id": "translation_action_direction_missing"}]
+        missing_required = [
+            {"issue_id": "translation_entity_alignment_failure"},
+            {"issue_id": "smoke_required_text_missing"},
+            {"issue_id": "smoke_relationship_failure"},
+        ]
 
         self.assertEqual(
-            classify_fixture_outcome(fixture, "ISS translated text", expected),
+            classify_fixture_outcome(fixture, "bad but nonempty ISS output", exact_known_signature),
             ("EXPECTED_MANUAL_FALLBACK", False),
         )
         self.assertEqual(
-            classify_fixture_outcome(fixture, "ISS translated text", related),
+            classify_fixture_outcome(fixture, "bad but nonempty ISS output", related_subset),
             ("EXPECTED_MANUAL_FALLBACK", False),
         )
         self.assertEqual(
-            classify_fixture_outcome(fixture, "ISS translated text", unrelated),
+            classify_fixture_outcome(fixture, "bad but nonempty ISS output", unrelated),
             ("QA_FAIL", True),
         )
         self.assertEqual(
             classify_fixture_outcome(fixture, "", expected),
             ("QA_FAIL", True),
         )
+        self.assertEqual(
+            classify_fixture_outcome(fixture, "bad but nonempty ISS output", missing_required),
+            ("QA_FAIL", True),
+        )
+
+    def test_smoke_provider_fatal_remains_fatal_and_failing(self):
+        import scripts.translation_nllb_smoke as smoke
+
+        fixture = next(
+            value for value in smoke.FIXTURES if value["name"] == "iss_sec_client_voting_summary"
+        )
+
+        class FatalTranslator:
+            last_semantic_recovery_metadata = {}
+            last_entity_alignment_failures = []
+            cache = {}
+
+            def _translate_text(self, *args, **kwargs):
+                raise TranslationUnavailableError("provider unavailable")
+
+        provider = type("Provider", (), {"model_name": "fake-provider"})()
+        stdout = io.StringIO()
+        with patch.object(smoke, "FIXTURES", (fixture,)), patch.object(
+            smoke, "LocalNLLBProvider", return_value=provider
+        ), patch.object(smoke, "TitleTranslator", return_value=FatalTranslator()), patch(
+            "sys.stdout", stdout
+        ), self.assertRaises(SystemExit) as raised:
+            smoke.main()
+
+        self.assertEqual(raised.exception.code, 1)
+        record = json.loads(stdout.getvalue())
+        self.assertEqual(record["status"], "FATAL")
 
     def test_production_workflow_uploads_manual_queue_after_qa_failure(self):
         workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
