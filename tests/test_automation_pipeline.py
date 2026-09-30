@@ -529,7 +529,9 @@ class AutomationPipelineContractTests(unittest.TestCase):
         self.assertNotIn("git add", workflow)
         self.assertNotIn("git commit", workflow)
         self.assertNotIn("git push", workflow)
-        self.assertIn("status = classify_quality_issues(issues)", script)
+        self.assertIn("status, unexpected_failure = classify_fixture_outcome", script)
+        self.assertIn('"expected_outcome": "manual_fallback"', script)
+        self.assertIn('"EXPECTED_MANUAL_FALLBACK"', script)
         self.assertIn('"status": "FATAL"', script)
         self.assertIn('"name": "prometheum_finra_critical_term"', script)
         self.assertIn('"name": "hashkey_exchange_obita_title"', script)
@@ -565,6 +567,48 @@ class AutomationPipelineContractTests(unittest.TestCase):
 
         self.assertEqual(classify_quality_issues(issues), "QA_FAIL")
         self.assertIn("translation_entity_alignment_failure", [issue["issue_id"] for issue in issues])
+
+    def test_smoke_expected_manual_fallback_is_narrow_and_nonfatal(self):
+        from scripts.translation_nllb_smoke import classify_fixture_outcome
+
+        fixture = {
+            "expected_outcome": "manual_fallback",
+            "expected_failure_issue": "translation_relationship_missing",
+            "allowed_fallback_issues": (
+                "translation_relationship_missing",
+                "smoke_relationship_failure",
+            ),
+        }
+        expected = [{"issue_id": "translation_relationship_missing"}]
+        related = expected + [{"issue_id": "smoke_relationship_failure"}]
+        unrelated = expected + [{"issue_id": "translation_entity_alignment_failure"}]
+
+        self.assertEqual(
+            classify_fixture_outcome(fixture, "ISS translated text", expected),
+            ("EXPECTED_MANUAL_FALLBACK", False),
+        )
+        self.assertEqual(
+            classify_fixture_outcome(fixture, "ISS translated text", related),
+            ("EXPECTED_MANUAL_FALLBACK", False),
+        )
+        self.assertEqual(
+            classify_fixture_outcome(fixture, "ISS translated text", unrelated),
+            ("QA_FAIL", True),
+        )
+        self.assertEqual(
+            classify_fixture_outcome(fixture, "", expected),
+            ("QA_FAIL", True),
+        )
+
+    def test_production_workflow_uploads_manual_queue_after_qa_failure(self):
+        workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
+
+        self.assertIn("- name: Upload manual translation queue", workflow)
+        self.assertIn("id: upload_manual_translation_queue", workflow)
+        self.assertIn("if: always()", workflow)
+        self.assertIn("manual-translation-queue-${{ steps.requested_week.outputs.week_start }}", workflow)
+        self.assertIn("manual_translation_queue_${{ steps.requested_week.outputs.compact_week_start }}.xlsx", workflow)
+        self.assertNotIn("publish_weekly.py", workflow)
 
     def test_real_nllb_smoke_trace_is_failure_only_and_fixture_bounded(self):
         from scripts.translation_nllb_smoke import TracingProvider, failure_debug

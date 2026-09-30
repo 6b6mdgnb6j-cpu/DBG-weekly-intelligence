@@ -1,7 +1,9 @@
 import argparse
+import json
 import sys
 
 from crawler.collector import collect_week
+from crawler.manual_translations import apply_approved_file, atomic_write_json, generate_queue_workbook
 from crawler.translator import TranslationUnavailableError
 from generate_weekly import render_report
 from qa_gate import FAIL, WARNING, run_qa
@@ -93,6 +95,15 @@ def run_weekly(args):
         print(str(exc))
         print("No review-ready bilingual artifact should be published.")
         return 4
+    weekly_data_path = result["weekly_data_path"]
+    with open(weekly_data_path, encoding="utf-8") as handle:
+        weekly_payload = json.load(handle)
+    applied, stale = apply_approved_file(weekly_payload, str(result["week_start"]))
+    if applied:
+        atomic_write_json(weekly_data_path, weekly_payload)
+        result["items"] = weekly_payload.get("items") or []
+    print(f"Manual translations applied: {applied}")
+    print(f"Manual translation stale/unmatched: {stale}")
     html_path, weekly_data_path, highlight_count = render_report(args.start, output_dir=args.output_dir)
 
     print_generation_summary(result, html_path, weekly_data_path, highlight_count)
@@ -116,6 +127,11 @@ def run_weekly(args):
         return 3
 
     print_qa_summary(qa_result)
+    with open(weekly_data_path, encoding="utf-8") as handle:
+        weekly_payload = json.load(handle)
+    queue_path = generate_queue_workbook(weekly_payload, qa_result["report"], args.output_dir)
+    if queue_path:
+        print(f"Manual translation queue: {queue_path}")
     print("Weekly artifacts were preserved.")
     return qa_result["exit_code"]
 

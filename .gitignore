@@ -14,3 +14,4 @@ output/
 cache/
 translation_experiment/
 data/news.json
+manual_translations/inbox/*.xlsx

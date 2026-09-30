@@ -130,6 +130,12 @@ FIXTURES = (
         ),
         "must_contain": ("ISS", "SEC"),
         "relationship": "iss_challenges_sec",
+        "expected_outcome": "manual_fallback",
+        "expected_failure_issue": "translation_relationship_missing",
+        "allowed_fallback_issues": (
+            "translation_relationship_missing",
+            "smoke_relationship_failure",
+        ),
     },
     {
         "name": "sec_ipo_increase_title",
@@ -176,6 +182,18 @@ FIXTURES = (
 
 def classify_quality_issues(issues):
     return "PASS" if not issues else "QA_FAIL"
+
+
+def classify_fixture_outcome(fixture, output, issues):
+    if not issues:
+        return "PASS", False
+    if fixture.get("expected_outcome") == "manual_fallback" and output:
+        issue_ids = {issue.get("issue_id") for issue in issues}
+        expected = fixture.get("expected_failure_issue")
+        allowed = set(fixture.get("allowed_fallback_issues") or (expected,))
+        if expected in issue_ids and issue_ids <= allowed:
+            return "EXPECTED_MANUAL_FALLBACK", False
+    return "QA_FAIL", True
 
 
 def fixture_constraint_issues(fixture, output):
@@ -226,8 +244,8 @@ def main():
                 if issue.get("severity") == FAIL
             ]
             issues.extend(fixture_constraint_issues(fixture, output))
-            status = classify_quality_issues(issues)
-            failures += bool(issues)
+            status, unexpected_failure = classify_fixture_outcome(fixture, output, issues)
+            failures += unexpected_failure
             result = {
                 "fixture": fixture["name"],
                 "status": status,

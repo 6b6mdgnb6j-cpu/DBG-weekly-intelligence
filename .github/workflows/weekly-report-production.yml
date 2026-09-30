@@ -245,6 +245,16 @@ jobs:
             ${{ steps.weekly.outputs.output_dir }}/qa_report_${{ steps.weekly.outputs.compact_week_start }}.md
             ${{ steps.weekly.outputs.output_dir }}/review_manifest_${{ steps.weekly.outputs.compact_week_start }}.json
 
+      - name: Upload manual translation queue
+        id: upload_manual_translation_queue
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: manual-translation-queue-${{ steps.requested_week.outputs.week_start }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: ${{ steps.requested_week.outputs.output_dir }}/manual_translation_queue_${{ steps.requested_week.outputs.compact_week_start }}.xlsx
+
       - name: Upload debug artifacts
         id: upload_debug
         if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.translation_preflight.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.bilingual_validation.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')

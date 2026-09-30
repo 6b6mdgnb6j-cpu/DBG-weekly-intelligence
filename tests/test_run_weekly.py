@@ -1,5 +1,6 @@
 import argparse
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,7 +18,12 @@ def fake_collect_result(tmp_path):
     raw = tmp_path / "raw.json"
     log = tmp_path / "collect.log"
     rejected = tmp_path / "relevance_rejected.json"
-    for path in (weekly, status, html, raw, log, rejected):
+    weekly.write_text(json.dumps({
+        "week_start": "2020-01-01",
+        "week_end": "2020-01-07",
+        "items": [{"title_original": "Market update"}],
+    }), encoding="utf-8")
+    for path in (status, html, raw, log, rejected):
         path.write_text("artifact", encoding="utf-8")
     return {
         "week_start": "2020-01-01",
@@ -43,6 +49,7 @@ def fake_collect_result(tmp_path):
             "final_weekly_items": 1,
         },
         "source_status_summary": {"success": 1},
+        "weekly_data_path": weekly,
         "_weekly_path": weekly,
         "_html_path": html,
     }
@@ -114,6 +121,58 @@ class RunWeeklyIntegrationTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("Status: FAIL", output)
         self.assertIn("Weekly artifacts were preserved.", output)
+
+    def test_qa_fail_generates_manual_queue_before_returning_nonzero(self):
+        result = qa_result("FAIL", 2)
+        result["blocking_count"] = 1
+        result["report"]["content_issues"] = [{
+            "index": 0,
+            "field": "title",
+            "issue_id": "translation_entity_alignment_failure",
+            "severity": "FAIL",
+            "reason": "Protected entity missing.",
+        }]
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            run_weekly,
+            "generate_queue_workbook",
+            return_value=Path(tmp) / "manual_translation_queue_20200101.xlsx",
+        ) as queue_mock:
+            code, _, _, _, _, output = self.run_with_mocks(Path(tmp), qa=result)
+
+        self.assertEqual(code, 2)
+        queue_mock.assert_called_once()
+        self.assertIn("Manual translation queue:", output)
+
+    def test_approved_override_is_applied_before_render_and_final_qa(self):
+        events = []
+
+        def apply_override(payload, week_start):
+            events.append(("override", week_start))
+            payload["items"][0]["title_cn"] = "人工翻译"
+            return 1, 0
+
+        def render(*args, **kwargs):
+            events.append(("render", None))
+            result = active_result["value"]
+            return result["_html_path"], result["_weekly_path"], 5
+
+        def qa(**kwargs):
+            events.append(("qa", None))
+            return qa_result()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            active_result = {"value": fake_collect_result(Path(tmp))}
+            with patch.object(run_weekly, "collect_week", return_value=active_result["value"]), patch.object(
+                run_weekly, "apply_approved_file", side_effect=apply_override
+            ), patch.object(run_weekly, "render_report", side_effect=render), patch.object(
+                run_weekly, "run_qa", side_effect=qa
+            ), patch.object(run_weekly, "generate_queue_workbook", return_value=None), patch(
+                "sys.stdout", new_callable=io.StringIO
+            ):
+                code = run_weekly.run_weekly(self.args())
+
+        self.assertEqual(code, 0)
+        self.assertEqual([event[0] for event in events], ["override", "render", "qa"])
 
     def test_qa_execution_exception_returns_nonzero_and_preserves_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
