@@ -92,6 +92,41 @@ class QAGateTests(unittest.TestCase):
         self.assertEqual(report["translation_mode"], "bilingual")
         self.assertEqual(report["summary"]["translation_mode"], "bilingual")
 
+    def test_final_item_title_sanity_accepts_normal_and_long_regulatory_titles(self):
+        titles = [
+            "Market infrastructure update",
+            "Federal Reserve Board and Federal Open Market Committee release economic projections from the September 15-16 FOMC meeting",
+            "FDIC Board of Directors Approves Proposed Rule to Modernize and Reform the FDIC's Framework for Reviewing Bank Merger Transactions | FDIC.gov",
+            "Tokyo Commodity Exchange Welcomes ABN AMRO Clearing Tokyo Co., Ltd. as a Broker Member for Trading TOCOM Electricity (Power) and Other Energy Futures | Japan Exchange Group",
+        ]
+        report = self.evaluate(weekly=payload([item(index, title_original=title) for index, title in enumerate(titles)]))
+
+        self.assertEqual(self.check(report, "final_item_titles_sane")["result"], PASS)
+
+    def test_final_item_title_sanity_rejects_body_sized_titles_with_evidence(self):
+        body_title = (
+            "Korea Premium Weeks 2026 to be Held from Sept 28 to Oct 16. "
+            + "This article paragraph describes capital market events, participants, and weekly sessions. " * 8
+        )
+        report = self.evaluate(weekly=payload([
+            item(1, source="韩国金融监督委员会", title_original=body_title),
+        ]))
+        check = self.check(report, "final_item_titles_sane")
+        evidence = check["evidence"]["issues"][0]
+
+        self.assertEqual(check["result"], FAIL)
+        self.assertEqual(evidence["index"], 0)
+        self.assertEqual(evidence["source"], "韩国金融监督委员会")
+        self.assertGreater(evidence["character_count"], 500)
+        self.assertGreater(evidence["word_count"], 90)
+        self.assertLessEqual(len(evidence["title_excerpt"]), 180)
+
+    def test_final_item_title_sanity_rejects_extreme_single_title(self):
+        extreme_title = " ".join(f"marketword{index}" for index in range(91))
+        report = self.evaluate(weekly=payload([item(1, title_original=extreme_title)]))
+
+        self.assertEqual(self.check(report, "final_item_titles_sane")["result"], FAIL)
+
     def test_known_blocked_source_does_not_warn_or_fail(self):
         report = self.evaluate(statuses=[source_status("KNOWN_BLOCKED", "blocked")])
         self.assertEqual(report["status"], PASS)

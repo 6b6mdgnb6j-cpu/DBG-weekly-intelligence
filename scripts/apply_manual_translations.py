@@ -3,11 +3,15 @@ import argparse
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from crawler.date_utils import parse_week_start, week_file_key
 from crawler.manual_translations import ManualTranslationError, apply_workbook
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = REPO_ROOT
 
 
 def parse_args(argv=None):

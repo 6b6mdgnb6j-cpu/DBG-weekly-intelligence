@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -111,6 +114,34 @@ class ManualTranslationQueueTests(unittest.TestCase):
                 {"week_start": WEEK, "items": [item()]}, {"content_issues": []}, tmp
             )
             self.assertIsNone(path)
+
+
+class ManualTranslationCLITests(unittest.TestCase):
+    def test_direct_script_invocation_imports_project_from_any_working_directory(self):
+        script = Path(__file__).resolve().parents[1] / "scripts" / "apply_manual_translations.py"
+        env = dict(os.environ)
+        env.pop("PYTHONPATH", None)
+        with tempfile.TemporaryDirectory() as tmp:
+            for cwd in (script.parent.parent, Path(tmp)):
+                with self.subTest(cwd=str(cwd)):
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(script),
+                            "--week-start",
+                            "2026-09-14",
+                            "--input",
+                            str(Path(tmp) / "missing.xlsx"),
+                        ],
+                        cwd=cwd,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("Manual translation workbook not found", result.stderr)
+                    self.assertNotIn("ModuleNotFoundError", result.stderr)
 
 
 class ManualTranslationApplyTests(unittest.TestCase):

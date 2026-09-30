@@ -91,6 +91,16 @@ def extract_title(soup):
 
 
 def extract_source_title(soup, source):
+    if source.get("id") == "SRC-050":
+        subject = soup.select_one(".board-view-wrap .header .subject")
+        if subject:
+            direct_text = " ".join(
+                str(value).strip() for value in subject.find_all(string=True, recursive=False)
+                if str(value).strip()
+            )
+            if direct_text:
+                return re.sub(r"\s+", " ", direct_text).strip()
+
     title = extract_title(soup)
     if source.get("id") != "SRC-025" or title.strip().lower() not in BAFIN_GENERIC_PAGE_TITLES:
         return title
@@ -99,6 +109,15 @@ def extract_source_title(soup, source):
         if article_heading and article_heading.strip().lower() not in BAFIN_GENERIC_PAGE_TITLES:
             return article_heading
     return title
+
+
+def extract_source_summary(soup, source):
+    if source.get("id") == "SRC-050":
+        for paragraph in soup.select(".board-view-wrap .body p"):
+            text = paragraph.get_text(" ", strip=True)
+            if len(text) > 40:
+                return text[:300]
+    return extract_summary(soup)
 
 
 def extract_summary(soup):
@@ -183,7 +202,7 @@ def parse_article(url, source, week_start, week_end, logger, list_title="", list
             title=title,
             url=url,
             date=raw_date,
-            summary=extract_summary(soup),
+            summary=extract_source_summary(soup, source),
         )
         diagnostic = {
             "title": item["title_original"] or list_title,

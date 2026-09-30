@@ -188,6 +188,7 @@ def evaluate_content(payload, week_start, week_end):
 
     urls = Counter()
     titles = Counter()
+    title_sanity_issues = []
     today = date.today()
     for index, item in enumerate(items):
         title = item.get("title_original") or item.get("title") or ""
@@ -209,6 +210,23 @@ def evaluate_content(payload, week_start, week_end):
             urls[url] += 1
         if title:
             titles[normalize_title(title)] += 1
+            normalized_title = " ".join(title.split())
+            character_count = len(normalized_title)
+            word_count = len(normalized_title.split())
+            triggered = []
+            if character_count > 500:
+                triggered.append("character_count_over_500")
+            if word_count > 90:
+                triggered.append("word_count_over_90")
+            if triggered:
+                title_sanity_issues.append({
+                    "index": index,
+                    "source": source,
+                    "title_excerpt": normalized_title[:180],
+                    "character_count": character_count,
+                    "word_count": word_count,
+                    "reason": ",".join(triggered),
+                })
 
     duplicate_urls = [url for url, count in urls.items() if count > 1]
     duplicate_titles = [title for title, count in titles.items() if title and count > 1]
@@ -230,6 +248,14 @@ def evaluate_content(payload, week_start, week_end):
         not date_issues,
         "Every final item date must be parseable, not future-dated, and inside the target week.",
         {"issues": date_issues[:10], "count": len(date_issues)},
+    )
+    check_result(
+        checks,
+        "final_item_titles_sane",
+        FAIL,
+        not title_sanity_issues,
+        "Final item titles must not contain article-body-sized text.",
+        {"issues": title_sanity_issues[:10], "count": len(title_sanity_issues)},
     )
     check_result(
         checks,
