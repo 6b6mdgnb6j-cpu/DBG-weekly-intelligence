@@ -1,0 +1,15 @@
+{
+  "overrides": [
+    {
+      "date": "2026-09-18",
+      "field": "summary",
+      "item_id": "dcd3125c9896453a6cab1c817d7935041cd3abddfe8af71fd2c18674a872c184",
+      "manual_translation": "马里兰州罗克维尔，2026年9月18日——机构股东服务公司（Institutional Shareholder Services，ISS）今日向美国宾夕法尼亚州东区联邦地区法院提交了一份法律意见书，对美国证券交易委员会（SEC）一份传票中提出的一项违宪要求提出质疑。该要求将要求公司交出数百万条反映其客户对[…]投票情况的数据。",
+      "original_sha256": "f0378c11b90a43fe79645f84a05739372cd3d6117af8aef6d37026a7d61d42da",
+      "source": "ISS STOXX",
+      "url": "https://www.iss-stoxx.com/press-releases/iss-challenges-unconstitutional-sec-request-for-client-voting-information/"
+    }
+  ],
+  "schema_version": 1,
+  "week_start": "2026-09-14"
+}
