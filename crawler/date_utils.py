@@ -107,7 +107,7 @@ def parse_any_date(value):
 
     for fmt in formats:
         try:
-            return datetime.strptime(text[: len(datetime.now().strftime(fmt))], fmt)
+            return datetime.strptime(text, fmt)
         except Exception:
             continue
 
