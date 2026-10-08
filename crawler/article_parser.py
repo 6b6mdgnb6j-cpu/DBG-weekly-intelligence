@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
 from .adapters.common import request_get
+from .adapters.fin_fsa import is_fin_fsa_publication, fin_fsa_publication_date
 from .date_utils import in_week
 from .news_model import standardize_news
 
@@ -184,6 +185,9 @@ def build_pdf_article(url, source, week_start, week_end, list_title="", list_dat
 
 def parse_article(url, source, week_start, week_end, logger, list_title="", list_date="", network_meta=None):
     try:
+        if source.get("id") == "SRC-037" and not is_fin_fsa_publication(url):
+            return None, None, {"title": list_title, "url": url, "raw_date": "",
+                                "parsed_date": "", "drop_reason": "non_news_container"}
         if is_pdf_url(url):
             return build_pdf_article(url, source, week_start, week_end, list_title, list_date)
 
@@ -195,6 +199,11 @@ def parse_article(url, source, week_start, week_end, logger, list_title="", list
         soup = BeautifulSoup(response.text, "html.parser")
         page_text = soup.get_text(" ", strip=True)
         raw_date = list_date or extract_metadata_date(soup) or extract_date(page_text[:3000])
+        if source.get("id") == "SRC-037":
+            raw_date = fin_fsa_publication_date(soup)
+            if not raw_date:
+                return None, None, {"title": list_title, "url": url, "raw_date": "",
+                                    "parsed_date": "", "drop_reason": "untrusted_publication_date"}
         title = extract_source_title(soup, source) or list_title
 
         item = standardize_news(

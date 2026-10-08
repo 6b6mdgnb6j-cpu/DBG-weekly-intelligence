@@ -1,3 +1,4 @@
+from .fin_fsa import parse_fin_fsa_list
 from .dbg import parse_dbg_list, parse_eurex_list
 from .apra import parse_apra_list
 from .crypto_finance import parse_crypto_finance_list
@@ -46,7 +47,7 @@ ADAPTERS = {
     "SRC-014": parse_table_release_list,
     "SRC-016": parse_table_release_list,
     "SRC-035": parse_article_release_list,
-    "SRC-037": parse_article_release_list,
+    "SRC-037": parse_fin_fsa_list,
     "SRC-046": parse_article_release_list,
     "SRC-048": parse_bma_list,
     "SRC-050": parse_korea_fsc_list,

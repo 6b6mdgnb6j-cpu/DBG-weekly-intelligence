@@ -10,6 +10,7 @@ from pathlib import Path
 from crawler.date_utils import parse_week_start, week_file_key
 from crawler.highlight_ranker import select_highlights
 from crawler.translation_quality import audit_translation_quality
+from crawler.adapters.fin_fsa import is_fin_fsa_publication
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -358,6 +359,17 @@ def evaluate_content(payload, week_start, week_end):
         "Competitor business mapping should not contradict strong content signals.",
         {"issues": competitor_mapping_warnings[:10], "count": len(competitor_mapping_warnings)},
     )
+
+    # Final-artifact defense: old/replayed navigation records cannot bypass parsing.
+    fin_fsa_containers = [
+        {"index": index, "url": item.get("url"), "title": item.get("title_original")}
+        for index, item in enumerate(items)
+        if (item.get("source") == "芬兰金融监管局" or item.get("source_id") == "SRC-037")
+        and not is_fin_fsa_publication(item.get("url") or "")
+    ]
+    check_result(checks, "fin_fsa_publication_pages_only", FAIL, not fin_fsa_containers,
+                 "FIN-FSA entries must be actual dated news/publications, not navigation or decision indexes.",
+                 {"items": fin_fsa_containers})
 
     translation_issues = audit_translation_quality(items, payload.get("translation_mode", ""))
     translation_failures = [issue for issue in translation_issues if issue.get("severity") == FAIL]

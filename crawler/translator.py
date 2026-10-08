@@ -486,6 +486,8 @@ class TerminologyNormalizer:
     # Canonical literals are hard protected. Aliases are ordinary/localizable unless
     # explicitly listed here based on a demonstrated identity-confusion regression.
     HARD_PROTECTED_ALIASES = {
+        "IFC": {"International Finance Corp", "International Finance Corporation"},
+        "EIOPA": {"European Insurance and Occupational Pensions Authority"},
         "Deutsche Börse": {"Deutsche Börse Group"},
         "ISS STOXX": {"ISS-Corporate"},
         "ICE": {"Intercontinental Exchange"},
@@ -496,6 +498,10 @@ class TerminologyNormalizer:
     }
     SOFT_LOCALIZABLE_ALIASES = {"JPX", "HKMA"}
     CANONICAL_ENTITIES = {
+        "IFC": {"aliases": ["International Finance Corp", "International Finance Corporation"], "bad": []},
+        "EIOPA": {"aliases": ["European Insurance and Occupational Pensions Authority"], "bad": []},
+        "Platts": {"aliases": [], "bad": []},
+        "PolicySteward": {"aliases": [], "bad": []},
         "HashKey Holdings Limited": {"aliases": [], "bad": []},
         "HashKey Exchange": {
             "aliases": [],
@@ -832,10 +838,28 @@ class TerminologyNormalizer:
     def _entity_matches(cls, text, entity):
         return list(re.finditer(cls._entity_pattern(entity), text or "", flags=cls._entity_flags(entity)))
 
+    @classmethod
+    def _entity_context_matches(cls, original, canonical):
+        if canonical != "IFC":
+            return True
+        # IFC also denotes file formats and financial centres. Do not infer the
+        # World Bank institution from a bare acronym or a different expansion.
+        if re.search(r"\bInternational Finance Corp(?:oration)?\b", original or "", re.I):
+            return True
+        if re.search(r"\b(?:Industry Foundation Classes|International Financ(?:e|ial) Cent(?:re|er))\b",
+                     original or "", re.I):
+            return False
+        return bool(re.search(
+            r"\b(?:bonds?|collateral|World Bank|IMF|IADB|lending|loans?|investments?|"
+            r"development financ(?:e|ing)|private[- ]sector financ(?:e|ing))\b",
+            original or "", re.I))
+
     def _original_has_entity_evidence(self, original, canonical, aliases):
         return bool(self._original_entity_evidence_positions(original, canonical, aliases))
 
     def _original_entity_evidence_positions(self, original, canonical, aliases):
+        if not self._entity_context_matches(original, canonical):
+            return []
         matches = [(match.start(), canonical) for match in self._entity_matches(original, canonical)]
         for alias in aliases:
             matches.extend((match.start(), alias) for match in self._entity_matches(original, alias))
@@ -863,6 +887,8 @@ class TerminologyNormalizer:
     def protected_entity_occurrences(self, original):
         matches = []
         for canonical, spec in self.CANONICAL_ENTITIES.items():
+            if not self._entity_context_matches(original, canonical):
+                continue
             evidence_terms = [canonical, *self.HARD_PROTECTED_ALIASES.get(canonical, set())]
             for evidence in evidence_terms:
                 for match in self._entity_matches(original, evidence):
