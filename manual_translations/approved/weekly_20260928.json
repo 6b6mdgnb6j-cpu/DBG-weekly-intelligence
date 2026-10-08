@@ -1,0 +1,33 @@
+{
+  "overrides": [
+    {
+      "date": "2026-10-01",
+      "field": "title",
+      "item_id": "079a61e168df50bd31bb03b7e58222ad914919fbc0b1991f02ebeb2fa8a46efe",
+      "manual_translation": "SEC提案拟明确投资顾问和基金如何根据联邦证券法托管加密资产",
+      "original_sha256": "dbd1fe9d386a4615a597f2210a32c9e775600eb81fd29d9aa86a5f81ceae22b9",
+      "source": "证券交易委员会",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-100-sec-proposal-would-address-how-investment-advisers-funds-can-custody-crypto-assets-under-federal"
+    },
+    {
+      "date": "2026-09-29",
+      "field": "summary",
+      "item_id": "90a17b09a7a07112edcc751b9e584726c3db164a7674929802ac229700d96bb2",
+      "manual_translation": "FTSE Russell推出FTSE MarketPsych主题指数系列，利用MarketPsych提供的AI驱动情绪分析，帮助投资者识别新兴市场趋势和主题投资机会。",
+      "original_sha256": "ff2d9b38364c581c5a95da09db515fe1ad538a19ae597c049e2a703eebee7ccc",
+      "source": "伦敦证券交易所集团",
+      "url": "https://www.lseg.com/en/media-centre/press-releases/ftse-russell/2026/ftse-russell-launches-ai-powered-thematic-index-series-marketpsych"
+    },
+    {
+      "date": "2026-10-02",
+      "field": "title",
+      "item_id": "e66085b7e1d59f81979390a42ea47500b25d3b3f77c50e590618fb50e01d236c",
+      "manual_translation": "美国联邦储备委员会（Federal Reserve Board）宣布，将其拟议的 Regulation O 现代化方案的征求意见期延长至11月4日。",
+      "original_sha256": "eeb296e95f021ba7e52d3a18925d13a73d7e78bdaef669a900b19bb253edd363",
+      "source": "联邦储备系统",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/bcreg20261002a.htm"
+    }
+  ],
+  "schema_version": 1,
+  "week_start": "2026-09-28"
+}
