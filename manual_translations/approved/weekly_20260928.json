@@ -11,6 +11,15 @@
     },
     {
       "date": "2026-09-29",
+      "field": "title",
+      "item_id": "09782a30f5327fb343d2fcd7c93ae5c0fcd064c0c59063fa934d2fd06005e9cf",
+      "manual_translation": "洲际交易所（ICE，Intercontinental Exchange）扩大与富国银行（Wells Fargo）的合作协议，以通过MSP平台支持其全部住房贷款服务组合。",
+      "original_sha256": "7cad78e6afe17facfab41fd53611f2c11cb691ab42e569cc6c3f4cfae5c4b503",
+      "source": "洲际交易所",
+      "url": "https://ir.theice.com/press/news-details/2026/Intercontinental-Exchange-Expands-Agreement-with-Wells-Fargo-to-Support-Full-Home-Loan-Servicing-Portfolio-on-MSP/default.aspx"
+    },
+    {
+      "date": "2026-09-29",
       "field": "summary",
       "item_id": "90a17b09a7a07112edcc751b9e584726c3db164a7674929802ac229700d96bb2",
       "manual_translation": "FTSE Russell推出FTSE MarketPsych主题指数系列，利用MarketPsych提供的AI驱动情绪分析，帮助投资者识别新兴市场趋势和主题投资机会。",
@@ -26,6 +35,15 @@
       "original_sha256": "eeb296e95f021ba7e52d3a18925d13a73d7e78bdaef669a900b19bb253edd363",
       "source": "联邦储备系统",
       "url": "https://www.federalreserve.gov/newsevents/pressreleases/bcreg20261002a.htm"
+    },
+    {
+      "date": "2026-09-28",
+      "field": "summary",
+      "item_id": "ee8ce3d0d6c04a42285867391bc0abde17aa51c42356bfb1dbaf4cde9d1c4ab1",
+      "manual_translation": "洲际交易所（Intercontinental Exchange, Inc.，NYSE: ICE）是全球领先的金融市场技术和数据提供商之一，为全球资本市场提供支持。公司今日发布了2026年8月ICE First Look报告，介绍抵押贷款拖欠、止赎和提前还款趋势。本月主要发现包括：受日历效应影响，全国拖欠率上升。8月全国拖欠率上升14个基点（bps）至3.53%，但若计入上月由日历因素导致的下降，拖欠率实际上基本持平。拖欠率同比小幅上升10个基点，但仍较2019年8月低35个基点，并低于有记录以来疫情前任何一个8月的水平。早期拖欠率仍低于去年同期，而严重拖欠有所上升：逾期30天和60天的贷款数量在8月有所增加，但仍比一年前少21,000笔。严重拖欠贷款增加11,000笔至574,000笔，结束了连续五个月的下降，目前仍比去年同期高19%。不过，其比例为1.04%……",
+      "original_sha256": "42d77a31f0df4b7bc1f580cc6982529815b527b4c1d9604a1847541bb5def84a",
+      "source": "洲际交易所",
+      "url": "https://ir.theice.com/press/news-details/2026/ICE-First-Look-Mortgage-Performance-Remains-Stable-as-Foreclosure-Inventory-Growth-Slows-to-Nine-Month-Low/default.aspx"
     }
   ],
   "schema_version": 1,
