@@ -373,7 +373,7 @@ def _standalone_sanity_quality_issues(index, item):
             item.get("source") or "",
             field=field,
         )
-        if validation.valid or TranslationSanityValidator.is_fatal_reason(validation.reason):
+        if validation.valid:
             continue
         issues.append(
             _issue(

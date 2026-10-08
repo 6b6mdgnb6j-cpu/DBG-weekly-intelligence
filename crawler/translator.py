@@ -133,6 +133,13 @@ class TranslationSanityValidator:
         "replacement_character",
         "control_ratio",
     )
+    QUEUEABLE_FATAL_REASON_PREFIXES = (
+        "garbage_term:",
+        "repeated_character",
+        "repeated_phrase",
+        "replacement_character",
+        "control_ratio",
+    )
     BAD_TERMS = (
         "清流",
         "希克克斯",
@@ -282,6 +289,10 @@ class TranslationSanityValidator:
     @classmethod
     def is_fatal_reason(cls, reason):
         return any((reason or "").startswith(prefix) for prefix in cls.FATAL_REASON_PREFIXES)
+
+    @classmethod
+    def is_queueable_fatal_reason(cls, reason):
+        return any((reason or "").startswith(prefix) for prefix in cls.QUEUEABLE_FATAL_REASON_PREFIXES)
 
 
 class LocalNLLBProvider:
@@ -1679,6 +1690,13 @@ class TitleTranslator:
                             return semantic_recovered
                 self._log_rejection_diagnostics(source, field, text, raw, normalized, changes, validation)
                 if TranslationSanityValidator.is_fatal_reason(validation.reason):
+                    if normalized and TranslationSanityValidator.is_queueable_fatal_reason(validation.reason):
+                        self.last_translation_quality_issues = [{
+                            "issue_id": "translation_sanity_quality_failure",
+                            "severity": "FAIL",
+                            "evidence": {"reason": validation.reason, "field": field, "source": source},
+                        }]
+                        return normalized
                     if self.strict:
                         raise TranslationUnavailableError(
                             f"translation rejected by sanity validator: reason={validation.reason} "

@@ -2449,6 +2449,52 @@ class LongTextTranslationTests(unittest.TestCase):
 
         semantic_recovery.assert_not_called()
 
+    def test_strict_summary_repeated_character_is_returned_for_manual_queue_without_cache(self):
+        original = "ICE reports that open interest increased by 14 basis points during the period."
+        malformed = "ICE报告称，未平仓量上上上升了14个基点。"
+        provider = RecordingProvider([malformed])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator.translate([{
+            "title_original": "洲际交易所市场更新",
+            "summary_original": original,
+            "source": "洲际交易所",
+        }])[0]
+
+        self.assertEqual(output["summary_cn"], malformed)
+        self.assertEqual(title_translator.cache, {})
+        self.assertEqual(output["translation_quality_issues"], [{
+            "issue_id": "translation_sanity_quality_failure",
+            "severity": "FAIL",
+            "evidence": {"reason": "repeated_character", "field": "summary", "source": "洲际交易所"},
+        }])
+
+    def test_strict_title_queueable_fatal_is_returned_but_empty_output_stays_fatal(self):
+        provider = RecordingProvider(["市场市市场场场公告"])
+        title_translator = TitleTranslator(enabled=True, provider=provider, strict=True)
+        title_translator.cache = {}
+
+        output = title_translator._translate_text(
+            "Exchange publishes a market announcement", "Exchange", field="title"
+        )
+
+        self.assertEqual(output, "市场市市场场场公告")
+        self.assertEqual(
+            title_translator.last_translation_quality_issues[0]["evidence"]["field"],
+            "title",
+        )
+        self.assertEqual(title_translator.cache, {})
+
+        unavailable = TitleTranslator(
+            enabled=True, provider=RecordingProvider([""]), strict=True
+        )
+        unavailable.cache = {}
+        with self.assertRaises(TranslationUnavailableError):
+            unavailable._translate_text(
+                "Exchange publishes a market announcement", "Exchange", field="title"
+            )
+
     def test_full_hashkey_successful_recovery_is_selected_validated_and_cached(self):
         original = (
             "Hong Kong, Sep. 15, 2026 — HashKey Exchange, a licensed trading platform under "

@@ -23,7 +23,7 @@ from crawler.manual_translations import (
     stable_item_id,
     write_queue_workbook,
 )
-from crawler.translation_quality import FAIL, validate_translation_field
+from crawler.translation_quality import FAIL, audit_translation_quality, validate_translation_field
 
 
 WEEK = "2026-09-14"
@@ -114,6 +114,46 @@ class ManualTranslationQueueTests(unittest.TestCase):
                 {"week_start": WEEK, "items": [item()]}, {"content_issues": []}, tmp
             )
             self.assertIsNone(path)
+
+    def test_repeated_character_candidate_reaches_final_qa_and_summary_queue(self):
+        malformed = "ICE报告称，未平仓量上上上升了14个基点。"
+        current = item(
+            source="ICE",
+            summary_original="ICE reports that open interest increased by 14 basis points during the period.",
+            summary_cn=malformed,
+            translation_quality_issues=[{
+                "issue_id": "translation_sanity_quality_failure",
+                "severity": FAIL,
+                "evidence": {"reason": "repeated_character", "field": "summary", "source": "ICE"},
+            }],
+        )
+        issues = audit_translation_quality([current], "bilingual")
+        entries = build_queue_entries(
+            {"week_start": WEEK, "items": [current]}, {"content_issues": issues}
+        )
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["field"], "summary")
+        self.assertEqual(entries[0]["current_cn"], malformed)
+        self.assertIn("repeated_character", entries[0]["qa_failure"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = generate_queue_workbook(
+                {"week_start": WEEK, "items": [current]},
+                {"content_issues": issues},
+                tmp,
+            )
+            workbook = load_workbook(path)
+            visible = workbook[VISIBLE_SHEET]
+            metadata = workbook[METADATA_SHEET]
+            self.assertEqual(visible.cell(3, 1).value, entries[0]["item_id"])
+            self.assertEqual(visible.cell(3, 2).value, "ICE")
+            self.assertEqual(visible.cell(3, 3).value, "summary")
+            self.assertEqual(visible.cell(3, 4).value, current["summary_original"])
+            self.assertEqual(visible.cell(3, 5).value, malformed)
+            self.assertIn("repeated_character", visible.cell(3, 6).value)
+            self.assertIsNone(visible.cell(3, 7).value)
+            self.assertEqual(metadata.sheet_state, "hidden")
 
 
 class ManualTranslationCLITests(unittest.TestCase):
@@ -321,6 +361,28 @@ class ManualTranslationOverrideTests(unittest.TestCase):
         self.assertFalse(any(value.get("severity") == FAIL for value in good))
         self.assertIn("translation_relationship_missing", [value.get("issue_id") for value in bad])
 
+    def test_manual_validation_rejects_fatal_sanity_corruption(self):
+        cases = {
+            "repeated_character": "市场上上上升了14个基点。",
+            "repeated_phrase": "市场下跌市场下跌市场下跌市场下跌市场下跌。",
+            "replacement_character": "市场\ufffd变化。",
+            "control_ratio": "市场\x00\x01变化。",
+        }
+        for reason, translated in cases.items():
+            with self.subTest(reason=reason):
+                issues = validate_translation_field(
+                    "Market conditions changed during the reporting period.",
+                    translated,
+                    "summary",
+                    "Example",
+                )
+                sanity = [
+                    value for value in issues
+                    if value.get("issue_id") == "translation_sanity_quality_failure"
+                ]
+                self.assertTrue(sanity)
+                self.assertEqual(sanity[0]["evidence"]["sanity_reason"], reason)
+
     def test_exact_iss_failure_is_resolved_without_translation_code_change(self):
         current = item(translation_quality_issues=[
             {"issue_id": "translation_relationship_missing", "evidence": {"field": "summary"}}
@@ -334,6 +396,50 @@ class ManualTranslationOverrideTests(unittest.TestCase):
 
         self.assertEqual((applied, stale), (1, 0))
         self.assertFalse(any(value.get("severity") == FAIL for value in final_issues))
+
+    def test_three_approved_overrides_apply_while_new_sanity_failure_stays_queued(self):
+        approved_items = []
+        overrides = []
+        for index in range(3):
+            current = item(
+                url=f"https://example.test/approved-{index}",
+                translation_quality_issues=[{
+                    "issue_id": "translation_relationship_missing",
+                    "evidence": {"field": "summary"},
+                }],
+            )
+            approved_items.append(current)
+            overrides.append(self.approved(current)["overrides"][0])
+
+        unresolved = item(
+            source="ICE",
+            url="https://example.test/new-ice-failure",
+            summary_original="ICE reports that open interest increased by 14 basis points during the period.",
+            summary_cn="ICE报告称，未平仓量上上上升了14个基点。",
+            translation_quality_issues=[{
+                "issue_id": "translation_sanity_quality_failure",
+                "severity": FAIL,
+                "evidence": {"reason": "repeated_character", "field": "summary", "source": "ICE"},
+            }],
+        )
+        payload = {"week_start": WEEK, "items": approved_items + [unresolved]}
+
+        applied, stale = apply_approved_overrides(
+            payload,
+            {"schema_version": 1, "week_start": WEEK, "overrides": overrides},
+        )
+        issues = audit_translation_quality(payload["items"], "bilingual")
+        entries = build_queue_entries(payload, {"content_issues": issues})
+
+        self.assertEqual((applied, stale), (3, 0))
+        self.assertTrue(all(
+            value.get("translation_provenance", {}).get("summary") == "manual_approved"
+            for value in approved_items
+        ))
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["source"], "ICE")
+        self.assertEqual(entries[0]["field"], "summary")
+        self.assertIn("repeated_character", entries[0]["qa_failure"])
 
 
 if __name__ == "__main__":
