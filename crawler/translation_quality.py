@@ -1,5 +1,7 @@
 import re
 from datetime import date
+from collections import Counter
+from decimal import Decimal
 
 from crawler.translator import TerminologyNormalizer, TranslationSanityValidator
 
@@ -112,6 +114,9 @@ CRITICAL_ACTION_FALLBACK_FAMILIES = {
 }
 
 DANGEROUS_ENTITY_VARIANTS = {
+    "IFC": ("国际货币基金组织",),
+    "EIOPA": ("欧盟能源署", "欧盟人工智能署", "欧盟监管局"),
+    "Platts": ("板块",),
     "ISS STOXX": ("国际空间站STOXX", "国际航天站STOXX", "国际航天局公司", "国际航天局", "国际空间站", "国际航天站"),
     "STOXX": ("STTOXX", "STOX", "斯托克斯"),
     "ICE": ("冰岛", "欧元交易所", "国际大陆交易所", "跨大陆交易"),
@@ -131,6 +136,9 @@ DANGEROUS_ENTITY_VARIANTS = {
 }
 
 ACCEPTABLE_ENTITY_RENDERINGS = {
+    "IFC": ("IFC", "国际金融公司"),
+    "EIOPA": ("EIOPA", "欧洲保险和职业养老金管理局", "欧洲保险和职业养老金监管局"),
+    "Platts": ("Platts", "普氏"),
     "SEC": ("SEC", "美国证券交易委员会", "证券交易委员会"),
     "Nasdaq": ("Nasdaq", "纳斯达克", "纳思达克"),
     "JPX": ("JPX", "日本交易所集团"),
@@ -195,6 +203,101 @@ MATERIAL_TERM_RULES = [
         "reason": "Portfolio margining was translated as an interest-rate concept.",
     },
 ]
+
+
+# Presence checks are source-conditioned and shared by candidate/manual/final QA.
+FINANCIAL_TERM_REQUIREMENTS = (
+    (r"\bhaircuts?\b", r"\b(?:collateral|margin)\b", "collateral haircut",
+     ("折扣率", "折扣", "折减率", "折减", "扣减率", "扣减")),
+    (r"\bcollateral\b", r"\b(?:haircuts?|margin|bonds?|eligible|acceptable)\b", "collateral",
+     ("抵押品", "抵押物", "担保品", "担保物")),
+    (r"\bmargin\b", r"\bcollateral\b", "margin collateral", ("保证金",)),
+)
+
+
+# Require a financial use of the word itself, not an unrelated financial word
+# elsewhere in the paragraph (e.g. delivery options for an equity data feed).
+_FINANCIAL_OPTIONS_RE = re.compile(
+    r"\b(?:LNG|JKM|TTF|electricity|equity|stock|index|interest[- ]rate|currency|FX|"
+    r"commodity|energy|futures?|financial)\s+(?:\([^)]{1,40}\)\s*)?"
+    r"(?:(?:average price|base|weekly|monthly|call|put)\s+)*options?\b"
+    r"|\b(?:trade|trading|traded|clearing|settle|settling)\s+(?:in\s+)?options?\b"
+    r"|\boptions?\s+(?:contracts?|trading|expiry|expiration|premiums?|on\s+(?:futures?|stocks?|indices|equities))\b",
+    re.I,
+)
+
+
+def _financial_term_issues(index, item):
+    issues = []
+    for field, original, translated in _translated_fields(item):
+        if not original or not translated:
+            continue
+        for trigger, context, term, expected in FINANCIAL_TERM_REQUIREMENTS:
+            if re.search(trigger, original, re.I) and re.search(context, original, re.I):
+                if not _contains_any(translated, expected):
+                    issues.append(_issue(index, item, field, "translation_financial_term_missing", FAIL,
+                        {"term": term, "expected_terms": list(expected), "translated_prefix": translated[:200]},
+                        "A deterministic financial term is missing or mistranslated."))
+        if _FINANCIAL_OPTIONS_RE.search(original) and "期权" not in translated:
+            issues.append(_issue(index, item, field, "translation_financial_term_missing", FAIL,
+                {"term": "financial options", "expected_terms": ["期权"],
+                 "translated_prefix": translated[:200]},
+                "Financial options must be translated as derivatives, not generic choices."))
+        if (re.search(r"\bgo[- ]live\b", original, re.I) and "截止" in translated
+                and not re.search(r"\b(?:deadlines?|cut[- ]?offs?)\b", original, re.I)):
+            issues.append(_issue(index, item, field, "translation_material_term_conflict", FAIL,
+                {"term": "go-live", "bad_terms": ["截止"]},
+                "Go-live is an effective/launch date, not a deadline."))
+    return issues
+
+
+# Compare monetary quantities in base currency units, not raw digit strings.
+# Decimal avoids rounding away million/billion/万/亿 conversion errors.
+_MONEY_NUMBER = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+_MONEY_SCALE = r"(?:trillion|billion|million|thousand|bn|mn|[mbk])(?![A-Za-z])|万亿|十亿|百万|千万|亿|万|千|百"
+_MONEY_CURRENCY = r"US\$|HK\$|£|€|\$|GBP|USD|EUR|HKD|CNY|RMB|英镑|美元|欧元|港元|人民币|英(?![A-Za-z\u4e00-\u9fff])"
+_MONEY_RE = re.compile(
+    rf"(?P<prefix>{_MONEY_CURRENCY})\s*(?P<n1>{_MONEY_NUMBER})\s*(?P<s1>{_MONEY_SCALE})?"
+    rf"|(?P<n2>{_MONEY_NUMBER})\s*(?P<s2>{_MONEY_SCALE})?\s*(?P<suffix>{_MONEY_CURRENCY})", re.I)
+_MONEY_FACTORS = {"thousand": 1000, "million": 1000000, "billion": 1000000000,
+    "trillion": 1000000000000, "mn": 1000000, "bn": 1000000000,
+    "m": 1000000, "b": 1000000000, "k": 1000,
+    "百": 100, "千": 1000, "万": 10000, "百万": 1000000, "千万": 10000000,
+    "亿": 100000000, "十亿": 1000000000, "万亿": 1000000000000}
+_MONEY_CURRENCIES = {"£": "GBP", "英镑": "GBP", "英": "GBP", "GBP": "GBP",
+    "$": "USD", "US$": "USD", "美元": "USD", "USD": "USD",
+    "€": "EUR", "欧元": "EUR", "EUR": "EUR", "HK$": "HKD", "HKD": "HKD", "港元": "HKD",
+    "人民币": "CNY", "CNY": "CNY", "RMB": "CNY"}
+
+
+def _money_values(text):
+    values, malformed = Counter(), []
+    for match in _MONEY_RE.finditer(text or ""):
+        currency = (match['prefix'] or match['suffix']).upper()
+        number = Decimal((match['n1'] or match['n2']).replace(',', ''))
+        scale = (match['s1'] or match['s2'] or '').lower()
+        values[(_MONEY_CURRENCIES[currency], number * _MONEY_FACTORS.get(scale, 1))] += 1
+        if currency == "英":
+            malformed.append(match.group())
+    return values, malformed
+
+
+def _numeric_consistency_issues(index, item):
+    issues = []
+    for field, original, translated in _translated_fields(item):
+        if not original or not translated:
+            continue
+        expected, _ = _money_values(original)
+        if not expected:
+            continue
+        actual, malformed = _money_values(translated)
+        if expected != actual or malformed:
+            describe = lambda values: [{"currency": c, "amount": str(n), "count": count}
+                                      for (c, n), count in sorted(values.items())]
+            issues.append(_issue(index, item, field, "translation_monetary_value_mismatch", FAIL,
+                {"expected": describe(expected), "actual": describe(actual), "malformed_currency": malformed},
+                "Monetary currency/value/magnitude or occurrence count differs from the source."))
+    return issues
 
 
 def _contains_english(text, patterns):
@@ -310,6 +413,8 @@ def _entity_issues(index, item, normalizer):
                     )
                 )
             for bad in dangerous_variants:
+                if canonical == "IFC" and re.search(r"\bIMF\b|International Monetary Fund", original, re.I):
+                    continue
                 if canonical == "ICE" and bad == "冰岛" and re.search(r"\bIceland(?:ic)?\b", original, flags=re.I):
                     continue
                 if _contains_bad_variant(translated, bad):
@@ -745,6 +850,8 @@ def audit_translation_quality(items, translation_mode=""):
         issues.extend(_sanity_quality_issues(index, item))
         issues.extend(_entity_issues(index, item, normalizer))
         issues.extend(_material_term_issues(index, item))
+        issues.extend(_financial_term_issues(index, item))
+        issues.extend(_numeric_consistency_issues(index, item))
         issues.extend(_proper_noun_issues(index, item))
         issues.extend(_title_proposition_issues(index, item))
         issues.extend(_trend_proposition_issues(index, item))
@@ -777,6 +884,9 @@ def validate_translation_field(
         return (
             (_standalone_sanity_quality_issues(0, item) if include_sanity else [])
             + _entity_issues(0, item, TerminologyNormalizer())
+            + _material_term_issues(0, item)
+            + _financial_term_issues(0, item)
+            + _numeric_consistency_issues(0, item)
             + _proper_noun_issues(0, item)
             + _title_proposition_issues(0, item)
             + _trend_proposition_issues(0, item)
@@ -788,6 +898,9 @@ def validate_translation_field(
         return (
             (_standalone_sanity_quality_issues(0, item) if include_sanity else [])
             + _entity_issues(0, item, TerminologyNormalizer())
+            + _material_term_issues(0, item)
+            + _financial_term_issues(0, item)
+            + _numeric_consistency_issues(0, item)
             + _proper_noun_issues(0, item)
             + _trend_proposition_issues(0, item)
             + _action_direction_issues(0, item)
