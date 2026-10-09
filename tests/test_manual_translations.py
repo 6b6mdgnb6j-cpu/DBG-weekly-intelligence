@@ -348,6 +348,109 @@ class ManualTranslationOverrideTests(unittest.TestCase):
                 self.assertEqual(current["summary_cn"], "ISS提出了违宪要求。")
                 self.assertTrue(current["translation_quality_issues"])
 
+    def test_investment_association_legacy_url_variants_match_title_and_summary(self):
+        old_url = (
+            "https://www.theia.org/news/press-releases/"
+            "summer-inflows-continue-investors-place-ps894-million-funds-august"
+        )
+        new_url = (
+            "https://www.theia.org/index%2Ephp/news/press-releases/"
+            "summer-inflows-continue-investors-place-ps894-million-funds-august"
+        )
+        current = item(
+            source="英国投资管理协会",
+            date="2026-10-01",
+            url=new_url,
+            title_original="Summer inflows continue as investors place £894 million into funds in August",
+            title_cn="错误标题",
+            summary_original=(
+                "1 October 2026, London – Net retail sales were £894 million in August, marking the "
+                "tenth consecutive month of retail inflows according to recent data from the Investment "
+                "Association (IA). This marks a notable change from August 2025, where outflows reached "
+                "£1.8 billion, underscoring the improvement"
+            ),
+            summary_cn="错误摘要",
+            translation_quality_issues=[
+                {"issue_id": "translation_monetary_mismatch", "evidence": {"field": "title"}},
+                {"issue_id": "translation_monetary_mismatch", "evidence": {"field": "summary"}},
+            ],
+        )
+        approved_item = dict(current, url=old_url)
+        overrides = []
+        for field, translation in (("title", "8月投资者向基金投入8.94亿英镑"), ("summary", "8月投资者向基金投入8.94亿英镑。")):
+            original = approved_item[f"{field}_original"]
+            overrides.append({
+                "item_id": stable_item_id(approved_item, field, original),
+                "source": approved_item["source"],
+                "date": approved_item["date"],
+                "url": old_url,
+                "field": field,
+                "original_sha256": original_sha256(original),
+                "manual_translation": translation,
+            })
+
+        applied, stale = apply_approved_overrides(
+            {"week_start": WEEK, "items": [current]},
+            {"schema_version": 1, "week_start": WEEK, "overrides": overrides},
+        )
+
+        self.assertEqual((applied, stale), (2, 0))
+        self.assertEqual(current["title_cn"], "8月投资者向基金投入8.94亿英镑")
+        self.assertEqual(current["summary_cn"], "8月投资者向基金投入8.94亿英镑。")
+        self.assertEqual(current["translation_provenance"], {
+            "title": "manual_approved",
+            "summary": "manual_approved",
+        })
+        self.assertNotIn("translation_quality_issues", current)
+
+    def test_investment_association_equivalence_is_bidirectional(self):
+        encoded = "https://www.theia.org/index%2ephp/news/press-releases/article"
+        canonical = "https://www.theia.org/news/press-releases/article"
+        current = item(source="Investment Association", url=canonical)
+        approved = self.approved(current, url=encoded)
+        approved["overrides"][0]["item_id"] = stable_item_id(
+            dict(current, url=encoded), "summary", current["summary_original"]
+        )
+
+        self.assertEqual(
+            apply_approved_overrides({"week_start": WEEK, "items": [current]}, approved),
+            (1, 0),
+        )
+
+    def test_investment_association_unrelated_url_and_hash_mismatch_do_not_match(self):
+        old_url = "https://www.theia.org/news/press-releases/article-one"
+        variants = (
+            {"url": "https://www.theia.org/index%2Ephp/news/press-releases/article-two"},
+            {"url": "https://www.theia.org/index%2Ephp/news/press-releases/article-one", "original_sha256": "0" * 64},
+            {"url": "https://other.example/news/press-releases/article-one"},
+        )
+        for changes in variants:
+            with self.subTest(changes=changes):
+                current = item(source="英国投资管理协会", url=changes["url"])
+                approved_item = item(source="英国投资管理协会", url=old_url)
+                approved = self.approved(approved_item, **{
+                    key: value for key, value in changes.items() if key != "url"
+                })
+
+                self.assertEqual(
+                    apply_approved_overrides({"week_start": WEEK, "items": [current]}, approved),
+                    (0, 1),
+                )
+
+    def test_investment_association_ambiguous_equivalent_overrides_are_rejected(self):
+        canonical = "https://www.theia.org/news/press-releases/article"
+        encoded = "https://www.theia.org/index%2Ephp/news/press-releases/article"
+        current = item(source="英国投资管理协会", url=encoded)
+        first = self.approved(dict(current, url=canonical))["overrides"][0]
+        second = dict(first, item_id="legacy-conflicting-id", manual_translation="另一人工译文")
+
+        applied, stale = apply_approved_overrides(
+            {"week_start": WEEK, "items": [current]},
+            {"schema_version": 1, "week_start": WEEK, "overrides": [first, second]},
+        )
+
+        self.assertEqual((applied, stale), (0, 2))
+
     def test_no_approved_file_leaves_payload_unchanged(self):
         with tempfile.TemporaryDirectory() as tmp:
             payload = {"week_start": WEEK, "items": [item()]}
