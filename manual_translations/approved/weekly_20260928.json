@@ -44,6 +44,150 @@
       "original_sha256": "42d77a31f0df4b7bc1f580cc6982529815b527b4c1d9604a1847541bb5def84a",
       "source": "洲际交易所",
       "url": "https://ir.theice.com/press/news-details/2026/ICE-First-Look-Mortgage-Performance-Remains-Stable-as-Foreclosure-Inventory-Growth-Slows-to-Nine-Month-Low/default.aspx"
+    },
+    {
+      "date": "2026-09-28",
+      "field": "summary",
+      "item_id": "59a3edd7e524153b49777be9383b4200403b6a847ece62655881a87f21d7b97c",
+      "manual_translation": "我们很高兴地宣布，LCH Limited（“LCH”）将扩大其合格非现金抵押品范围，纳入以美元计价的亚洲开发银行债券（ASIA）、国际金融公司债券（IFC）和美洲开发银行债券（IADB）。上线日期为2026年9月30日。",
+      "original_sha256": "84f4570b243eac8d2f84b4d8cc53e363fd70b79c064ae475f3994c088558cd37",
+      "source": "LCH",
+      "url": "https://www.lseg.com/content/lseg/en_us/post-trade/clearing/membership/ltd-membership/ltd-member-updates/lch-collateral-extensions-asia-ifc-and-iadb-denominated-in-usd.html"
+    },
+    {
+      "date": "2026-09-28",
+      "field": "title",
+      "item_id": "367e84b80496ce675b78591f4f98e0355e7aedb32dca8f22cd3b76c10305da91",
+      "manual_translation": "LCH 扩大抵押品范围：以美元计价的亚洲开发银行（ASIA）、国际金融公司（IFC）和美洲开发银行（IADB）债券",
+      "original_sha256": "df70dac99f6079fc7b25a5008e2f45935fdb34b6ea27151abc81804ea43d2f72",
+      "source": "LCH",
+      "url": "https://www.lseg.com/content/lseg/en_us/post-trade/clearing/membership/ltd-membership/ltd-member-updates/lch-collateral-extensions-asia-ifc-and-iadb-denominated-in-usd.html"
+    },
+    {
+      "date": "2026-09-28",
+      "field": "summary",
+      "item_id": "8420b4b7c266d3dc8049bf776c8b9063edaeb3363e549488f3ed1df746b55c13",
+      "manual_translation": "LCH Limited（LCH）风险管理部门已对适用于会员保证金抵押品的折扣率进行了审查。",
+      "original_sha256": "e44ea0e753c3d19bddeb7c13df1b834d56564651f0c69051731cb88ac405736d",
+      "source": "LCH",
+      "url": "https://www.lseg.com/content/lseg/en_us/post-trade/clearing/membership/ltd-membership/ltd-member-updates/acceptable-collateral-haircut-review-29.html"
+    },
+    {
+      "date": "2026-09-28",
+      "field": "title",
+      "item_id": "cb487da5cd66e1a55cf221120095a3a2de2199b880e4316a21ce4e5a2ca8c900",
+      "manual_translation": "合格抵押品折扣率审查",
+      "original_sha256": "937debeb31e41e4ee3fc65f9a8553b790cdb7dce7a5feac4dd3b5fe62412018b",
+      "source": "LCH",
+      "url": "https://www.lseg.com/content/lseg/en_us/post-trade/clearing/membership/ltd-membership/ltd-member-updates/acceptable-collateral-haircut-review-29.html"
+    },
+    {
+      "date": "2026-09-29",
+      "field": "summary",
+      "item_id": "983c64cfedca57ecdd1d95afc6b29747b9f4104d26a6e33e56e4f95afc29faa2",
+      "manual_translation": "更多能源合约纳入 ICE Risk Model 2。\n\nICE 的 JKM LNG（Platts）是东北亚天然气的基准价格。\n\n洲际交易所（Intercontinental Exchange, Inc.，NYSE: ICE）是全球领先的金融市场技术与数据提供商之一，为全球资本市场提供支持，并运营着全球规模最大、流动性最强的能源衍生品交易及清算市场。该公司今日宣布推出新的 JKM LNG（Platts）期权、LNG Balmo（月内剩余期间）运费期货以及英国基荷电力期权，以拓展 ICE 的全球天然气及电力市场。新的 JKM 期权（JKZ）是对 ICE 现有 JKM 平均价格期权的补充，其结算方式与 ICE 的 TTF 期权类似，在月底以标的期货的结算价进行结算。新期权使客户能够管理某一特定时点的亚洲天然气价格风险，与用于管理月内累积风险敞口的平均价格期权相配合。此外，ICE……",
+      "original_sha256": "77c1f6f830073b2f7a331d5f35b0b1bf9c38a606350fa460bf3de1d477be3b76",
+      "source": "洲际交易所",
+      "url": "https://ir.theice.com/press/news-details/2026/ICE-Launches-New-JKM-LNG-Platts-Options-LNG-Balmo-Freight-Futures-and-U-K--Electricity-Options-in-an-Expansion-of-Global-Natural-Gas-and-Power-Markets/default.aspx"
+    },
+    {
+      "date": "2026-09-29",
+      "field": "title",
+      "item_id": "7b11b8a7556ef9d43d76b4a5b28ffd9a6e0f8c965171a941d190556be1406cd9",
+      "manual_translation": "ICE 推出新的 JKM LNG（Platts）期权、LNG Balmo（月内剩余期间）运费期货及英国电力期权，拓展全球天然气及电力市场",
+      "original_sha256": "2d8e55e6df5fa0cc34719f692894917d13c4edc97a91c5b82dbbf5c08aca28fb",
+      "source": "洲际交易所",
+      "url": "https://ir.theice.com/press/news-details/2026/ICE-Launches-New-JKM-LNG-Platts-Options-LNG-Balmo-Freight-Futures-and-U-K--Electricity-Options-in-an-Expansion-of-Global-Natural-Gas-and-Power-Markets/default.aspx"
+    },
+    {
+      "date": "2026-09-29",
+      "field": "summary",
+      "item_id": "660768758ce5c2d8d79c23131dd029686d3ac2a83985e807268770e51f26635e",
+      "manual_translation": "Cboe Global Markets, Inc.（Cboe: CBOE）是全球领先的市场运营商，也是股票及指数衍生品领域的先驱。该公司与全球领先的指数提供商标普道琼斯指数（S&P Dow Jones Indices，简称“S&P DJI”）今日宣布，将双方的独家许可协议延长25年，使长期合作延续至2051年。根据续签协议，Cboe 将继续享有提供其旗舰标普500®指数（S&P 500，SPX）期权交易的独家权利。Cboe 与 S&P DJI 还可能携手探索传统指数衍生品以外的创新，包括代币化期权合约等新产品。该协议建立在双方逾40年的合作基础上。双方的合作始于1983年推出 SPX 期权，这项突破性创新此后成为全球投资者获取和管理美国股票市场风险敞口的全球标准。",
+      "original_sha256": "83c57679876225e8cc94c300e190d9373f32a1fe37f6cfecf852f153885d8db0",
+      "source": "芝加哥期权交易所",
+      "url": "https://ir.cboe.com/news/news-details/2026/Cboe-and-SP-Dow-Jones-Indices-Sign-25-Year-Extension-of-Exclusive-Licensing-Agreement-Through-2051/default.aspx"
+    },
+    {
+      "date": "2026-09-30",
+      "field": "summary",
+      "item_id": "d507f18328c7d9269d375570f13d73d469f68e34709d6fc8bdb7d9c680bdd6da",
+      "manual_translation": "马里兰州罗克维尔，2026年9月30日——ISS STOXX 旗下的 ISS STOXX Governance 是全球领先的独立、客观股东大会研究提供商。该部门今日宣布了其人工智能驱动的 PolicySteward 产品的最新进展，计划于10月12日至10月30日开展客户测试。该产品最初于4月公布，当时被称为在……方面的一次飞跃。",
+      "original_sha256": "384616362945827ab77c411fd44f3161c0edea63fbfcefe9f17ee9fa89ad94f2",
+      "source": "ISS STOXX",
+      "url": "https://www.iss-stoxx.com/press-releases/iss-stoxx-advances-ai-strategy-with-launch-of-policysteward-for-early-client-feedback/"
+    },
+    {
+      "date": "2026-09-30",
+      "field": "title",
+      "item_id": "4a29e32c2d50acb82c6f44dc8af4cb97190ec44a2dcd5c9c40ab4208d0ecc570",
+      "manual_translation": "ISS STOXX 推出 PolicySteward 以征集客户早期反馈，推进人工智能战略",
+      "original_sha256": "d372579d86c1e155680a90a29be6212d128a6634f2b925f3faa0f03c7bc0bb63",
+      "source": "ISS STOXX",
+      "url": "https://www.iss-stoxx.com/press-releases/iss-stoxx-advances-ai-strategy-with-launch-of-policysteward-for-early-client-feedback/"
+    },
+    {
+      "date": "2026-09-28",
+      "field": "summary",
+      "item_id": "670c28521cbcd5609ebdeefd626a2b3577515891eec354db2d7c7fc46522cc6e",
+      "manual_translation": "欧洲保险和职业养老金管理局（EIOPA）今日发布了有关其简化工作思路的后续说明。新说明回顾了迄今取得的进展，并阐述了 EIOPA 正在开展的工作和未来计划，旨在简化监管，减少欧洲保险及职业养老金领域不必要的复杂性。",
+      "original_sha256": "8ade5b43564f48243537a9717389a68835b4b4e466b64e344b168734d00915dd",
+      "source": "欧洲保险和职业养老金管理局",
+      "url": "https://www.eiopa.europa.eu/eiopa-reports-progress-its-simplification-initiatives-2026-09-28_en"
+    },
+    {
+      "date": "2026-09-28",
+      "field": "title",
+      "item_id": "206b4477dd1fe1fce08c66acfa19ac8271f4e98d2d0e063a1c81acc5e4167d00",
+      "manual_translation": "欧洲保险和职业养老金管理局（EIOPA）报告简化举措的进展",
+      "original_sha256": "e620d0f510ef02d7815319be146e35ae6e722f1835bee91ed769e5fb6e8aa5c6",
+      "source": "欧洲保险和职业养老金管理局",
+      "url": "https://www.eiopa.europa.eu/eiopa-reports-progress-its-simplification-initiatives-2026-09-28_en"
+    },
+    {
+      "date": "2026-10-01",
+      "field": "summary",
+      "item_id": "f49a88d643fc110253dcaa02bbfa3fa9fddb07e2d35528628fbbb2e444776b0d",
+      "manual_translation": "2026年10月1日，伦敦——英国投资管理协会（Investment Association，IA）的最新数据显示，8月零售净销售额为8.94亿英镑，标志着零售资金连续第十个月净流入。这与2025年8月资金净流出达18亿英镑的情况相比出现了显著变化，凸显了情况的改善……",
+      "original_sha256": "644f25ebd2df1922ec93db5bc6d90d9584fbcb8e2df4cc73770897a83e32a5d9",
+      "source": "英国投资管理协会",
+      "url": "https://www.theia.org/news/press-releases/summer-inflows-continue-investors-place-ps894-million-funds-august"
+    },
+    {
+      "date": "2026-10-01",
+      "field": "title",
+      "item_id": "1349346f3fbfd516b13db1e41e57248733098fde612867e00a826a0455fcba6e",
+      "manual_translation": "夏季资金流入持续：投资者8月向基金投入8.94亿英镑",
+      "original_sha256": "35ac71ba08ee96737ce7fa6852948c9bd489da938fd0ebed067e652423256176",
+      "source": "英国投资管理协会",
+      "url": "https://www.theia.org/news/press-releases/summer-inflows-continue-investors-place-ps894-million-funds-august"
+    },
+    {
+      "date": "2026-09-30",
+      "field": "summary",
+      "item_id": "b930419dda2df84b7cdf5be16c4bcb86b56227ba566195714e2358d96266f025",
+      "manual_translation": "Cboe Global Markets, Inc.（Cboe: CBOE）是全球领先的市场运营商，也是股票及指数衍生品领域的先驱。该公司今日在得克萨斯州休斯敦举行的 Robinhood 第三届年度 HOOD 峰会上宣布，计划推出一类与特定公司关键绩效指标（KPI）挂钩的新型二元合约，预计于2026年10月推出，但须经监管批准。Robinhood 将成为在产品推出时首家向客户提供这些产品的零售经纪商。这些 KPI 二元期权将为投资者提供一种新方式：通过受美国证券交易委员会（SEC）监管、在 Cboe 的美国注册证券交易所交易的产品，就特定公司指标和公司事件建立头寸。这一拟议框架使 Cboe 的产品区别于目前在指定合约市场（DCM）交易的类似事件型合约，并体现了该公司的观点，即这些证券产品应在美国……所提供的透明度、监督及投资者保护之下进行交易。〔原文在“of the U.S.”处截断，未补全后文。〕",
+      "original_sha256": "c16114e7f695d767337b225a90288303b3d1885bba7fe5367c0ac767e52f414b",
+      "source": "芝加哥期权交易所",
+      "url": "https://ir.cboe.com/news/news-details/2026/Cboe-and-Robinhood-Announce-Planned-Launch-of-New-KPI-Contracts-Further-Expanding-Prediction-Market-Offerings/default.aspx"
+    },
+    {
+      "date": "2026-10-01",
+      "field": "summary",
+      "item_id": "a520b1ce2b7647c651362712b86f04c408c3878b1c6748b5aa3e9024054ab4c4",
+      "manual_translation": "韩国金融委员会（Financial Services Commission，FSC）提出修订《金融投资服务与资本市场法》（FSCMA）以及《股票与债券电子登记法》（下称《电子登记法》）项下的下位法规，为实施……铺平道路。〔原文在“the implementation of”处截断，未补写实施对象。〕",
+      "original_sha256": "062e70078a0cb65dc3e1d7d8080805c525f186e5be80104398879b2b6ab2b8a5",
+      "source": "韩国金融监督委员会",
+      "url": "https://www.fsc.go.kr/eng/pr010101/87834?srchCtgry=&curPage=&srchKey=&srchText=&srchBeginDt=&srchEndDt="
+    },
+    {
+      "date": "2026-10-01",
+      "field": "title",
+      "item_id": "a029f51e2911542e5b40e40bc5bf81fc744620cf379e1aeb389814dfe17b84a5",
+      "manual_translation": "韩国金融委员会（FSC）提出规则修订建议，为证券发行与流通的代币化铺平道路",
+      "original_sha256": "f5636a3360b6da5cd3d50eba8d7f285ff90da531444e2b8c9fe22d4f472bc498",
+      "source": "韩国金融监督委员会",
+      "url": "https://www.fsc.go.kr/eng/pr010101/87834?srchCtgry=&curPage=&srchKey=&srchText=&srchBeginDt=&srchEndDt="
     }
   ],
   "schema_version": 1,
