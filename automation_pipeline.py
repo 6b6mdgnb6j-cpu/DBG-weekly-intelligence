@@ -177,7 +177,9 @@ def workflow_step_status(outcome, exit_code):
     return "FAILED"
 
 
-def write_review_manifest(output_dir, week_start, generation_commit_sha, generation_run_id):
+def write_review_manifest(
+    output_dir, week_start, generation_commit_sha, generation_run_id, snapshot_provenance=None,
+):
     if not VALID_RUN_ID_RE.fullmatch(str(generation_run_id or "")):
         raise AutomationValidationError("generation_run_id must contain digits only")
     validate_week_start(week_start)
@@ -218,6 +220,10 @@ def write_review_manifest(output_dir, week_start, generation_commit_sha, generat
         "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
         "artifacts": artifacts,
     }
+    if snapshot_provenance is not None:
+        if snapshot_provenance.get("mode") != "snapshot_replay":
+            raise AutomationValidationError("snapshot provenance mode is invalid")
+        manifest["snapshot_provenance"] = snapshot_provenance
     manifest_path = artifact_path(output_dir, "manifest", week_start)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return manifest_path
@@ -284,6 +290,22 @@ def validate_manifest(bundle_dir, week_start, source_run_id=None, generation_sha
         raise AutomationValidationError("production artifact is stale relative to main")
     if manifest.get("translation_mode") != "bilingual":
         raise AutomationValidationError("manifest translation_mode must be bilingual")
+    provenance = manifest.get("snapshot_provenance")
+    if provenance is not None:
+        collection = provenance.get("collection") or {}
+        replay = provenance.get("replay") or {}
+        if provenance.get("mode") != "snapshot_replay":
+            raise AutomationValidationError("snapshot provenance mode is invalid")
+        for key in ("run_id", "commit_sha", "artifact_id", "artifact_name", "artifact_sha256", "input_files"):
+            if not collection.get(key):
+                raise AutomationValidationError(f"snapshot collection provenance missing: {key}")
+        for key in ("run_id", "generation_sha", "approved_translations_sha256", "override_results"):
+            if replay.get(key) in (None, ""):
+                raise AutomationValidationError(f"snapshot replay provenance missing: {key}")
+        if str(replay.get("run_id")) != str(manifest.get("generation_run_id")):
+            raise AutomationValidationError("snapshot replay run ID mismatch")
+        if replay.get("generation_sha") != manifest.get("generation_commit_sha"):
+            raise AutomationValidationError("snapshot replay generation SHA mismatch")
 
     artifacts = manifest.get("artifacts") or {}
     for key in ("weekly_data", "source_status", "qa_report", "weekly_report_html"):

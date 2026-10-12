@@ -10,9 +10,36 @@ on:
         description: Optional target week Monday in YYYY-MM-DD format. Leave empty for previous natural week.
         required: false
         type: string
+      generation_mode:
+        description: Generation mode. Snapshot replay is manual-only and never falls back to live collection.
+        required: false
+        default: live
+        type: choice
+        options: [live, snapshot]
+      snapshot_artifact_id:
+        description: Required artifact ID for snapshot mode.
+        required: false
+        type: string
+      snapshot_artifact_name:
+        description: Required artifact name for snapshot mode.
+        required: false
+        type: string
+      snapshot_sha256:
+        description: Required SHA-256 of the original snapshot ZIP.
+        required: false
+        type: string
+      collection_run_id:
+        description: Original collection run ID for snapshot provenance.
+        required: false
+        type: string
+      collection_sha:
+        description: Original collection commit SHA for snapshot provenance.
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: weekly-report-production
@@ -106,14 +133,14 @@ jobs:
           exit 0
 
       - name: Configure translation cache
-        if: steps.tests.outcome == 'success' && steps.tests.outputs.exit_code == '0' && steps.compile.outcome == 'success' && steps.compile.outputs.exit_code == '0'
+        if: inputs.generation_mode != 'snapshot' && steps.tests.outcome == 'success' && steps.tests.outputs.exit_code == '0' && steps.compile.outcome == 'success' && steps.compile.outputs.exit_code == '0'
         run: |
           echo "HF_HOME=$RUNNER_TEMP/huggingface" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/huggingface"
 
       - name: Translation preflight
         id: translation_preflight
-        if: steps.tests.outcome == 'success' && steps.tests.outputs.exit_code == '0' && steps.compile.outcome == 'success' && steps.compile.outputs.exit_code == '0'
+        if: inputs.generation_mode != 'snapshot' && steps.tests.outcome == 'success' && steps.tests.outputs.exit_code == '0' && steps.compile.outcome == 'success' && steps.compile.outputs.exit_code == '0'
         run: |
           set +e
           python3 automation_pipeline.py translation-preflight --attempts 3 --sleep-seconds 5
@@ -121,16 +148,66 @@ jobs:
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: Download immutable collection snapshot
+        id: snapshot_download
+        if: inputs.generation_mode == 'snapshot' && steps.tests.outputs.exit_code == '0' && steps.compile.outputs.exit_code == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ARTIFACT_ID: ${{ inputs.snapshot_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.snapshot_artifact_name }}
+          COLLECTION_RUN_ID: ${{ inputs.collection_run_id }}
+          COLLECTION_SHA: ${{ inputs.collection_sha }}
+        run: |
+          test -n "$ARTIFACT_ID"
+          gh api "repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID" > collection-artifact.json
+          python3 - <<'PY'
+          import json
+          import os
+
+          artifact = json.load(open("collection-artifact.json", encoding="utf-8"))
+          source_run = artifact.get("workflow_run") or {}
+          expected = {
+              "name": os.environ["ARTIFACT_NAME"],
+              "run_id": int(os.environ["COLLECTION_RUN_ID"]),
+              "head_sha": os.environ["COLLECTION_SHA"],
+          }
+          actual = {
+              "name": artifact.get("name"),
+              "run_id": source_run.get("id"),
+              "head_sha": source_run.get("head_sha"),
+          }
+          if artifact.get("expired"):
+              raise SystemExit("snapshot artifact has expired")
+          if actual != expected:
+              raise SystemExit(f"snapshot artifact provenance mismatch: expected={expected}, actual={actual}")
+          PY
+          gh api "repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > collection-snapshot.zip
+
       - name: Generate bilingual weekly report and QA
         id: weekly
-        if: steps.translation_preflight.outcome == 'success' && steps.translation_preflight.outputs.exit_code == '0'
+        if: (inputs.generation_mode == 'snapshot' && steps.tests.outputs.exit_code == '0' && steps.compile.outputs.exit_code == '0') || (inputs.generation_mode != 'snapshot' && steps.translation_preflight.outcome == 'success' && steps.translation_preflight.outputs.exit_code == '0')
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GENERATION_MODE: ${{ inputs.generation_mode || 'live' }}
           MANUAL_WEEK_START: ${{ steps.requested_week.outputs.week_start }}
           MANUAL_OUTPUT_DIR: ${{ steps.requested_week.outputs.output_dir }}
         run: |
           set +e
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$MANUAL_WEEK_START" ]; then
+          if [ "$GENERATION_MODE" = "snapshot" ]; then
+            python3 snapshot_replay.py \
+              --snapshot-zip collection-snapshot.zip \
+              --snapshot-sha256 "${{ inputs.snapshot_sha256 }}" \
+              --week-start "$MANUAL_WEEK_START" \
+              --output-dir "$MANUAL_OUTPUT_DIR" \
+              --approved-file "manual_translations/approved/weekly_${{ steps.requested_week.outputs.compact_week_start }}.json" \
+              --collection-run-id "${{ inputs.collection_run_id }}" \
+              --collection-sha "${{ inputs.collection_sha }}" \
+              --collection-artifact-id "${{ inputs.snapshot_artifact_id }}" \
+              --collection-artifact-name "${{ inputs.snapshot_artifact_name }}" \
+              --generation-run-id "${{ github.run_id }}" \
+              --generation-sha "${{ github.sha }}"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$MANUAL_WEEK_START" ]; then
             python3 run_weekly.py --start "$MANUAL_WEEK_START" --output-dir "$MANUAL_OUTPUT_DIR" --require-translation
           else
             python3 run_weekly.py --require-translation --start "$MANUAL_WEEK_START" --output-dir "$MANUAL_OUTPUT_DIR"
@@ -191,11 +268,15 @@ jobs:
         if: steps.bilingual_validation.outcome == 'success' && steps.bilingual_validation.outputs.exit_code == '0'
         run: |
           set +e
-          python3 automation_pipeline.py manifest \
-            --output-dir "${{ steps.weekly.outputs.output_dir }}" \
-            --week-start "${{ steps.weekly.outputs.week_start }}" \
-            --generation-sha "${{ github.sha }}" \
-            --generation-run-id "${{ github.run_id }}"
+          if [ "${{ inputs.generation_mode || 'live' }}" = "snapshot" ]; then
+            test -f "${{ steps.weekly.outputs.output_dir }}/review_manifest_${{ steps.weekly.outputs.compact_week_start }}.json"
+          else
+            python3 automation_pipeline.py manifest \
+              --output-dir "${{ steps.weekly.outputs.output_dir }}" \
+              --week-start "${{ steps.weekly.outputs.week_start }}" \
+              --generation-sha "${{ github.sha }}" \
+              --generation-run-id "${{ github.run_id }}"
+          fi
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           exit 0
@@ -257,7 +338,7 @@ jobs:
 
       - name: Upload debug artifacts
         id: upload_debug
-        if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.translation_preflight.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.bilingual_validation.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
+        if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || (inputs.generation_mode != 'snapshot' && steps.translation_preflight.outputs.exit_code != '0') || (inputs.generation_mode == 'snapshot' && steps.snapshot_download.outcome != 'success') || steps.weekly.outputs.exit_code != '0' || steps.bilingual_validation.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
         uses: actions/upload-artifact@v7
         with:
           name: weekly-report-debug-${{ github.run_id }}-${{ github.run_attempt }}
@@ -393,9 +474,11 @@ jobs:
       - name: Enforce workflow result
         if: always()
         env:
+          GENERATION_MODE: ${{ inputs.generation_mode || 'live' }}
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
           COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
           PREFLIGHT_EXIT_CODE: ${{ steps.translation_preflight.outputs.exit_code }}
+          SNAPSHOT_DOWNLOAD_OUTCOME: ${{ steps.snapshot_download.outcome }}
           WEEKLY_EXIT_CODE: ${{ steps.weekly.outputs.exit_code }}
           BILINGUAL_VALIDATION_EXIT_CODE: ${{ steps.bilingual_validation.outputs.exit_code }}
           MANIFEST_EXIT_CODE: ${{ steps.manifest.outputs.exit_code }}
@@ -410,7 +493,12 @@ jobs:
             echo "COMPILE FAILED"
             exit "${COMPILE_EXIT_CODE:-1}"
           fi
-          if [ "${PREFLIGHT_EXIT_CODE:-1}" != "0" ]; then
+          if [ "$GENERATION_MODE" = "snapshot" ]; then
+            if [ "$SNAPSHOT_DOWNLOAD_OUTCOME" != "success" ]; then
+              echo "SNAPSHOT DOWNLOAD OR PROVENANCE VERIFICATION FAILED"
+              exit 1
+            fi
+          elif [ "${PREFLIGHT_EXIT_CODE:-1}" != "0" ]; then
             echo "TRANSLATION PREFLIGHT FAILED"
             exit "${PREFLIGHT_EXIT_CODE:-1}"
           fi

@@ -1,0 +1,160 @@
+import argparse
+import hashlib
+import json
+import shutil
+import tempfile
+import zipfile
+from pathlib import Path
+
+from automation_pipeline import AutomationValidationError, validate_manifest, write_review_manifest
+from crawler.manual_translations import apply_approved_overrides_with_report, atomic_write_json
+from generate_weekly import render_report
+from qa_gate import FAIL, run_qa
+
+
+class SnapshotReplayError(RuntimeError):
+    pass
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _safe_extract(archive, destination):
+    destination = Path(destination).resolve()
+    with zipfile.ZipFile(archive) as bundle:
+        for member in bundle.infolist():
+            target = (destination / member.filename).resolve()
+            if destination != target and destination not in target.parents:
+                raise SnapshotReplayError(f"unsafe snapshot member: {member.filename}")
+        bundle.extractall(destination)
+
+
+def _find_required(root, filename):
+    matches = list(Path(root).rglob(filename))
+    if len(matches) != 1:
+        raise SnapshotReplayError(f"snapshot must contain exactly one {filename}; found {len(matches)}")
+    return matches[0]
+
+
+def replay_snapshot(
+    snapshot_zip, expected_snapshot_sha256, week_start, output_dir, approved_file,
+    collection_run_id, collection_sha, collection_artifact_id, collection_artifact_name,
+    generation_run_id, generation_sha,
+):
+    snapshot_zip = Path(snapshot_zip)
+    output_dir = Path(output_dir)
+    approved_file = Path(approved_file)
+    actual_archive_hash = sha256(snapshot_zip)
+    if actual_archive_hash != expected_snapshot_sha256:
+        raise SnapshotReplayError("snapshot ZIP SHA-256 mismatch")
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise SnapshotReplayError("output directory must be absent or empty")
+    if not approved_file.exists():
+        raise SnapshotReplayError("approved translations file is missing")
+
+    compact = week_start.replace("-", "")
+    with tempfile.TemporaryDirectory(prefix="weekly-snapshot-") as temp:
+        _safe_extract(snapshot_zip, temp)
+        weekly_input = _find_required(temp, f"weekly_data_{compact}.json")
+        status_input = _find_required(temp, f"source_status_{compact}.json")
+        weekly = json.loads(weekly_input.read_text(encoding="utf-8"))
+        statuses = json.loads(status_input.read_text(encoding="utf-8"))
+        if weekly.get("week_start") != week_start:
+            raise SnapshotReplayError("snapshot week_start mismatch")
+        if not isinstance(weekly.get("items"), list) or not isinstance(statuses, list):
+            raise SnapshotReplayError("snapshot data structure is invalid")
+        approved = json.loads(approved_file.read_text(encoding="utf-8"))
+        if approved.get("week_start") != week_start:
+            raise SnapshotReplayError("approved translations week_start mismatch")
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        weekly_output = output_dir / weekly_input.name
+        status_output = output_dir / status_input.name
+        shutil.copyfile(weekly_input, weekly_output)
+        shutil.copyfile(status_input, status_output)
+        report = apply_approved_overrides_with_report(weekly, approved)
+        if report["identity_hash_conflict"] or report["ambiguous"]:
+            conflicts = [row.get("item_id") for row in report["identity_hash_conflict"]]
+            ambiguities = [row.get("item_id") for row in report["ambiguous"]]
+            raise SnapshotReplayError(
+                "approved translation identity conflict or ambiguity: "
+                f"conflicts={conflicts}, ambiguous={ambiguities}"
+            )
+        atomic_write_json(weekly_output, weekly)
+        render_report(week_start, output_dir=output_dir)
+        qa_result = run_qa(
+            weekly_data_path=weekly_output,
+            source_status_path=status_output,
+            expected_week_start=week_start,
+            output_dir=output_dir,
+        )
+        if qa_result["status"] == FAIL or qa_result["blocking_count"]:
+            raise SnapshotReplayError("snapshot replay QA failed")
+
+        provenance = {
+            "mode": "snapshot_replay",
+            "collection": {
+                "run_id": str(collection_run_id), "commit_sha": collection_sha,
+                "artifact_id": str(collection_artifact_id), "artifact_name": collection_artifact_name,
+                "artifact_sha256": actual_archive_hash,
+                "input_files": {
+                    weekly_input.name: sha256(weekly_input),
+                    status_input.name: sha256(status_input),
+                },
+            },
+            "replay": {
+                "run_id": str(generation_run_id), "generation_sha": generation_sha,
+                "approved_translations_file": approved_file.name,
+                "approved_translations_sha256": sha256(approved_file),
+                "override_results": report,
+            },
+        }
+        manifest_path = write_review_manifest(
+            output_dir, week_start, generation_sha, generation_run_id,
+            snapshot_provenance=provenance,
+        )
+        validate_manifest(
+            output_dir, week_start, source_run_id=generation_run_id,
+            generation_sha=generation_sha, current_main_sha=generation_sha,
+        )
+        return {"qa": qa_result, "overrides": report, "manifest": str(manifest_path)}
+
+
+def cli(argv=None):
+    parser = argparse.ArgumentParser(description="Replay an immutable weekly collection snapshot offline.")
+    parser.add_argument("--snapshot-zip", required=True)
+    parser.add_argument("--snapshot-sha256", dest="expected_snapshot_sha256", required=True)
+    parser.add_argument("--week-start", required=True)
+    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--approved-file", required=True)
+    parser.add_argument("--collection-run-id", required=True)
+    parser.add_argument("--collection-sha", required=True)
+    parser.add_argument("--collection-artifact-id", required=True)
+    parser.add_argument("--collection-artifact-name", required=True)
+    parser.add_argument("--generation-run-id", required=True)
+    parser.add_argument("--generation-sha", required=True)
+    args = parser.parse_args(argv)
+    try:
+        result = replay_snapshot(**vars(args))
+    except (SnapshotReplayError, AutomationValidationError, OSError, ValueError, zipfile.BadZipFile) as exc:
+        print(f"SNAPSHOT REPLAY BLOCKED: {exc}")
+        return 4
+    print(json.dumps({
+        "status": "REVIEW_READY",
+        "qa_status": result["qa"]["status"],
+        "applied": len(result["overrides"]["applied"]),
+        "absent": len(result["overrides"]["absent"]),
+        "identity_hash_conflict": len(result["overrides"]["identity_hash_conflict"]),
+        "ambiguous": len(result["overrides"]["ambiguous"]),
+        "manifest": result["manifest"],
+    }, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli())

@@ -341,17 +341,39 @@ def _clear_field_translation_issues(item, field):
         item.pop("translation_quality_issues", None)
 
 
-def apply_approved_overrides(weekly_payload, approved_payload_data):
+def apply_approved_overrides_with_report(weekly_payload, approved_payload_data):
+    report = {"applied": [], "absent": [], "identity_hash_conflict": [], "ambiguous": []}
     if not approved_payload_data:
-        return 0, 0
+        return report
     if approved_payload_data.get("schema_version") != SCHEMA_VERSION:
-        return 0, len(approved_payload_data.get("overrides") or [])
+        report["identity_hash_conflict"] = list(approved_payload_data.get("overrides") or [])
+        return report
     if approved_payload_data.get("week_start") != weekly_payload.get("week_start"):
-        return 0, len(approved_payload_data.get("overrides") or [])
+        report["identity_hash_conflict"] = list(approved_payload_data.get("overrides") or [])
+        return report
 
-    overrides = {entry.get("item_id"): entry for entry in approved_payload_data.get("overrides") or []}
+    override_rows = list(approved_payload_data.get("overrides") or [])
+    rows_by_item_id = {}
+    for row in override_rows:
+        rows_by_item_id.setdefault(row.get("item_id"), []).append(row)
+    duplicate_ids = {item_id: rows for item_id, rows in rows_by_item_id.items() if len(rows) > 1}
+    if duplicate_ids:
+        report["ambiguous"] = [
+            {
+                "item_id": item_id,
+                "reason": "duplicate_approved_item_id",
+                "conflicting_fields": sorted({
+                    key
+                    for row in rows[1:]
+                    for key in set(rows[0]) | set(row)
+                    if rows[0].get(key) != row.get(key)
+                }),
+            }
+            for item_id, rows in duplicate_ids.items()
+        ]
+        return report
+    overrides = {entry.get("item_id"): entry for entry in override_rows}
     matched = set()
-    applied = 0
     for item in weekly_payload.get("items") or []:
         for field in ("title", "summary"):
             original, _ = _field_values(item, field)
@@ -383,8 +405,84 @@ def apply_approved_overrides(weekly_payload, approved_payload_data):
             item["translation_provenance"] = provenance
             _clear_field_translation_issues(item, field)
             matched.add(item_id)
-            applied += 1
-    return applied, len(overrides) - len(matched)
+            report["applied"].append({
+                "item_id": item_id,
+                "source": override.get("source"),
+                "date": override.get("date"),
+                "field": field,
+                "url": override.get("url"),
+            })
+
+    items = weekly_payload.get("items") or []
+    for override in override_rows:
+        if override.get("item_id") in matched:
+            continue
+        same_identity = []
+        for item in items:
+            if override.get("source") != (item.get("source") or ""):
+                continue
+            if str(override.get("date") or "") != str(item.get("date") or ""):
+                continue
+            field = override.get("field")
+            original, _ = _field_values(item, field)
+            if not original:
+                continue
+            same_identity.append((item, original))
+
+        detail = {
+            "item_id": override.get("item_id"),
+            "source": override.get("source"),
+            "date": override.get("date"),
+            "field": override.get("field"),
+            "url": override.get("url"),
+        }
+        if not same_identity:
+            report["absent"].append(detail)
+            continue
+        equivalent_identity = [
+            (item, original) for item, original in same_identity
+            if (item.get("url") or "") == (override.get("url") or "")
+            or (
+                (item.get("source") or "") in INVESTMENT_ASSOCIATION_SOURCES
+                and _investment_association_canonical_url(item.get("url") or "")
+                == _investment_association_canonical_url(override.get("url") or "")
+                != ""
+            )
+        ]
+        if not equivalent_identity:
+            report["absent"].append(detail)
+            continue
+        hash_matches = [
+            item for item, original in equivalent_identity
+            if original_sha256(original) == override.get("original_sha256")
+        ]
+        if not hash_matches:
+            report["identity_hash_conflict"].append(detail)
+            continue
+        equivalent = hash_matches
+        target_key = (
+            override.get("source"), str(override.get("date") or ""), override.get("field"),
+            override.get("original_sha256"), _investment_association_canonical_url(override.get("url") or ""),
+        )
+        equivalent_approvals = [
+            row for row in override_rows
+            if (
+                row.get("source"), str(row.get("date") or ""), row.get("field"),
+                row.get("original_sha256"), _investment_association_canonical_url(row.get("url") or ""),
+            ) == target_key
+        ]
+        if len(equivalent) > 1 or len(equivalent_approvals) > 1:
+            report["ambiguous"].append(detail)
+        else:
+            report["absent"].append(detail)
+    return report
+
+
+def apply_approved_overrides(weekly_payload, approved_payload_data):
+    report = apply_approved_overrides_with_report(weekly_payload, approved_payload_data)
+    applied = len(report["applied"])
+    unmatched = sum(len(report[key]) for key in ("absent", "identity_hash_conflict", "ambiguous"))
+    return applied, unmatched
 
 
 def apply_approved_file(weekly_payload, week_start, approved_dir="manual_translations/approved"):
