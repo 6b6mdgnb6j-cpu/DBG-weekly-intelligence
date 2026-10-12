@@ -353,6 +353,25 @@ def apply_approved_overrides_with_report(weekly_payload, approved_payload_data):
         return report
 
     override_rows = list(approved_payload_data.get("overrides") or [])
+    rows_by_item_id = {}
+    for row in override_rows:
+        rows_by_item_id.setdefault(row.get("item_id"), []).append(row)
+    duplicate_ids = {item_id: rows for item_id, rows in rows_by_item_id.items() if len(rows) > 1}
+    if duplicate_ids:
+        report["ambiguous"] = [
+            {
+                "item_id": item_id,
+                "reason": "duplicate_approved_item_id",
+                "conflicting_fields": sorted({
+                    key
+                    for row in rows[1:]
+                    for key in set(rows[0]) | set(row)
+                    if rows[0].get(key) != row.get(key)
+                }),
+            }
+            for item_id, rows in duplicate_ids.items()
+        ]
+        return report
     overrides = {entry.get("item_id"): entry for entry in override_rows}
     matched = set()
     for item in weekly_payload.get("items") or []:
@@ -420,15 +439,8 @@ def apply_approved_overrides_with_report(weekly_payload, approved_payload_data):
         if not same_identity:
             report["absent"].append(detail)
             continue
-        hash_matches = [
-            item for item, original in same_identity
-            if original_sha256(original) == override.get("original_sha256")
-        ]
-        if not hash_matches:
-            report["identity_hash_conflict"].append(detail)
-            continue
-        equivalent = [
-            item for item in hash_matches
+        equivalent_identity = [
+            (item, original) for item, original in same_identity
             if (item.get("url") or "") == (override.get("url") or "")
             or (
                 (item.get("source") or "") in INVESTMENT_ASSOCIATION_SOURCES
@@ -437,6 +449,17 @@ def apply_approved_overrides_with_report(weekly_payload, approved_payload_data):
                 != ""
             )
         ]
+        if not equivalent_identity:
+            report["absent"].append(detail)
+            continue
+        hash_matches = [
+            item for item, original in equivalent_identity
+            if original_sha256(original) == override.get("original_sha256")
+        ]
+        if not hash_matches:
+            report["identity_hash_conflict"].append(detail)
+            continue
+        equivalent = hash_matches
         target_key = (
             override.get("source"), str(override.get("date") or ""), override.get("field"),
             override.get("original_sha256"), _investment_association_canonical_url(override.get("url") or ""),

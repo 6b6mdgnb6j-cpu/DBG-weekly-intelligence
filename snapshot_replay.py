@@ -79,7 +79,12 @@ def replay_snapshot(
         shutil.copyfile(status_input, status_output)
         report = apply_approved_overrides_with_report(weekly, approved)
         if report["identity_hash_conflict"] or report["ambiguous"]:
-            raise SnapshotReplayError("approved translation identity conflict or ambiguity")
+            conflicts = [row.get("item_id") for row in report["identity_hash_conflict"]]
+            ambiguities = [row.get("item_id") for row in report["ambiguous"]]
+            raise SnapshotReplayError(
+                "approved translation identity conflict or ambiguity: "
+                f"conflicts={conflicts}, ambiguous={ambiguities}"
+            )
         atomic_write_json(weekly_output, weekly)
         render_report(week_start, output_dir=output_dir)
         qa_result = run_qa(

@@ -149,6 +149,7 @@ jobs:
           exit 0
 
       - name: Download immutable collection snapshot
+        id: snapshot_download
         if: inputs.generation_mode == 'snapshot' && steps.tests.outputs.exit_code == '0' && steps.compile.outputs.exit_code == '0'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -337,7 +338,7 @@ jobs:
 
       - name: Upload debug artifacts
         id: upload_debug
-        if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || steps.translation_preflight.outputs.exit_code != '0' || steps.weekly.outputs.exit_code != '0' || steps.bilingual_validation.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
+        if: always() && (steps.tests.outputs.exit_code != '0' || steps.compile.outputs.exit_code != '0' || (inputs.generation_mode != 'snapshot' && steps.translation_preflight.outputs.exit_code != '0') || (inputs.generation_mode == 'snapshot' && steps.snapshot_download.outcome != 'success') || steps.weekly.outputs.exit_code != '0' || steps.bilingual_validation.outputs.exit_code != '0' || steps.manifest.outputs.exit_code != '0' || steps.bundle_validation.outputs.exit_code != '0' || steps.published_safety.outputs.exit_code != '0')
         uses: actions/upload-artifact@v7
         with:
           name: weekly-report-debug-${{ github.run_id }}-${{ github.run_attempt }}
@@ -473,9 +474,11 @@ jobs:
       - name: Enforce workflow result
         if: always()
         env:
+          GENERATION_MODE: ${{ inputs.generation_mode || 'live' }}
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
           COMPILE_EXIT_CODE: ${{ steps.compile.outputs.exit_code }}
           PREFLIGHT_EXIT_CODE: ${{ steps.translation_preflight.outputs.exit_code }}
+          SNAPSHOT_DOWNLOAD_OUTCOME: ${{ steps.snapshot_download.outcome }}
           WEEKLY_EXIT_CODE: ${{ steps.weekly.outputs.exit_code }}
           BILINGUAL_VALIDATION_EXIT_CODE: ${{ steps.bilingual_validation.outputs.exit_code }}
           MANIFEST_EXIT_CODE: ${{ steps.manifest.outputs.exit_code }}
@@ -490,7 +493,12 @@ jobs:
             echo "COMPILE FAILED"
             exit "${COMPILE_EXIT_CODE:-1}"
           fi
-          if [ "${PREFLIGHT_EXIT_CODE:-1}" != "0" ]; then
+          if [ "$GENERATION_MODE" = "snapshot" ]; then
+            if [ "$SNAPSHOT_DOWNLOAD_OUTCOME" != "success" ]; then
+              echo "SNAPSHOT DOWNLOAD OR PROVENANCE VERIFICATION FAILED"
+              exit 1
+            fi
+          elif [ "${PREFLIGHT_EXIT_CODE:-1}" != "0" ]; then
             echo "TRANSLATION PREFLIGHT FAILED"
             exit "${PREFLIGHT_EXIT_CODE:-1}"
           fi

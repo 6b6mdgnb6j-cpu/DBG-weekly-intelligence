@@ -2,6 +2,8 @@ import copy
 import hashlib
 import json
 import tempfile
+import os
+import subprocess
 import unittest
 import zipfile
 from pathlib import Path
@@ -32,6 +34,21 @@ def approval(record, field="title", translation="市场基础设施更新"):
 
 
 class SnapshotReplayTests(unittest.TestCase):
+    def workflow_enforcement(self, **env_overrides):
+        workflow = Path(".github/workflows/weekly-report-production.yml").read_text(encoding="utf-8")
+        block = workflow.split("      - name: Enforce workflow result", 1)[1]
+        script = block.split("        run: |\n", 1)[1]
+        script = "\n".join(line[10:] if line.startswith("          ") else line for line in script.splitlines())
+        defaults = {
+            "GENERATION_MODE": "live", "TEST_EXIT_CODE": "0", "COMPILE_EXIT_CODE": "0",
+            "PREFLIGHT_EXIT_CODE": "0", "SNAPSHOT_DOWNLOAD_OUTCOME": "skipped",
+            "WEEKLY_EXIT_CODE": "0", "BILINGUAL_VALIDATION_EXIT_CODE": "0",
+            "MANIFEST_EXIT_CODE": "0", "BUNDLE_VALIDATION_EXIT_CODE": "0",
+            "PUBLISHED_SAFETY_EXIT_CODE": "0",
+        }
+        defaults.update(env_overrides)
+        return subprocess.run(["bash", "-c", script], env={**os.environ, **defaults}, capture_output=True, text=True)
+
     def make_snapshot(self, root, records=None, week=WEEK):
         root = Path(root)
         source = root / "source"
@@ -132,6 +149,61 @@ class SnapshotReplayTests(unittest.TestCase):
             with self.assertRaisesRegex(snapshot_replay.SnapshotReplayError, "ambiguity"):
                 self.run_replay(tmp, records=[record], approved_rows=[first, second])
 
+    def test_duplicate_item_id_conflicting_translation_is_rejected_before_application(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = item()
+            first = approval(record)
+            second = {**first, "manual_translation": "冲突译文"}
+            with self.assertRaisesRegex(snapshot_replay.SnapshotReplayError, "ambiguous"):
+                self.run_replay(tmp, records=[record], approved_rows=[first, second])
+            self.assertEqual(record["title_cn"], "错误译文")
+
+    def test_duplicate_item_id_conflicting_metadata_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            record = item()
+            first = approval(record)
+            second = {**first, "url": "https://example.test/other"}
+            with self.assertRaisesRegex(snapshot_replay.SnapshotReplayError, "ambiguous"):
+                self.run_replay(tmp, records=[record], approved_rows=[first, second])
+
+    def test_absent_same_source_date_field_article_is_not_hash_conflict(self):
+        present = item(url="https://example.test/present", original="Present article")
+        missing = item(url="https://example.test/missing", original="Missing article")
+        payload = {"week_start": WEEK, "items": [present]}
+        report = snapshot_replay.apply_approved_overrides_with_report(
+            payload, {"schema_version": 1, "week_start": WEEK, "overrides": [approval(missing)]}
+        )
+        self.assertEqual(len(report["absent"]), 1)
+        self.assertEqual(report["identity_hash_conflict"], [])
+
+    def test_same_article_changed_original_is_hash_conflict(self):
+        present = item(url="https://example.test/article", original="Changed original")
+        approved_record = item(url=present["url"], original="Approved original")
+        report = snapshot_replay.apply_approved_overrides_with_report(
+            {"week_start": WEEK, "items": [present]},
+            {"schema_version": 1, "week_start": WEEK, "overrides": [approval(approved_record)]},
+        )
+        self.assertEqual(len(report["identity_hash_conflict"]), 1)
+        self.assertEqual(report["absent"], [])
+
+    def test_workflow_enforcement_live_and_snapshot_boundaries(self):
+        self.assertEqual(self.workflow_enforcement().returncode, 0)
+        self.assertNotEqual(self.workflow_enforcement(PREFLIGHT_EXIT_CODE="4").returncode, 0)
+        self.assertEqual(self.workflow_enforcement(
+            GENERATION_MODE="snapshot", PREFLIGHT_EXIT_CODE="", SNAPSHOT_DOWNLOAD_OUTCOME="success"
+        ).returncode, 0)
+        self.assertNotEqual(self.workflow_enforcement(
+            GENERATION_MODE="snapshot", PREFLIGHT_EXIT_CODE="", SNAPSHOT_DOWNLOAD_OUTCOME="failure"
+        ).returncode, 0)
+        self.assertNotEqual(self.workflow_enforcement(
+            GENERATION_MODE="snapshot", PREFLIGHT_EXIT_CODE="", SNAPSHOT_DOWNLOAD_OUTCOME="success",
+            WEEKLY_EXIT_CODE="4"
+        ).returncode, 0)
+        self.assertNotEqual(self.workflow_enforcement(
+            GENERATION_MODE="snapshot", PREFLIGHT_EXIT_CODE="", SNAPSHOT_DOWNLOAD_OUTCOME="success",
+            BUNDLE_VALIDATION_EXIT_CODE="4"
+        ).returncode, 0)
+
     def test_qa_fail_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -162,6 +234,9 @@ class SnapshotReplayTests(unittest.TestCase):
         self.assertIn("--collection-run-id", snapshot_block)
         self.assertIn("snapshot artifact provenance mismatch", workflow)
         self.assertIn('artifact.get("expired")', workflow)
+        debug = workflow.split("      - name: Upload debug artifacts", 1)[1].split("      - name:", 1)[0]
+        self.assertIn("inputs.generation_mode != 'snapshot'", debug)
+        self.assertIn("steps.snapshot_download.outcome != 'success'", debug)
 
 
 if __name__ == "__main__":
