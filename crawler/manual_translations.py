@@ -1,9 +1,11 @@
 import hashlib
 import json
 import os
+import re
 import tempfile
 from copy import copy
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from crawler.translation_quality import FAIL, validate_translation_field
 
@@ -34,6 +36,9 @@ METADATA_HEADERS = (
     "title_original",
 )
 
+INVESTMENT_ASSOCIATION_SOURCES = {"英国投资管理协会", "Investment Association"}
+INVESTMENT_ASSOCIATION_HOST = "www.theia.org"
+
 
 class ManualTranslationError(ValueError):
     pass
@@ -53,6 +58,47 @@ def stable_item_id(item, field, original_text):
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _investment_association_canonical_url(url):
+    parsed = urlsplit(url or "")
+    if parsed.scheme.lower() != "https" or parsed.netloc.lower() != INVESTMENT_ASSOCIATION_HOST:
+        return ""
+    path = re.sub(r"%2e", ".", parsed.path, flags=re.I)
+    if path == "/index.php":
+        path = "/"
+    elif path.startswith("/index.php/"):
+        path = path[len("/index.php"):]
+    path = path.rstrip("/") or "/"
+    return urlunsplit(("https", INVESTMENT_ASSOCIATION_HOST, path, parsed.query, ""))
+
+
+def _approved_override_for_item(overrides, item, field, original_text):
+    item_id = stable_item_id(item, field, original_text)
+    exact = overrides.get(item_id)
+    if exact:
+        return item_id, exact
+
+    source = item.get("source") or ""
+    if source not in INVESTMENT_ASSOCIATION_SOURCES:
+        return item_id, None
+    canonical_url = _investment_association_canonical_url(item.get("url") or "")
+    if not canonical_url:
+        return item_id, None
+
+    expected_hash = original_sha256(original_text)
+    candidates = [
+        (override_id, override)
+        for override_id, override in overrides.items()
+        if override.get("source") == source
+        and str(override.get("date") or "") == str(item.get("date") or "")
+        and override.get("field") == field
+        and override.get("original_sha256") == expected_hash
+        and _investment_association_canonical_url(override.get("url") or "") == canonical_url
+    ]
+    if len(candidates) != 1:
+        return item_id, None
+    return candidates[0]
 
 
 def _field_values(item, field):
@@ -311,16 +357,23 @@ def apply_approved_overrides(weekly_payload, approved_payload_data):
             original, _ = _field_values(item, field)
             if not original:
                 continue
-            item_id = stable_item_id(item, field, original)
-            override = overrides.get(item_id)
+            item_id, override = _approved_override_for_item(overrides, item, field, original)
             if not override:
                 continue
             identity_matches = (
                 override.get("source") == (item.get("source") or "")
                 and str(override.get("date") or "") == str(item.get("date") or "")
-                and (override.get("url") or "") == (item.get("url") or "")
                 and override.get("field") == field
                 and override.get("original_sha256") == original_sha256(original)
+                and (
+                    (override.get("url") or "") == (item.get("url") or "")
+                    or (
+                        (item.get("source") or "") in INVESTMENT_ASSOCIATION_SOURCES
+                        and _investment_association_canonical_url(override.get("url") or "")
+                        == _investment_association_canonical_url(item.get("url") or "")
+                        != ""
+                    )
+                )
             )
             if not identity_matches:
                 continue
