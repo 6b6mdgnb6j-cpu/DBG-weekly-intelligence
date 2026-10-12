@@ -1,0 +1,519 @@
+{
+  "overrides": [
+    {
+      "date": "2026-10-06",
+      "field": "summary",
+      "item_id": "02394999faf9bf856402e4aa76845952d40721766e881b95ee537f9627053602",
+      "manual_translation": "美国证券交易委员会（SEC）合规交流计划宣布，将于2026年11月19日面向投资公司及投资顾问举办全国线上研讨会。",
+      "original_sha256": "2810ac202da519db3a18f0e07663387451b72c2818a26c8f28a949d19bda3840",
+      "source": "证券交易委员会",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-102-sec-host-virtual-national-compliance-outreach-seminar-investment-companies-investment-advisers"
+    },
+    {
+      "date": "2026-10-05",
+      "field": "title",
+      "item_id": "02614bc4ada56ebb4442bea76bf12c58dac431608d2c6feb0808c9a3900eee69",
+      "manual_translation": "改革英国资本市场，使其更有效地服务经济发展",
+      "original_sha256": "31abcac0ccd07ca72093644701d988209afd6e6c139ac9464cd09d793b386974",
+      "source": "金融行为监管局",
+      "url": "https://www.fca.org.uk/news/speeches/reforming-uk-capital-markets-ensure-they-work-well-our-economy"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "title",
+      "item_id": "0a32f45fd1df9365d1707ac478d45162cd9b75c4b10ef290a03239a33d00cea0",
+      "manual_translation": "EIOPA明确对私募股权支持的保险公司实施监管的欧盟统一预期",
+      "original_sha256": "0159243b0834c42846a87020a609b39b7911bb49b6b824673e19062a3e3b6946",
+      "source": "欧洲保险和职业养老金管理局",
+      "url": "https://www.eiopa.europa.eu/eiopa-sets-eu-wide-expectations-supervision-private-equity-backed-insurers-2026-10-06_en"
+    },
+    {
+      "date": "2026-10-05",
+      "field": "title",
+      "item_id": "0cf67c7e9e31a0ef599532bc995d3a068119e5a2c3f451a3047c6ccd69949440",
+      "manual_translation": "Cboe Global Markets公布2026年9月交易量",
+      "original_sha256": "5e2088bdab104296aa6a69912a0be84ccc2cf71fe4b5360584a788b384f07d15",
+      "source": "芝加哥期权交易所",
+      "url": "https://ir.cboe.com/news/news-details/2026/Cboe-Global-Markets-Reports-Trading-Volume-for-September-2026/default.aspx"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "130493b3b76256a216810a640252573679884a7248ce3f5b9154983cf69edf1a",
+      "manual_translation": "第四次印英金融市场对话：联合声明",
+      "original_sha256": "a64fc35299ba7e72906b6d257bf935f98e52a472afa4011e4fea6eca81c31e66",
+      "source": "英国财政部",
+      "url": "https://www.gov.uk/government/publications/india-uk-4th-financial-markets-dialogue-joint-statement"
+    },
+    {
+      "date": "2026-10-08",
+      "field": "title",
+      "item_id": "171f435aff4847a2106b419f79b7f1eeea362c107c58ead78f9d216a4b2cc699",
+      "manual_translation": "EIOPA就更注重比例原则和监管成效的保险类投资产品销售监管征求意见",
+      "original_sha256": "e7344394b87f688f46f026a6b67c8bea0a8238f8f68ba189db4ce8502300d11f",
+      "source": "欧洲保险和职业养老金管理局",
+      "url": "https://www.eiopa.europa.eu/eiopa-seeks-views-more-proportionate-and-outcomes-focused-supervision-sales-insurance-based-2026-10-08_en"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "summary",
+      "item_id": "17e6bbb099b6aa4b84727009fbba5b6b0f68f4658bfb97a964cf648b83836d7c",
+      "manual_translation": "欧洲保险和职业养老金管理局（EIOPA）发布监管声明，涉及与私募股权相关的保险及再保险公司的许可审批和持续监管。该声明面向各国监管机构，旨在促进对私募股权支持的（再）保险公司开展统一、高质量且以风险为本的监管。",
+      "original_sha256": "646f6f9b7eb6886d01833a9977957fdc1af3d0d3fdb7ef3f3f82d93849b0d949",
+      "source": "欧洲保险和职业养老金管理局",
+      "url": "https://www.eiopa.europa.eu/eiopa-sets-eu-wide-expectations-supervision-private-equity-backed-insurers-2026-10-06_en"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "1c71278375032e12738e384b10fa3a3c1d88429e529b4239b8ba22c8067e6fec",
+      "manual_translation": "美国联邦公开市场委员会2026年9月15日至16日会议纪要",
+      "original_sha256": "19bf593907ffcb36bf0af77df07aba4b0d3207f3528f238cebd6c7d6864d2340",
+      "source": "联邦储备系统",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm"
+    },
+    {
+      "date": "2026-10-08",
+      "field": "summary",
+      "item_id": "1c963bc89bab08e906f922940c4c915f080c1850355f218c415dd0d3f63278f9",
+      "manual_translation": "加拿大证券管理机构（CSA）宣布发布《国家文书31-103：注册要求、豁免及注册人持续义务》的最终修订，禁止公开发售投资基金分销中的佣金追回（chargeback）安排。",
+      "original_sha256": "a207c7ad26a75837cfb85725cef63b05bcb4715f3541ca7e977ac944cdcfb8ab",
+      "source": "加拿大安大略省证券委员会",
+      "url": "https://www.osc.ca/en/news-events/news/canadian-securities-regulators-publish-final-amendments-prohibiting-chargebacks-investment-fund"
+    },
+    {
+      "date": "2026-10-11",
+      "field": "title",
+      "item_id": "1d30ff4612eb00832d23bc1635e0441ed9e356669340b6bcacb09edbfa35b7f4",
+      "manual_translation": "IOSCO启动第十届世界投资者周",
+      "original_sha256": "6fa3ec1f2e819914135301a5ef67cfe13ca4c904dd6fb921385104f60c6c118c",
+      "source": "国际证监会组织",
+      "url": "https://www.iosco.org/news/pdf/IOSCONEWS803.pdf"
+    },
+    {
+      "date": "2026-10-08",
+      "field": "title",
+      "item_id": "1e6fdb404ebe1be4fe79c93e58efe91addb00c7d33a1003d0487fd9cd2e251d6",
+      "manual_translation": "关于仅因持续经营问题而被出具无法表示意见审计报告的财务报表的联合声明",
+      "original_sha256": "b12237f4f36b265af704cfb469ae34e3bcc0cdcf905779b727ae3d07f9b26c72",
+      "source": "香港证券及期货事务监察委员会",
+      "url": "https://www.sfc.hk/-/media/EN/files/ER/Policy-statements-and-announcements/Joint-Statement-on-Financial-Statements-with-Disclaimer-of-Opinion-solely-relating-to-Going-Concern.pdf?rev=3ca2139082334932a198131df168ebed&hash=7BD82BA16FF8F3FB9340ECC88667F0F3"
+    },
+    {
+      "date": "2026-10-08",
+      "field": "title",
+      "item_id": "328e2cf4bba52cf56581866b320c6c6af46b487ab91b8fb9181c299974f77143",
+      "manual_translation": "LCH Ltd自我认证：修订董事会保留事项清单",
+      "original_sha256": "892f608a1b92721e29b7dc4985bffa76345abf6a14a3ecc77edfc2bd674e46fc",
+      "source": "LCH",
+      "url": "https://www.lseg.com/content/dam/post-trade/en_us/documents/lch/proposed-rule-changes/lch-ltd/lch-limited-self-certification-amendments-to-the-schedule-of-matters-reserved-to-the-board.pdf"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "summary",
+      "item_id": "35d0d78499d3b6a25bd062b61ec98774334e0a67025822f91b90c3e2394f3fbc",
+      "manual_translation": "EEX集团公布其2026年9月月度交易量，并介绍了相关业务变化。",
+      "original_sha256": "471a4e16ad1672bcfa545a91163a8087a2a9798a26283c495183dd2878adc21b",
+      "source": "EEX",
+      "url": "https://www.eex.com/en/newsroom/detail?tx_news_pi1%5Baction%5D=detail&tx_news_pi1%5Bcontroller%5D=News&tx_news_pi1%5Bnews%5D=15685&cHash=174cd5b4f5d4afa086a1f395c4e2778e"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "title",
+      "item_id": "35e455cad655c8175ab519ef3809988ef4963f77b596bc37ef2669dc8fc8a439",
+      "manual_translation": "Eurex拓展日本股票衍生品业务",
+      "original_sha256": "89ee91e4a6ab2cbcdd8ab459f6ae0c7960087764f2213490654cc9e0f6a0780c",
+      "source": "德意志交易所集团官网",
+      "url": "https://www.cashmarket.deutsche-boerse.com/cash-en/Stay-Informed/newsroom/press-releases/Eurex-Expands-into-Japanese-Equity-Derivatives--5613110"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "42cf2d1b79a8f9a33044ec97763d230c33ad826781ddefe0a0b721b7ac115183",
+      "manual_translation": "Eurex公布2026年9月交易数据",
+      "original_sha256": "0937582fdb36c85131e46afebb866a61c4c4a99d38f2a018168c406ed2fbe702",
+      "source": "德意志交易所集团官网",
+      "url": "https://www.cashmarket.deutsche-boerse.com/cash-en/Stay-Informed/newsroom/press-releases/September-2026-Figures-at-Eurex-5615298"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "46cccd8061e732026d175782a4eae568a695f05c397a572f3a32952269a38222",
+      "manual_translation": "Clearstream与Brookfield合作扩大投资者进入私募市场的渠道",
+      "original_sha256": "e51e20262de4dc2a28b1bdc652c9e7e483f3fc4348c8fc662690924827c5ff5a",
+      "source": "明讯银行",
+      "url": "https://www.clearstream.com/clearstream-en/newsroom/261007-5615250"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "summary",
+      "item_id": "4a828dddd09a059ac2627f22115f4da00cc8c9b098b1a82b21112665fd2bcf3a",
+      "manual_translation": "EEX表示，如需更多相关信息，可与其联系。",
+      "original_sha256": "605e448dc2d68fce15dcf81730550afa278dfa0f30dbbb7d69962eca467d98b3",
+      "source": "EEX",
+      "url": "https://www.eex.com/en/newsroom/detail?tx_news_pi1%5Baction%5D=detail&tx_news_pi1%5Bcontroller%5D=News&tx_news_pi1%5Bnews%5D=15684&cHash=872e723399050902cb10c4cfb0b4e462"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "title",
+      "item_id": "4bee845981d066c5a191076d989b1a180fe9d7e4ec51e77a9d91ee999d4f34fa",
+      "manual_translation": "皮耶罗·奇波洛内：数字时代的货币——数字欧元、代币化与中央银行的角色",
+      "original_sha256": "98007a8a0eff093d0c3f11632585660ffd2178c207eadc8922defaef67cbd362",
+      "source": "欧洲中央银行",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261006~0da978f159.en.html"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "title",
+      "item_id": "4ebe6e6882e3beb8a8dad5087cf769310b13819c90f2e3d22b8ae93dff12e8f8",
+      "manual_translation": "SEC就“择优分配交易”案请求对Western Asset前联席首席投资官Ken Leech作出最终判决",
+      "original_sha256": "71288f1aabb082cf5a61dbed42b364b347c14c6a4e7223b49e4919927b836875",
+      "source": "证券交易委员会",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-103-sec-seeks-final-judgment-against-former-western-asset-co-cio-ken-leech-cherry-picking-case"
+    },
+    {
+      "date": "2026-10-08",
+      "field": "title",
+      "item_id": "4fb1eca0b328c895c60a217b62a589ba26196eb8bdf62831f24a73da0eceacb6",
+      "manual_translation": "香港金融管理局：2027年到期银色债券系列第四次利息支付的利率",
+      "original_sha256": "8543150d5f90dd4750e912b2b2f695eaa7c710d4209967d9a0a97161f9d2317a",
+      "source": "香港金融管理局",
+      "url": "https://www.hkma.gov.hk/eng/news-and-media/press-releases/2026/10/20261008-3/"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "55c7d6f6b24f4c87d0925dcd03c70512ea3bda6492b58a4ec44769b88413c717",
+      "manual_translation": "2026年9月欧元计价证券融资及场外衍生品市场信贷条款调查结果（SESFOD）",
+      "original_sha256": "2379bcdd977feb871053f27f351d7284338898c5c4cf6b2d03dd8f39e363e72d",
+      "source": "欧洲中央银行",
+      "url": "https://www.ecb.europa.eu//press/pr/date/2026/html/ecb.pr261007~6447350434.en.html"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "title",
+      "item_id": "5ad1ecdb4d0fadeb9c2831545d3477e2b11b86554a6c3dcf14c945112cb58ea2",
+      "manual_translation": "美乌重建投资基金批准能源及关键矿产领域新增投资与合作",
+      "original_sha256": "b774c0dbeba8b47874e28ee6c2821bf7919e1c39b00db2f679439a769bd8a00a",
+      "source": "美国财政部",
+      "url": "https://home.treasury.gov/news/press-releases/sb0648/"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "summary",
+      "item_id": "5db8a6ad5da8652c7be3c9838a7662324c631dabc1612a20ebdd6e5ede191c8a",
+      "manual_translation": "加拿大证券管理机构（CSA）在投资者教育月期间提醒投资者：面对日益增多的网络投资信息和机会，应坚持长期投资目标，并审慎评估、核实网上所见信息。",
+      "original_sha256": "b6fae31411ca460c794dc430ea713c14b0fa730b500742a4d6d90f7712f17c15",
+      "source": "加拿大安大略省证券委员会",
+      "url": "https://www.osc.ca/en/news-events/news/csa-encourages-informed-investing-and-fraud-prevention-during-investor-education-month"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "64becde0c81b283f2ee7b9a1dadf9bfe04634f95271683e8d7441ef70c1c00cf",
+      "manual_translation": "Cboe Clear Europe将证券融资交易清算服务拓展至美国股票",
+      "original_sha256": "ad65a9484aa6caf891b291315825da6cf4ae40534b39ad6ccc793a4a2689cfa8",
+      "source": "芝加哥期权交易所",
+      "url": "https://ir.cboe.com/news/news-details/2026/Cboe-Clear-Europe-Expands-Securities-Financing-Transactions-Clearing-Service-to-U-S--Equities/default.aspx"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "summary",
+      "item_id": "68af1bcf54ebc4118660503428e4079113848de2fe1f9345f40cb56fd55157cf",
+      "manual_translation": "美国证券交易委员会（SEC）提议修订《投资公司法》有关“交叉交易”的规则。现行规则允许注册基金在满足特定条件时与其关联方进行证券交易。",
+      "original_sha256": "f6044b4c33a9ea9ff382e85748f2ca35462fe5948a85cf0fd96cd5e81920a930",
+      "source": "证券交易委员会",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-104-sec-proposes-expanding-securities-eligible-cross-trading-registered-funds"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "summary",
+      "item_id": "6c69f784aa1a94214aabfc7e11a8ea9eb0d4f25bd38a503801baded12b4865b0",
+      "manual_translation": "该文件是英国财政部与印度财政部发布的联合声明，公开记录了2026年9月29日（星期二）举行的第四次金融市场对话所讨论的事项。",
+      "original_sha256": "8470eebda12190959e19ca558232333710bcfcee2f69a272278d392cac0db933",
+      "source": "英国财政部",
+      "url": "https://www.gov.uk/government/publications/india-uk-4th-financial-markets-dialogue-joint-statement"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "summary",
+      "item_id": "6d57eb62087a9db335bd5b136ad6e4db26f7a7cfae86752c2d8abf77c47b2b3a",
+      "manual_translation": "泛欧流动性加速提升：Eurex股票指数衍生品2026年第三季度回顾。",
+      "original_sha256": "4fd35fe3310a6c32718fb6fb6227cc18fe7a22b9f9af719a30a2feaee09f6c30",
+      "source": "欧洲期交所",
+      "url": "https://www.eurex.com/ex-en/find/news-center/news/equity-index-market-briefing-october-5619442"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "title",
+      "item_id": "6ef24896ce5a20cb99b98a625610c90dfbaefd94566235cf48905ce460cbcedf",
+      "manual_translation": "SEC提议扩大注册基金可进行关联方交叉交易的证券范围",
+      "original_sha256": "0e601aad4df9aec039a528e42010b8565f83a4a83ab5fce86b520bf3b13f102b",
+      "source": "证券交易委员会",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-104-sec-proposes-expanding-securities-eligible-cross-trading-registered-funds"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "title",
+      "item_id": "6ef39c623d11fbb8f2a43bc9a93690d2f846099788fea9cc79269cbf5d6cbe75",
+      "manual_translation": "CFTC发布临时最终规则，将部分活动排除在“互换”定义之外",
+      "original_sha256": "942701034ecabd8ea4b69c5f957d1c02e36c8472aea6e7b87402fb943196afcc",
+      "source": "商品期货交易委员会",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9309-26"
+    },
+    {
+      "date": "2026-10-08",
+      "field": "summary",
+      "item_id": "764236334bf1a8b73cd10034db7c13c6f2a02f4f09c20c3fe6b01f7aeb2370c6",
+      "manual_translation": "香港金融管理局作为香港特别行政区政府代表，于10月8日公布2027年到期银色债券系列第四次付息所适用的年利率。",
+      "original_sha256": "cb613828bedc9dfc1a4e2ed4d9d8fa6d003559cb3ab503d24ff28bbe86aefa4f",
+      "source": "香港金融管理局",
+      "url": "https://www.hkma.gov.hk/eng/news-and-media/press-releases/2026/10/20261008-3/"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "title",
+      "item_id": "7930e87d86517a80f45323d256f24dc39032d251f8dbdd06d7dd6713f12c4067",
+      "manual_translation": "CFTC就将特定事件合约纳入“互换”定义的拟议规则征求公众意见",
+      "original_sha256": "cfcfc067a54fad5d186696286651f756988636a9d9472e902109a4fb323dd96a",
+      "source": "商品期货交易委员会",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9310-26"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "7afe178461526715a875ebd5ae5cff82805362bc7b2bd6644c54538a61c01002",
+      "manual_translation": "数据更正：EEX欧洲天然气指数（EGIX）2026年10月5日交易日的日度和月度数值",
+      "original_sha256": "6cf98f377fd09b6ce226c4d9f38179c7eff85115e21861cf925e5798fdcbe5be",
+      "source": "EEX",
+      "url": "https://www.eex.com/en/newsroom/detail?tx_news_pi1%5Baction%5D=detail&tx_news_pi1%5Bcontroller%5D=News&tx_news_pi1%5Bnews%5D=15684&cHash=872e723399050902cb10c4cfb0b4e462"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "7ce3c9c50df9788fcb13782b2687c8c0d1a4aa29d0fd04329a1fbad58788e0e3",
+      "manual_translation": "安大略省证券委员会（OSC）发布2026年注册、检查与审查部门年度报告",
+      "original_sha256": "0331a04caa2a7274eee66b215adfef084310f52d60e9b21ebf436c23f3719eaf",
+      "source": "加拿大安大略省证券委员会",
+      "url": "https://www.osc.ca/en/news-events/news/osc-publishes-rie-division-2026-annual-report"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "title",
+      "item_id": "7f21678b195f520a1b81eea2e150677330d87811a431bf1e397cbc20e861736a",
+      "manual_translation": "SEC将为投资公司及投资顾问举办全国线上合规交流研讨会",
+      "original_sha256": "5adaee4aa991e33dd41da42c27bfa3f216cda98bab8b256be8a69f942135c8a0",
+      "source": "证券交易委员会",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-102-sec-host-virtual-national-compliance-outreach-seminar-investment-companies-investment-advisers"
+    },
+    {
+      "date": "2026-10-08",
+      "field": "title",
+      "item_id": "85fa5ee631f4adf95317c2804a542dede6eaf3a39b08e3f84a33f2057cf8a670",
+      "manual_translation": "加拿大证券监管机构发布禁止投资基金分销中佣金追回安排的最终修订",
+      "original_sha256": "4f704fa6273045683c016d83233a22c4faa67d95a952528161e81cdde18e510f",
+      "source": "加拿大安大略省证券委员会",
+      "url": "https://www.osc.ca/en/news-events/news/canadian-securities-regulators-publish-final-amendments-prohibiting-chargebacks-investment-fund"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "summary",
+      "item_id": "8694fa76267871060d4f7cc7e7a5d5927682d51c3efcd4b138ec565168025015",
+      "manual_translation": "美国—乌克兰重建投资基金（URIF）批准多项新投资，以推进两国共同的经济和战略利益。有关投资旨在增强关键供应链的安全性。",
+      "original_sha256": "ae9388393b855ae19d21ff111690e1308aa6871c3c8d00f82ae5dd90e0f50360",
+      "source": "美国财政部",
+      "url": "https://home.treasury.gov/news/press-releases/sb0648/"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "summary",
+      "item_id": "91d1770ca40efdbf3a1b1b96fdd24c7bb13e395ba882a7400ea1a1b84c2f9844",
+      "manual_translation": "Eurex计划自2026年11月2日起推出日本个股期货（SSF）和个股股息期货（SSDF）交易。",
+      "original_sha256": "41e61e87620b6f7cbcc18b58d310ca9d423f3452128c1f84a6da261d520431bc",
+      "source": "德意志交易所集团官网",
+      "url": "https://www.cashmarket.deutsche-boerse.com/cash-en/Stay-Informed/newsroom/press-releases/Eurex-Expands-into-Japanese-Equity-Derivatives--5613110"
+    },
+    {
+      "date": "2026-10-08",
+      "field": "summary",
+      "item_id": "954613baaaa8b2e3f630b390ae025995ce0d2f55a8e28970a031eb903500807c",
+      "manual_translation": "欧洲保险和职业养老金管理局（EIOPA）在现有监管框架下启动公开咨询，征求对其监管声明草案的意见。该草案旨在对保险类投资产品（IBIPs）的销售流程及订约前信息披露实施更注重监管成效的监督。",
+      "original_sha256": "df30a70440d920881d73a344ed78e1c7450d9a1b5ec2b2e74f3349f24b715b19",
+      "source": "欧洲保险和职业养老金管理局",
+      "url": "https://www.eiopa.europa.eu/eiopa-seeks-views-more-proportionate-and-outcomes-focused-supervision-sales-insurance-based-2026-10-08_en"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "title",
+      "item_id": "9abdd17b203de4bcd7080788839f278e180fb216e4feeeae66f4c21b558ef53d",
+      "manual_translation": "SDAX指数临时调整",
+      "original_sha256": "170a576c2657583e6dcc25249d8fe511140a0db3552002481d0b30e34298d1c0",
+      "source": "ISS STOXX",
+      "url": "https://www.iss-stoxx.com/press-releases/unscheduled-adjustment-in-sdax-4/"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "summary",
+      "item_id": "9bdb7d7fc939f24d0ed07953d2f78f084664771bee9b886de115dd205191a66d",
+      "manual_translation": "美国商品期货交易委员会（CFTC）发布拟议规则制定通知（NPRM），拟通过进一步明确“互换”（swap）的定义、将特定事件合约纳入其中，以提高市场监管规则的清晰度。",
+      "original_sha256": "cee3384b38c903800cfd1c29f19f72cde9b5480720c63c1f555c6d3d373ffd6f",
+      "source": "商品期货交易委员会",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9310-26"
+    },
+    {
+      "date": "2026-10-05",
+      "field": "summary",
+      "item_id": "a932629442aabd6df3eb8499e139b5556fc15fab4d3c0686fd80c8e67bd7b8d0",
+      "manual_translation": "巴塞尔银行监管委员会27个成员司法管辖区中，已有约四分之三公布了落实整套《巴塞尔协议Ⅲ》标准的法规。几乎所有成员司法管辖区均已公布银行落实相关标准的时间要求。",
+      "original_sha256": "b9594068d578854f99ab2d1fd5d4999d30e5a8a6ac223caa77d15e211474d9f2",
+      "source": "巴塞尔银行监管委员会",
+      "url": "https://www.bis.org/media-releases/20261005-basel-iii-applicable-almost-all-member-jurisdictions-2027"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "summary",
+      "item_id": "aad85eebb9bca54064ba9891eb9db7c45a041a270b82634244e0a33eb4036735",
+      "manual_translation": "Cboe Global Markets宣布，其泛欧清算机构Cboe Clear Europe计划自2026年10月中旬起，把证券融资交易（SFT）中央清算服务扩展至可用于证券借贷的美国股票，初期覆盖罗素3000指数成分股及美国上市规模最大的500只ETF，合计涉及超过3,500只美国股票及ETF。该机构称，此举将推动建立覆盖欧美股票、ETF及固定收益工具的中央对手方（CCP）证券借贷清算服务，并计划逐步将服务范围扩展至Cboe约12,000只美国股票交易标的。",
+      "original_sha256": "f2f1eef610a0bc9c8c69588f28351b8851f787e4d8bee74cdbafca030c289d11",
+      "source": "芝加哥期权交易所",
+      "url": "https://ir.cboe.com/news/news-details/2026/Cboe-Clear-Europe-Expands-Securities-Financing-Transactions-Clearing-Service-to-U-S--Equities/default.aspx"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "title",
+      "item_id": "b4c4d27ec48e6c14afc436ed2a2f0fbac3623f6db7de30f8e77691a39ebd0c71",
+      "manual_translation": "EEX集团公布2026年9月交易量",
+      "original_sha256": "07b410660304f069d4aea21a7f98f55df09b62138e3cfc022b1b80e5abe6b8aa",
+      "source": "EEX",
+      "url": "https://www.eex.com/en/newsroom/detail?tx_news_pi1%5Baction%5D=detail&tx_news_pi1%5Bcontroller%5D=News&tx_news_pi1%5Bnews%5D=15685&cHash=174cd5b4f5d4afa086a1f395c4e2778e"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "summary",
+      "item_id": "c60d04dcab9144fb0e92a9ac78c4d72047ab8e363a93ec75b6a0d1d02d607a40",
+      "manual_translation": "2026年9月，Eurex上市衍生品总体交易量增长45%；场外清算业务表现强劲。",
+      "original_sha256": "e465a4ff769a979d82f0ca9d4291cfc280584865db24794931a0d36cb078b8ba",
+      "source": "德意志交易所集团官网",
+      "url": "https://www.cashmarket.deutsche-boerse.com/cash-en/Stay-Informed/newsroom/press-releases/September-2026-Figures-at-Eurex-5615298"
+    },
+    {
+      "date": "2026-10-05",
+      "field": "summary",
+      "item_id": "cc3fdcc38b78507063ff4aba2f2c9026a6d515ac7d9b47418de15a1d426306e4",
+      "manual_translation": "全球市场运营商Cboe Global Markets公布2026年9月各业务线交易量统计，并提供2026年第三季度部分单张合约收入（RPC）及净收入获取指标的指引。其月度交易量及RPC/净收入报告汇总各业务板块交易统计、市场份额、部分指数产品成交量，以及滞后一个月披露的RPC/净收入获取情况。数据显示，9月多市场挂牌期权日均交易量为1,538.2万张，去年同期为1,527.3万张，同比增长0.7%；指数期权日均交易量为642.2万张，去年同期为525.0万张，同比增长22.3%。",
+      "original_sha256": "d6f9d8b174d6eb9bd4fd54d1764fd8a2ee3b33c490a8ffc0a2d56f5f2bcc54dc",
+      "source": "芝加哥期权交易所",
+      "url": "https://ir.cboe.com/news/news-details/2026/Cboe-Global-Markets-Reports-Trading-Volume-for-September-2026/default.aspx"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "title",
+      "item_id": "cd344fe0830df7692173a36186fed77a2f571211b2ff2d582cba389bc19f55ff",
+      "manual_translation": "弗兰克·埃尔德森：通过及时整改实现有效监管",
+      "original_sha256": "4392df01f3cbcca7dd3998f761999830a21a3c5c27798dfc2a56ff015e2a5913",
+      "source": "欧洲中央银行",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261006_1~0df91e4e44.en.html"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "summary",
+      "item_id": "d42266a632649de117ce0297bd331d9b1a9713db2c939792c195a5c9eddb591f",
+      "manual_translation": "德意志交易所集团（Deutsche Börse Group）旗下交易后业务Clearstream与全球另类资产管理机构Brookfield宣布建立合作伙伴关系，以扩大投资者进入私募市场的渠道。合作涉及Brookfield在卢森堡注册的常青型私募市场基金，包括基础设施相关基金。",
+      "original_sha256": "64e32d78aefec1f69814e4ff7aa186ca8a46b97060bd2d583b89c6cb17a70f9e",
+      "source": "明讯银行",
+      "url": "https://www.clearstream.com/clearstream-en/newsroom/261007-5615250"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "summary",
+      "item_id": "d6a5c0af1dba55e6f8ce690661204e85aec06b50fadbda1433345d53f4026054",
+      "manual_translation": "美国证券交易委员会（SEC）向法院申请对投资顾问Western Asset Management Company LLC的前联席首席投资官Stephen Kenneth Leech II作出经同意的最终判决。",
+      "original_sha256": "891d34ebc462544519903a3cb4ad90827dd7b04f738620c929304ea4ed2413ad",
+      "source": "证券交易委员会",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-103-sec-seeks-final-judgment-against-former-western-asset-co-cio-ken-leech-cherry-picking-case"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "summary",
+      "item_id": "d8c175e6780bc0e4f851a0589da1fd38a98ddfe355bf59bc05aae6b3badfc409",
+      "manual_translation": "Nasdaq公布2026年9月交易量，以及截至2026年9月30日季度的交易量、预估单位交易收入、上市数量和指数统计数据；相关数据表已登载于其投资者关系网站。",
+      "original_sha256": "0d99f5ef6726a1ac7d9b3ff53c6124f9beba925c0d65efaead86235ccb028e5e",
+      "source": "纳斯达克公司",
+      "url": "https://www.nasdaq.com/press-release/nasdaq-reports-september-2026-volumes-and-3q26-statistics-2026-10-07"
+    },
+    {
+      "date": "2026-10-05",
+      "field": "title",
+      "item_id": "dfac31235fda947be9c716762f2e3062d5e3ad2d7444df871bf84006249c52ab",
+      "manual_translation": "CFTC就加密资产交易和市场监管规则的拟议规则制定预先通知征求公众意见",
+      "original_sha256": "c0d30541399d7374bd4ee23a81113d723fa5b8fad87ce7e9d848e5d911757c74",
+      "source": "商品期货交易委员会",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9307-26"
+    },
+    {
+      "date": "2026-10-05",
+      "field": "summary",
+      "item_id": "e3c13f0a12363740f029e73ee6f98e9fa256b68d4a26f106821859a688156fcb",
+      "manual_translation": "美国商品期货交易委员会（CFTC）发布拟议规则制定预先通知（ANPRM），就是否建立适用于《商品交易法》第2(c)(2)(D)条所涉加密资产交易和市场的综合监管框架征求公众意见。",
+      "original_sha256": "8cdaf014161924743bed22afaf1a676aa426b917b70c733380037b90daab2361",
+      "source": "商品期货交易委员会",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9307-26"
+    },
+    {
+      "date": "2026-10-07",
+      "field": "summary",
+      "item_id": "e568b3a5094de3cb65bc8f79ac3f42da3bc40f3eaffa783cbbe423fb733fb30c",
+      "manual_translation": "安大略省证券委员会（OSC）发布其注册、检查与审查（RIE）部门2026年年度报告。报告主要关注OSC直接监管的注册机构及个人。",
+      "original_sha256": "722721b587950ef25f699e51e2f52e6b02b49290967674041357e04958958e33",
+      "source": "加拿大安大略省证券委员会",
+      "url": "https://www.osc.ca/en/news-events/news/osc-publishes-rie-division-2026-annual-report"
+    },
+    {
+      "date": "2026-10-05",
+      "field": "title",
+      "item_id": "ec5b2f090412179da7a538c3de9cbdd4006dd69850296f181790b0a0a7c53b75",
+      "manual_translation": "到2027年，《巴塞尔协议Ⅲ》将适用于几乎所有成员司法管辖区",
+      "original_sha256": "fc5377b5dadecf8687cb3987ade8043d51c92b405d146864a740da2d1c3356de",
+      "source": "巴塞尔银行监管委员会",
+      "url": "https://www.bis.org/media-releases/20261005-basel-iii-applicable-almost-all-member-jurisdictions-2027"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "title",
+      "item_id": "ee6eb5d5571980429f1fd051b801e6924c06744423e17acf0d102420d04dd0cd",
+      "manual_translation": "10月股指市场简报",
+      "original_sha256": "8cb6325e64eba16c8cd7e81ca8ccb1cf6d04422383839c3e36ef5c579cc6ba38",
+      "source": "欧洲期交所",
+      "url": "https://www.eurex.com/ex-en/find/news-center/news/equity-index-market-briefing-october-5619442"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "summary",
+      "item_id": "f8718d16bfb968f992bf00bf84f0a0f9173de0015dec7b7a6591511f923d8ffc",
+      "manual_translation": "美国商品期货交易委员会（CFTC）发布临时最终规则，将赌场式博彩产品——包括体育投注及赌场游戏中的投注——排除在“互换”（swap）的定义之外，以将CFTC长期以来的相关监管立场明确写入规则。",
+      "original_sha256": "ccf57e220f896d7e3ea190307f27588e61f886dc214b193415458744b49a0e18",
+      "source": "商品期货交易委员会",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9309-26"
+    },
+    {
+      "date": "2026-10-06",
+      "field": "title",
+      "item_id": "fae988297674666c02816fa7a64691b54aefc7476cb1251682b178007605d512",
+      "manual_translation": "加拿大证券监管机构在投资者教育月倡导理性投资和防范欺诈",
+      "original_sha256": "569ca09f4cfb5fad4dcb6b09d965185cb87a51edb790db70d3b3d143776a995b",
+      "source": "加拿大安大略省证券委员会",
+      "url": "https://www.osc.ca/en/news-events/news/csa-encourages-informed-investing-and-fraud-prevention-during-investor-education-month"
+    },
+    {
+      "date": "2026-10-09",
+      "field": "summary",
+      "item_id": "fc35e8f4055f372cd749b88f8752c80363b6a4fc8d3b134b70d4b7b00dbc5c47",
+      "manual_translation": "ISS STOXX集团旗下的STOXX Ltd.于2026年10月9日宣布对SDAX指数进行临时调整。由于Nagarro SE不符合相关基础纳入标准，该公司将被移出SDAX。",
+      "original_sha256": "c77689e81619bcd63f5cb17dbc3c2faa237f8dec346f07c789af0b25f69b26e6",
+      "source": "ISS STOXX",
+      "url": "https://www.iss-stoxx.com/press-releases/unscheduled-adjustment-in-sdax-4/"
+    }
+  ],
+  "schema_version": 1,
+  "week_start": "2026-10-05"
+}
