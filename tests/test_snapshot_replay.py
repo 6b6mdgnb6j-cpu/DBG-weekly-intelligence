@@ -110,20 +110,44 @@ class SnapshotReplayTests(unittest.TestCase):
             with self.assertRaises(snapshot_replay.SnapshotReplayError):
                 self.run_replay(tmp, week_start="2026-09-21")
 
-    def test_missing_required_file_is_rejected(self):
+    def assert_missing_snapshot_file(self, retained_filename, missing_filename, reverse_order=False):
         with tempfile.TemporaryDirectory() as tmp:
-            archive, digest, _ = self.make_snapshot(tmp)
+            archive, _, _ = self.make_snapshot(tmp)
             broken = Path(tmp, "broken.zip")
             with zipfile.ZipFile(archive) as source, zipfile.ZipFile(broken, "w") as target:
-                name = source.namelist()[0]
-                target.writestr(name, source.read(name))
+                name = next(name for name in source.namelist() if Path(name).name == retained_filename)
+                members = [(name, source.read(name)), ("README.txt", b"Incomplete test snapshot")]
+                for member_name, content in reversed(members) if reverse_order else members:
+                    target.writestr(member_name, content)
+            with zipfile.ZipFile(broken) as source:
+                filenames = {Path(name).name for name in source.namelist()}
+                self.assertIn(retained_filename, filenames)
+                self.assertNotIn(missing_filename, filenames)
             approved = Path(tmp, "approved.json")
             approved.write_text(json.dumps({"schema_version": 1, "week_start": WEEK, "overrides": []}))
-            with self.assertRaisesRegex(snapshot_replay.SnapshotReplayError, "source_status"):
+            with self.assertRaisesRegex(snapshot_replay.SnapshotReplayError, missing_filename) as caught:
                 snapshot_replay.replay_snapshot(
                     broken, hashlib.sha256(broken.read_bytes()).hexdigest(), WEEK, Path(tmp, "out"), approved,
                     "44", "old", "115", "debug", "99", "new",
                 )
+            self.assertFalse(Path(tmp, "out").exists())
+            return str(caught.exception)
+
+    def test_missing_required_file_is_rejected(self):
+        self.assert_missing_snapshot_file("weekly_data_20260928.json", "source_status_20260928.json")
+
+    def test_missing_weekly_data_is_rejected(self):
+        self.assert_missing_snapshot_file("source_status_20260928.json", "weekly_data_20260928.json")
+
+    def test_missing_required_files_are_rejected_regardless_of_archive_order(self):
+        for retained, missing in (
+            ("weekly_data_20260928.json", "source_status_20260928.json"),
+            ("source_status_20260928.json", "weekly_data_20260928.json"),
+        ):
+            with self.subTest(missing=missing):
+                forward = self.assert_missing_snapshot_file(retained, missing)
+                reverse = self.assert_missing_snapshot_file(retained, missing, reverse_order=True)
+                self.assertEqual(forward, reverse)
 
     def test_identity_hash_conflict_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
