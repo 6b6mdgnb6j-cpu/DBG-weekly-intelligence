@@ -114,6 +114,46 @@ def make_bundle(root, weekly_overrides=None, qa_overrides=None):
 
 
 class AutomationPipelineContractTests(unittest.TestCase):
+    def test_snapshot_manifest_preserves_collection_and_replay_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_bundle(tmp)
+            provenance = {
+                "mode": "snapshot_replay",
+                "collection": {
+                    "run_id": "44", "commit_sha": "old", "artifact_id": "115",
+                    "artifact_name": "debug", "artifact_sha256": "a" * 64,
+                    "input_files": {"weekly.json": "b" * 64},
+                },
+                "replay": {
+                    "run_id": RUN_ID, "generation_sha": SHA,
+                    "approved_translations_sha256": "c" * 64,
+                    "override_results": {"applied": [], "absent": [], "identity_hash_conflict": [], "ambiguous": []},
+                },
+            }
+            write_review_manifest(tmp, WEEK, SHA, RUN_ID, snapshot_provenance=provenance)
+            manifest = validate_manifest(tmp, WEEK, source_run_id=RUN_ID, generation_sha=SHA, current_main_sha=SHA)
+            self.assertEqual(manifest["snapshot_provenance"]["collection"]["run_id"], "44")
+            self.assertEqual(manifest["snapshot_provenance"]["replay"]["run_id"], RUN_ID)
+
+    def test_snapshot_manifest_cannot_impersonate_generation_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_bundle(tmp)
+            provenance = {
+                "mode": "snapshot_replay",
+                "collection": {
+                    "run_id": "44", "commit_sha": "old", "artifact_id": "115",
+                    "artifact_name": "debug", "artifact_sha256": "a" * 64,
+                    "input_files": {"weekly.json": "b" * 64},
+                },
+                "replay": {
+                    "run_id": "44", "generation_sha": SHA,
+                    "approved_translations_sha256": "c" * 64, "override_results": {},
+                },
+            }
+            write_review_manifest(tmp, WEEK, SHA, RUN_ID, snapshot_provenance=provenance)
+            with self.assertRaisesRegex(AutomationValidationError, "replay run ID"):
+                validate_manifest(tmp, WEEK, source_run_id=RUN_ID, generation_sha=SHA)
+
     def test_review_artifact_name_is_week_scoped(self):
         self.assertEqual(review_artifact_name(WEEK), "weekly-report-review-2026-01-05")
         self.assertEqual(artifact_filename("manifest", WEEK), "review_manifest_20260105.json")
