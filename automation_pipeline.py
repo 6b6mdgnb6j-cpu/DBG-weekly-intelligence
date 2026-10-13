@@ -8,6 +8,7 @@ from pathlib import Path
 
 from qa_gate import FAIL, PASS, WARNING, file_sha256
 from crawler.manual_supplements import ManualSupplementError, validate_supplement_bundle
+from crawler.manual_editorial_summaries import EditorialSummaryError, validate_summary_bundle
 
 
 REVIEW_SCHEMA_VERSION = 1
@@ -234,6 +235,15 @@ def write_review_manifest(
             if not path.exists():
                 raise AutomationValidationError("approved supplement bundle input is missing")
             artifacts["editorial_supplements"] = {"filename": filename, "sha256": file_sha256(path)}
+        summaries = snapshot_provenance.get("editorial_summaries")
+        if summaries:
+            filename = summaries.get("artifact_filename")
+            if not filename or Path(filename).name != filename:
+                raise AutomationValidationError("unsafe editorial summary artifact filename")
+            path = output_dir / filename
+            if not path.exists():
+                raise AutomationValidationError("approved editorial summary bundle input is missing")
+            artifacts["editorial_summaries"] = {"filename": filename, "sha256": file_sha256(path)}
     manifest_path = artifact_path(output_dir, "manifest", week_start)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return manifest_path
@@ -347,8 +357,9 @@ def validate_manifest(bundle_dir, week_start, source_run_id=None, generation_sha
     if html_highlights is not None and html_highlights != qa_highlights:
         raise AutomationValidationError("HTML highlights count does not match QA report")
     try:
+        validate_summary_bundle(bundle_dir, weekly, (provenance or {}).get("editorial_summaries"), artifacts)
         validate_supplement_bundle(bundle_dir, weekly, (provenance or {}).get("editorial_supplements"), artifacts)
-    except (ManualSupplementError, OSError, ValueError, KeyError, TypeError) as exc:
+    except (ManualSupplementError, EditorialSummaryError, OSError, ValueError, KeyError, TypeError) as exc:
         raise AutomationValidationError(f"editorial supplement validation failed: {exc}") from exc
     return manifest
 

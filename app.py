@@ -140,6 +140,9 @@ def localized_title(item):
 
 
 def localized_summary(item):
+    editorial = item.get("editorial_summary") or {}
+    if editorial.get("origin") == "manual_editorial_summary" and editorial.get("approval_status") == "APPROVED":
+        return editorial.get("summary_cn") if current_language() == "中文" else editorial.get("summary_en")
     if current_language() == "中文":
         return item.get("summary_cn") or item.get("summary_original") or item.get("summary") or item.get("summary_en")
     return item.get("summary_en") or item.get("summary_original") or item.get("summary") or item.get("summary_cn")

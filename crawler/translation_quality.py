@@ -62,7 +62,7 @@ ACTION_DIRECTION_RULES = [
         ),
         ("允许", "许可", "经许可", "获准", "准许", "授权", "经授权", "持牌"),
     ),
-    ("increase", (r"\bincreas(?:e|es|ed|ing)\b", r"\brais(?:e|es|ed|ing)\b"), ("增长", "增加", "上升", "提升", "提高")),
+    ("increase", (r"\bincreas(?:e|es|ed|ing)\b", r"\brais(?:e|es|ed|ing)\b"), ("增长", "增加", "上升", "提升", "提高", "上调")),
     ("decrease", (r"\bdecreas(?:e|es|ed|ing)\b", r"\breduc(?:e|es|ed|ing|tion)\b", r"\bcut(?:s|ting)?\b"), ("下降", "减少", "下滑", "降低", "下调")),
 ]
 
@@ -593,7 +593,11 @@ def _title_proposition_issues(index, item):
         return []
     issues = []
     for anchor_id, original_patterns, translated_signals in SUBSTANTIVE_TITLE_ANCHORS:
-        if _contains_english(original, original_patterns) and not _contains_any(translated, translated_signals):
+        anchor_original = original
+        if anchor_id == "increase" and "规模化发展" in translated:
+            # Remove only this compound; independent growth/action anchors still require direction.
+            anchor_original = re.sub(r"\bgrowth\s+and\s+scale\b", " ", original, flags=re.I)
+        if _contains_english(anchor_original, original_patterns) and not _contains_any(translated, translated_signals):
             issues.append(
                 _issue(
                     index,

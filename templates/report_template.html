@@ -194,6 +194,10 @@
         : (item.title_en || item.title_original || item.title_cn);
     }
     function summaryFor(item) {
+      const editorial = item.editorial_summary;
+      if (editorial && editorial.origin === "manual_editorial_summary" && editorial.approval_status === "APPROVED") {
+        return lang === "cn" ? editorial.summary_cn : editorial.summary_en;
+      }
       return lang === "cn"
         ? (item.summary_cn || item.summary_original || item.summary || item.summary_en)
         : (item.summary_en || item.summary_original || item.summary || item.summary_cn);

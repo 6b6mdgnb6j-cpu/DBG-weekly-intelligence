@@ -128,8 +128,48 @@
       "title_cn": "MSCI推出SignalLab，为投资团队提供可信且整合的研究信号",
       "title_en": "MSCI Launches SignalLab Giving Investment Teams Access to Trusted and Integrated Signals",
       "url": "https://ir.msci.com/news-releases/news-release-details/msci-launches-signallab-giving-investment-teams-access-trusted"
+    },
+    {
+      "approval": {
+        "approved_at": "2026-10-13T12:03:53+08:00",
+        "reviewed_by": "6b6mdgnb6j-cpu"
+      },
+      "approval_status": "APPROVED",
+      "business_relevance": "衍生品合约结构、交易场所规则及客户保护；非单一执法案件、非永久许可、非加密币期货。",
+      "canonical_url": "https://www.cftc.gov/PressRoom/PressReleases/9308-26",
+      "category": "Macro",
+      "content_sha256": "69496cdfa5fed22dbbfafbdb0219d89b6d6b2c1e5d40009260431f48e40b6842",
+      "editorial_origin": "manual_editorial_supplement",
+      "official_title": "CFTC Issues No-Action Letter for DCMs Regarding Converting Existing Perpetual-Style Broad-Based Security Index Futures into True Perpetual Futures",
+      "publication_date": "2026-10-05",
+      "source_id": "SRC-013",
+      "source_name": "商品期货交易委员会",
+      "source_verification": {
+        "method": "official_release_review",
+        "notes": [
+          "衍生品合约结构、交易场所规则及客户保护；非单一执法案件、非永久许可、非加密币期货。",
+          "Exact bilingual draft reviewed and explicitly approved by the human user; official release date and content verified in the two-week audit."
+        ],
+        "official_title": "CFTC Issues No-Action Letter for DCMs Regarding Converting Existing Perpetual-Style Broad-Based Security Index Futures into True Perpetual Futures",
+        "official_url": "https://www.cftc.gov/PressRoom/PressReleases/9308-26",
+        "publication_date": "2026-10-05",
+        "verified_on": "2026-10-13"
+      },
+      "subcategory": "美国",
+      "summary_cn": "CFTC工作人员为指定合约市场（DCM）有条件地提供不采取执法行动安排，允许通过取消到期日，将现有永续型宽基证券指数期货转为真正永续期货。转换须满足客户保护及监管申报要求；该安排于2026年10月20日到期。",
+      "summary_en": "CFTC staff offered conditional no-action relief for designated contract markets converting existing perpetual-style broad-based security index futures into true perpetual futures by removing expiration dates. Customer protections and regulatory filings are required; the relief expires October 20, 2026.",
+      "supplement_id": "830d41de47ae110c515a87706b4cf8afaf181e3cf819685faf6d452d55ce8959",
+      "title_cn": "CFTC就DCM将现有永续型宽基证券指数期货转换为真正永续期货发出不采取执法行动函",
+      "title_en": "CFTC Issues No-Action Letter for DCMs Regarding Converting Existing Perpetual-Style Broad-Based Security Index Futures into True Perpetual Futures",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9308-26"
     }
   ],
+  "revision_approval": {
+    "approved_at": "2026-10-13T12:03:53+08:00",
+    "previous_file_sha256": "589f896a84d9559ae697d3e686e370aaa413fadc63b8bc1726fe128845d7e9d4",
+    "reviewed_by": "6b6mdgnb6j-cpu",
+    "scope": "Add the approved CFTC 9308-26 article only; preserve all four previous records and their approval."
+  },
   "schema_version": 1,
   "week_end": "2026-10-11",
   "week_start": "2026-10-05"

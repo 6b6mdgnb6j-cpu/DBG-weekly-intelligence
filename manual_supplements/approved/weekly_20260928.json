@@ -1,0 +1,114 @@
+{
+  "approval": {
+    "approved_at": "2026-10-13T12:03:53+08:00",
+    "reviewed_by": "6b6mdgnb6j-cpu"
+  },
+  "approval_status": "APPROVED",
+  "records": [
+    {
+      "approval": {
+        "approved_at": "2026-10-13T12:03:53+08:00",
+        "reviewed_by": "6b6mdgnb6j-cpu"
+      },
+      "approval_status": "APPROVED",
+      "business_relevance": "Eurex竞争、全球衍生品及利率市场规模。区别于10/08国际ADV新闻，但Q3全球数字重叠，编辑需避免重复强调。",
+      "canonical_url": "https://investor.cmegroup.com/news-releases/news-release-details/cme-group-reports-record-average-daily-volume-september-and-q3",
+      "category": "Competitor",
+      "content_sha256": "73613a12c56875a6c5cb0b2e7d491400b529ee5fedb5635d10e1c7aeb24d3da8",
+      "editorial_origin": "manual_editorial_supplement",
+      "official_title": "CME Group Reports Record Average Daily Volume for September and Q3, Driven by Growth Across Asset Classes",
+      "publication_date": "2026-10-02",
+      "source_id": "SRC-149",
+      "source_name": "芝加哥商品交易所集团",
+      "source_verification": {
+        "method": "official_release_review",
+        "notes": [
+          "Eurex竞争、全球衍生品及利率市场规模。区别于10/08国际ADV新闻，但Q3全球数字重叠，编辑需避免重复强调。",
+          "Exact bilingual draft reviewed and explicitly approved by the human user; official release date and content verified in the two-week audit."
+        ],
+        "official_title": "CME Group Reports Record Average Daily Volume for September and Q3, Driven by Growth Across Asset Classes",
+        "official_url": "https://investor.cmegroup.com/news-releases/news-release-details/cme-group-reports-record-average-daily-volume-september-and-q3",
+        "publication_date": "2026-10-02",
+        "verified_on": "2026-10-13"
+      },
+      "subcategory": "交易与清算",
+      "summary_cn": "CME Group公布9月日均成交量达3180万份合约，同比增长22%；第三季度达2940万份，同比增长16%。9月利率产品日均成交量达1620万份合约，同比增长22%。",
+      "summary_en": "CME Group reported September ADV of 31.8 million contracts, up 22% year over year, and Q3 ADV of 29.4 million, up 16%. September interest-rate ADV reached 16.2 million contracts, up 22%.",
+      "supplement_id": "9b3042ef3d80a716845e263cb895fd6dd855e4aa0f52e0da9a609a27ebb2bf44",
+      "title_cn": "CME Group公布9月及第三季度创纪录日均成交量，各资产类别推动增长",
+      "title_en": "CME Group Reports Record Average Daily Volume for September and Q3, Driven by Growth Across Asset Classes",
+      "url": "https://investor.cmegroup.com/news-releases/news-release-details/cme-group-reports-record-average-daily-volume-september-and-q3"
+    },
+    {
+      "approval": {
+        "approved_at": "2026-10-13T12:03:53+08:00",
+        "reviewed_by": "6b6mdgnb6j-cpu"
+      },
+      "approval_status": "APPROVED",
+      "business_relevance": "Clearstream及基金服务竞争、私募市场交易后基础设施。投资金额未披露，不补数字。",
+      "canonical_url": "https://www.dtcc.com/press-releases/2026/dtcc-and-icapital-collaborate-to-advance-private-market-infrastructure",
+      "category": "Competitor",
+      "content_sha256": "ae5df41b41617cfe740eb5d8fdb1ca56f376906831fe4748e48e1c1d658d395b",
+      "editorial_origin": "manual_editorial_supplement",
+      "official_title": "DTCC and iCapital Collaborate to Advance Private Market Infrastructure, Expand Access and Support the Industry’s Next Phase of Growth and Scale",
+      "publication_date": "2026-09-28",
+      "source_id": "SRC-184",
+      "source_name": "DTCC",
+      "source_verification": {
+        "method": "official_release_review",
+        "notes": [
+          "Clearstream及基金服务竞争、私募市场交易后基础设施。投资金额未披露，不补数字。",
+          "Exact bilingual draft reviewed and explicitly approved by the human user; official release date and content verified in the two-week audit."
+        ],
+        "official_title": "DTCC and iCapital Collaborate to Advance Private Market Infrastructure, Expand Access and Support the Industry’s Next Phase of Growth and Scale",
+        "official_url": "https://www.dtcc.com/press-releases/2026/dtcc-and-icapital-collaborate-to-advance-private-market-infrastructure",
+        "publication_date": "2026-09-28",
+        "verified_on": "2026-10-13"
+      },
+      "subcategory": "证券与基金服务",
+      "summary_cn": "DTCC与iCapital宣布合作，连接私募市场基础设施与投资流程；DTCC同时对iCapital作出战略投资。双方初期计划进一步整合DTCC的Alternative Investment Product（AIP）与iCapital平台。",
+      "summary_en": "DTCC and iCapital announced a collaboration connecting private-market infrastructure and investment workflows. DTCC also made a strategic investment in iCapital. Initial plans include further integration of DTCC's Alternative Investment Product with iCapital's platform.",
+      "supplement_id": "c2be4775ea0c480cc57a254820884cc78ffd4dc51254c0dd1b8aaa12d28cff9b",
+      "title_cn": "DTCC与iCapital合作推进私募市场基础设施，扩大准入并支持规模化发展",
+      "title_en": "DTCC and iCapital Collaborate to Advance Private Market Infrastructure, Expand Access and Support the Industry’s Next Phase of Growth and Scale",
+      "url": "https://www.dtcc.com/press-releases/2026/dtcc-and-icapital-collaborate-to-advance-private-market-infrastructure"
+    },
+    {
+      "approval": {
+        "approved_at": "2026-10-13T12:03:53+08:00",
+        "reviewed_by": "6b6mdgnb6j-cpu"
+      },
+      "approval_status": "APPROVED",
+      "business_relevance": "跨境衍生品交易与清算监管连续性；不是永久规则或委员会正式豁免。",
+      "canonical_url": "https://www.cftc.gov/PressRoom/PressReleases/9306-26",
+      "category": "Macro",
+      "content_sha256": "975e3d30da5aa811e2acf8e5cd78580c2f4a74b5bf92e4e39524845b27a51013",
+      "editorial_origin": "manual_editorial_supplement",
+      "official_title": "CFTC Staff Extends Brexit-Related No-Action Positions",
+      "publication_date": "2026-10-01",
+      "source_id": "SRC-013",
+      "source_name": "商品期货交易委员会",
+      "source_verification": {
+        "method": "official_release_review",
+        "notes": [
+          "跨境衍生品交易与清算监管连续性；不是永久规则或委员会正式豁免。",
+          "Exact bilingual draft reviewed and explicitly approved by the human user; official release date and content verified in the two-week audit."
+        ],
+        "official_title": "CFTC Staff Extends Brexit-Related No-Action Positions",
+        "official_url": "https://www.cftc.gov/PressRoom/PressReleases/9306-26",
+        "publication_date": "2026-10-01",
+        "verified_on": "2026-10-13"
+      },
+      "subcategory": "美国",
+      "summary_cn": "CFTC工作人员延长英国脱欧相关临时不采取执法行动安排，在评估英国相关等效性认定及豁免期间，维持英美衍生品交易和清算的监管确定性。",
+      "summary_en": "CFTC staff extended temporary Brexit-related no-action positions to maintain regulatory certainty for UK-US derivatives trading and clearing while relevant UK comparability determinations and exemptions are assessed.",
+      "supplement_id": "05b3b12ae7ee2463eb453e0f479e73d2102eab1e9ad347707596ff87f555a9e5",
+      "title_cn": "CFTC工作人员延长英国脱欧相关不采取执法行动安排",
+      "title_en": "CFTC Staff Extends Brexit-Related No-Action Positions",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9306-26"
+    }
+  ],
+  "schema_version": 1,
+  "week_end": "2026-10-04",
+  "week_start": "2026-09-28"
+}

@@ -45,6 +45,15 @@ on:
         description: Required SHA-256 of the approved editorial file when supplements are selected.
         required: false
         type: string
+      apply_editorial_summaries:
+        description: Apply approved empty-source summaries in explicit snapshot mode only.
+        required: false
+        default: false
+        type: boolean
+      editorial_summary_sha256:
+        description: Required SHA-256 of the approved editorial summary file.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -89,6 +98,8 @@ jobs:
           GENERATION_MODE: ${{ inputs.generation_mode || 'live' }}
           APPLY_SUPPLEMENTS: ${{ inputs.apply_editorial_supplements || false }}
           SUPPLEMENT_SHA256: ${{ inputs.supplement_sha256 }}
+          APPLY_SUMMARIES: ${{ inputs.apply_editorial_summaries || false }}
+          EDITORIAL_SUMMARY_SHA256: ${{ inputs.editorial_summary_sha256 }}
         run: |
           python3 - <<'PY'
           import os
@@ -105,6 +116,15 @@ jobs:
                   raise SystemExit("Approved supplement SHA-256 is required")
           elif digest:
               raise SystemExit("Supplement digest supplied without supplement selection")
+          summaries = os.environ.get("APPLY_SUMMARIES", "false") == "true"
+          summary_digest = os.environ.get("EDITORIAL_SUMMARY_SHA256", "")
+          if summaries:
+              if os.environ.get("GENERATION_MODE", "live") != "snapshot" or not raw:
+                  raise SystemExit("Editorial summaries require snapshot mode and an explicit week")
+              if not re.fullmatch(r"[0-9a-f]{64}", summary_digest):
+                  raise SystemExit("Approved editorial summary SHA-256 is required")
+          elif summary_digest:
+              raise SystemExit("Editorial summary digest supplied without selection")
           if raw:
               if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
                   raise SystemExit("week_start must use YYYY-MM-DD format")
@@ -215,6 +235,8 @@ jobs:
           MANUAL_OUTPUT_DIR: ${{ steps.requested_week.outputs.output_dir }}
           APPLY_SUPPLEMENTS: ${{ inputs.apply_editorial_supplements || false }}
           SUPPLEMENT_SHA256: ${{ inputs.supplement_sha256 }}
+          APPLY_SUMMARIES: ${{ inputs.apply_editorial_summaries || false }}
+          EDITORIAL_SUMMARY_SHA256: ${{ inputs.editorial_summary_sha256 }}
         run: |
           set +e
           if [ "$APPLY_SUPPLEMENTS" = "true" ] && [ "$GENERATION_MODE" != "snapshot" ]; then
@@ -227,6 +249,14 @@ jobs:
           fi
           if [ "$GENERATION_MODE" = "snapshot" ]; then
             supplement_args=()
+            summary_args=()
+            if [ "$APPLY_SUMMARIES" = "true" ]; then
+              if [ -z "$EDITORIAL_SUMMARY_SHA256" ]; then
+                echo "Approved editorial summary SHA-256 is required"
+                exit 1
+              fi
+              summary_args=(--editorial-summary-file "manual_editorial_summaries/approved/weekly_${{ steps.requested_week.outputs.compact_week_start }}.json" --editorial-summary-sha256 "$EDITORIAL_SUMMARY_SHA256")
+            fi
             if [ "$APPLY_SUPPLEMENTS" = "true" ]; then
               if [ -z "$SUPPLEMENT_SHA256" ]; then
                 echo "Approved supplement SHA-256 is required"
@@ -246,7 +276,8 @@ jobs:
               --collection-artifact-name "${{ inputs.snapshot_artifact_name }}" \
               --generation-run-id "${{ github.run_id }}" \
               --generation-sha "${{ github.sha }}" \
-              "${supplement_args[@]}"
+              "${supplement_args[@]}" \
+              "${summary_args[@]}"
           elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$MANUAL_WEEK_START" ]; then
             python3 run_weekly.py --start "$MANUAL_WEEK_START" --output-dir "$MANUAL_OUTPUT_DIR" --require-translation
           else
@@ -366,6 +397,7 @@ jobs:
             ${{ steps.weekly.outputs.output_dir }}/qa_report_${{ steps.weekly.outputs.compact_week_start }}.md
             ${{ steps.weekly.outputs.output_dir }}/review_manifest_${{ steps.weekly.outputs.compact_week_start }}.json
             ${{ steps.weekly.outputs.output_dir }}/editorial_supplements_${{ steps.weekly.outputs.compact_week_start }}.json
+            ${{ steps.weekly.outputs.output_dir }}/editorial_summaries_${{ steps.weekly.outputs.compact_week_start }}.json
 
       - name: Upload manual translation queue
         id: upload_manual_translation_queue
