@@ -4,7 +4,7 @@
   "translation_mode": "bilingual",
   "source_count": 68,
   "registered_source_count": 189,
-  "item_count": 43,
+  "item_count": 44,
   "items": [
     {
       "brand": "Cboe",
@@ -974,6 +974,34 @@
       "competitor_group": "",
       "competitor_type": "",
       "date": "2026-10-07",
+      "editorial_summary": {
+        "approval": {
+          "approved_at": "2026-10-13T12:03:53+08:00",
+          "reviewed_by": "6b6mdgnb6j-cpu"
+        },
+        "approval_status": "APPROVED",
+        "approved_file_sha256": "7d93ec65792e4bebc2695bf016318c6824c4e526a1c36954f30a8424cb823e3a",
+        "content_sha256": "c9ffc4a44e5bb53275a5f8530673524d1619eedd8c4577a36c45be629d3807ea",
+        "origin": "manual_editorial_summary",
+        "source_verification": {
+          "method": "official_document_review",
+          "official_urls": [
+            "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm",
+            "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260916.htm"
+          ],
+          "verified_facts": [
+            "Release page: October 7, 2026; full minutes: meeting September 15-16.",
+            "Committee Policy Actions and 12-0 vote: increase 25 basis points to 3.75-4.00 percent.",
+            "Participants and policy actions: elevated inflation and solid economic activity.",
+            "Policy outlook: most participants expected another increase by year end; future meetings depend on incoming information."
+          ],
+          "verified_on": "2026-10-13"
+        },
+        "summary_basis": "human_authored_summary_of_official_evidence",
+        "summary_cn": "美联储于10月7日公布9月15日至16日FOMC会议纪要。纪要显示，委员会一致同意将联邦基金利率目标区间上调25个基点至3.75%—4.00%，认为通胀仍然偏高，而经济活动保持稳健。多数与会者认为年底前可能还需进一步加息，但强调未来政策决定仍将取决于后续经济数据。",
+        "summary_en": "The Federal Reserve released the minutes of its September 15–16 FOMC meeting on October 7. The Committee unanimously raised the federal funds rate target range by 25 basis points to 3.75–4.00%, citing elevated inflation and resilient economic activity. Most participants considered another rate increase by year-end likely appropriate, while emphasizing that future decisions would depend on incoming economic data.",
+        "summary_id": "502c146012fb90794aa929fb9493b39574d7023d091de130ff15553c7db09b93"
+      },
       "mapped_dbg_business": "",
       "mapping_confidence": "",
       "mapping_reason": "",
@@ -1385,6 +1413,51 @@
       "title_original": "MSCI Launches SignalLab Giving Investment Teams Access to Trusted and Integrated Signals",
       "title_original_lang": "en",
       "url": "https://ir.msci.com/news-releases/news-release-details/msci-launches-signallab-giving-investment-teams-access-trusted"
+    },
+    {
+      "brand": "",
+      "category": "Macro",
+      "competitor_type": "",
+      "date": "2026-10-05",
+      "editorial_provenance": {
+        "approval": {
+          "approved_at": "2026-10-13T12:03:53+08:00",
+          "reviewed_by": "6b6mdgnb6j-cpu"
+        },
+        "approval_status": "APPROVED",
+        "content_sha256": "69496cdfa5fed22dbbfafbdb0219d89b6d6b2c1e5d40009260431f48e40b6842",
+        "origin": "manual_editorial_supplement",
+        "source_id": "SRC-013",
+        "source_verification": {
+          "method": "official_release_review",
+          "notes": [
+            "衍生品合约结构、交易场所规则及客户保护；非单一执法案件、非永久许可、非加密币期货。",
+            "Exact bilingual draft reviewed and explicitly approved by the human user; official release date and content verified in the two-week audit."
+          ],
+          "official_title": "CFTC Issues No-Action Letter for DCMs Regarding Converting Existing Perpetual-Style Broad-Based Security Index Futures into True Perpetual Futures",
+          "official_url": "https://www.cftc.gov/PressRoom/PressReleases/9308-26",
+          "publication_date": "2026-10-05",
+          "verified_on": "2026-10-13"
+        },
+        "summary_basis": "editorial_paraphrase_of_official_release",
+        "supplement_id": "830d41de47ae110c515a87706b4cf8afaf181e3cf819685faf6d452d55ce8959"
+      },
+      "official": true,
+      "priority": 1,
+      "relevance_reason": "official, priority=1",
+      "relevance_score": 2,
+      "source": "商品期货交易委员会",
+      "subcategory": "美国",
+      "summary": "CFTC staff offered conditional no-action relief for designated contract markets converting existing perpetual-style broad-based security index futures into true perpetual futures by removing expiration dates. Customer protections and regulatory filings are required; the relief expires October 20, 2026.",
+      "summary_cn": "CFTC工作人员为指定合约市场（DCM）有条件地提供不采取执法行动安排，允许通过取消到期日，将现有永续型宽基证券指数期货转为真正永续期货。转换须满足客户保护及监管申报要求；该安排于2026年10月20日到期。",
+      "summary_en": "CFTC staff offered conditional no-action relief for designated contract markets converting existing perpetual-style broad-based security index futures into true perpetual futures by removing expiration dates. Customer protections and regulatory filings are required; the relief expires October 20, 2026.",
+      "summary_original": "CFTC staff offered conditional no-action relief for designated contract markets converting existing perpetual-style broad-based security index futures into true perpetual futures by removing expiration dates. Customer protections and regulatory filings are required; the relief expires October 20, 2026.",
+      "summary_original_lang": "en",
+      "title_cn": "CFTC就DCM将现有永续型宽基证券指数期货转换为真正永续期货发出不采取执法行动函",
+      "title_en": "CFTC Issues No-Action Letter for DCMs Regarding Converting Existing Perpetual-Style Broad-Based Security Index Futures into True Perpetual Futures",
+      "title_original": "CFTC Issues No-Action Letter for DCMs Regarding Converting Existing Perpetual-Style Broad-Based Security Index Futures into True Perpetual Futures",
+      "title_original_lang": "en",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9308-26"
     }
   ],
   "highlights": [
@@ -1491,6 +1564,34 @@
       "competitor_group": "",
       "competitor_type": "",
       "date": "2026-10-07",
+      "editorial_summary": {
+        "approval": {
+          "approved_at": "2026-10-13T12:03:53+08:00",
+          "reviewed_by": "6b6mdgnb6j-cpu"
+        },
+        "approval_status": "APPROVED",
+        "approved_file_sha256": "7d93ec65792e4bebc2695bf016318c6824c4e526a1c36954f30a8424cb823e3a",
+        "content_sha256": "c9ffc4a44e5bb53275a5f8530673524d1619eedd8c4577a36c45be629d3807ea",
+        "origin": "manual_editorial_summary",
+        "source_verification": {
+          "method": "official_document_review",
+          "official_urls": [
+            "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm",
+            "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260916.htm"
+          ],
+          "verified_facts": [
+            "Release page: October 7, 2026; full minutes: meeting September 15-16.",
+            "Committee Policy Actions and 12-0 vote: increase 25 basis points to 3.75-4.00 percent.",
+            "Participants and policy actions: elevated inflation and solid economic activity.",
+            "Policy outlook: most participants expected another increase by year end; future meetings depend on incoming information."
+          ],
+          "verified_on": "2026-10-13"
+        },
+        "summary_basis": "human_authored_summary_of_official_evidence",
+        "summary_cn": "美联储于10月7日公布9月15日至16日FOMC会议纪要。纪要显示，委员会一致同意将联邦基金利率目标区间上调25个基点至3.75%—4.00%，认为通胀仍然偏高，而经济活动保持稳健。多数与会者认为年底前可能还需进一步加息，但强调未来政策决定仍将取决于后续经济数据。",
+        "summary_en": "The Federal Reserve released the minutes of its September 15–16 FOMC meeting on October 7. The Committee unanimously raised the federal funds rate target range by 25 basis points to 3.75–4.00%, citing elevated inflation and resilient economic activity. Most participants considered another rate increase by year-end likely appropriate, while emphasizing that future decisions would depend on incoming economic data.",
+        "summary_id": "502c146012fb90794aa929fb9493b39574d7023d091de130ff15553c7db09b93"
+      },
       "mapped_dbg_business": "",
       "mapping_confidence": "",
       "mapping_reason": "",
