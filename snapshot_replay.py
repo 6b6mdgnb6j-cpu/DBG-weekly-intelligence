@@ -8,6 +8,7 @@ from pathlib import Path
 
 from automation_pipeline import AutomationValidationError, validate_manifest, write_review_manifest
 from crawler.manual_translations import apply_approved_overrides_with_report, atomic_write_json
+from crawler.manual_supplements import load_supplements, supplement_provenance
 from generate_weekly import render_report
 from qa_gate import FAIL, run_qa
 
@@ -45,10 +46,13 @@ def replay_snapshot(
     snapshot_zip, expected_snapshot_sha256, week_start, output_dir, approved_file,
     collection_run_id, collection_sha, collection_artifact_id, collection_artifact_name,
     generation_run_id, generation_sha,
+    supplement_file=None, supplement_sha256=None,
 ):
     snapshot_zip = Path(snapshot_zip)
     output_dir = Path(output_dir)
     approved_file = Path(approved_file)
+    if bool(supplement_file) != bool(supplement_sha256):
+        raise SnapshotReplayError("supplement file and SHA-256 must be supplied together")
     actual_archive_hash = sha256(snapshot_zip)
     if actual_archive_hash != expected_snapshot_sha256:
         raise SnapshotReplayError("snapshot ZIP SHA-256 mismatch")
@@ -72,11 +76,6 @@ def replay_snapshot(
         if approved.get("week_start") != week_start:
             raise SnapshotReplayError("approved translations week_start mismatch")
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        weekly_output = output_dir / weekly_input.name
-        status_output = output_dir / status_input.name
-        shutil.copyfile(weekly_input, weekly_output)
-        shutil.copyfile(status_input, status_output)
         report = apply_approved_overrides_with_report(weekly, approved)
         if report["identity_hash_conflict"] or report["ambiguous"]:
             conflicts = [row.get("item_id") for row in report["identity_hash_conflict"]]
@@ -85,6 +84,27 @@ def replay_snapshot(
                 "approved translation identity conflict or ambiguity: "
                 f"conflicts={conflicts}, ambiguous={ambiguities}"
             )
+        supplements = None
+        if supplement_file:
+            if report["absent"]:
+                raise SnapshotReplayError("supplement replay requires all existing translation approvals to match")
+            additions, supplement_data = load_supplements(
+                supplement_file, supplement_sha256, week_start, weekly["items"]
+            )
+            supplements = supplement_provenance(supplement_file, supplement_sha256, supplement_data, weekly["items"])
+            weekly["items"].extend(additions)
+            weekly["item_count"] = len(weekly["items"])
+            counts = dict(weekly.get("pipeline_counts") or {})
+            counts["editorial_supplements"] = len(additions)
+            counts["final_weekly_items"] = len(weekly["items"])
+            weekly["pipeline_counts"] = counts
+        output_dir.mkdir(parents=True, exist_ok=True)
+        weekly_output = output_dir / weekly_input.name
+        status_output = output_dir / status_input.name
+        shutil.copyfile(status_input, status_output)
+        if supplements:
+            # Bind the exact approved document, not a regenerated representation.
+            shutil.copyfile(supplement_file, output_dir / supplements["artifact_filename"])
         atomic_write_json(weekly_output, weekly)
         render_report(week_start, output_dir=output_dir)
         qa_result = run_qa(
@@ -114,6 +134,8 @@ def replay_snapshot(
                 "override_results": report,
             },
         }
+        if supplements:
+            provenance["editorial_supplements"] = supplements
         manifest_path = write_review_manifest(
             output_dir, week_start, generation_sha, generation_run_id,
             snapshot_provenance=provenance,
@@ -138,6 +160,8 @@ def cli(argv=None):
     parser.add_argument("--collection-artifact-name", required=True)
     parser.add_argument("--generation-run-id", required=True)
     parser.add_argument("--generation-sha", required=True)
+    parser.add_argument("--supplement-file", help="Explicit approved editorial supplement JSON (snapshot only).")
+    parser.add_argument("--supplement-sha256", help="Required SHA-256 when --supplement-file is supplied.")
     args = parser.parse_args(argv)
     try:
         result = replay_snapshot(**vars(args))
