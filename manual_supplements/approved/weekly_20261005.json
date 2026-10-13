@@ -1,0 +1,136 @@
+{
+  "approval": {
+    "approved_at": "2026-10-13T09:17:52+08:00",
+    "reviewed_by": "6b6mdgnb6j-cpu"
+  },
+  "approval_status": "APPROVED",
+  "records": [
+    {
+      "approval_status": "APPROVED",
+      "business_relevance": "Interest-rate derivatives competition with Eurex; energy-market competition with EEX.",
+      "canonical_url": "https://ir.theice.com/press/news-details/2026/Intercontinental-Exchange-Reports-September-and-Third-Quarter-2026-Statistics/default.aspx",
+      "category": "Competitor",
+      "content_sha256": "dbce4282cfa367482be3123c3d244aeeb9eb5bab7a3e18a53ef56fe4baadaf12",
+      "editorial_origin": "manual_editorial_supplement",
+      "official_title": "Intercontinental Exchange Reports September and Third Quarter 2026 Statistics",
+      "publication_date": "2026-10-05",
+      "source_id": "SRC-150",
+      "source_name": "洲际交易所",
+      "source_verification": {
+        "method": "official_release_review",
+        "notes": [
+          "Official release is dated October 5, 2026.",
+          "September figures are year-over-year: overall 51%, Energy 26%, Financials 81%, Interest Rates 95%.",
+          "Q3 year-over-year ADV: overall 31%, Financials 45%, Interest Rates 49%."
+        ],
+        "official_title": "Intercontinental Exchange Reports September and Third Quarter 2026 Statistics",
+        "official_url": "https://ir.theice.com/press/news-details/2026/Intercontinental-Exchange-Reports-September-and-Third-Quarter-2026-Statistics/default.aspx",
+        "publication_date": "2026-10-05",
+        "verified_on": "2026-10-12"
+      },
+      "subcategory": "交易与清算",
+      "summary_cn": "ICE公布2026年9月日均成交量（ADV）：整体同比增长51%，能源业务增长26%，金融业务增长81%，利率业务增长95%。2026年第三季度，整体ADV同比增长31%，其中金融业务增长45%，利率业务增长49%。",
+      "summary_en": "ICE reported September 2026 average daily volume (ADV) growth of 51% year-over-year overall, 26% in Energy, 81% in Financials and 95% in Interest Rates. For Q3 2026, total ADV rose 31% year-over-year, with Financials up 45% and Interest Rates up 49%.",
+      "supplement_id": "ae1cd624d4a66283fb09b464d264d549574e71c619535a1bd83797de5944174f",
+      "title_cn": "Intercontinental Exchange（ICE）公布2026年9月及第三季度交易统计",
+      "title_en": "Intercontinental Exchange Reports September and Third Quarter 2026 Statistics",
+      "url": "https://ir.theice.com/press/news-details/2026/Intercontinental-Exchange-Reports-September-and-Third-Quarter-2026-Statistics/default.aspx"
+    },
+    {
+      "approval_status": "APPROVED",
+      "business_relevance": "Freight and commodity derivatives product expansion relevant to EEX competition.",
+      "canonical_url": "https://ir.theice.com/press/news-details/2026/ICE-Launches-New-VLCC-Tanker-and-Container-Freight-Contracts-as-Customers-Hedge-Freight-Risk-Across-Global-Trade-Routes/default.aspx",
+      "category": "Competitor",
+      "content_sha256": "4cda880428db1bcddb83d4aeb727ac0d37b8f76cbfb445a3a925d8b42256c7b0",
+      "editorial_origin": "manual_editorial_supplement",
+      "official_title": "ICE Launches New VLCC Tanker and Container Freight Contracts as Customers Hedge Freight Risk Across Global Trade Routes",
+      "publication_date": "2026-10-05",
+      "source_id": "SRC-150",
+      "source_name": "洲际交易所",
+      "source_verification": {
+        "method": "official_release_review",
+        "notes": [
+          "Official release is dated October 5, 2026 and describes products launched that day.",
+          "TD34 and TD15 tanker futures use Baltic Exchange assessments; container options use NYSHEX freight indices.",
+          "33% is freight-market ADV year-to-date, not overall ICE volume or September-only growth."
+        ],
+        "official_title": "ICE Launches New VLCC Tanker and Container Freight Contracts as Customers Hedge Freight Risk Across Global Trade Routes",
+        "official_url": "https://ir.theice.com/press/news-details/2026/ICE-Launches-New-VLCC-Tanker-and-Container-Freight-Contracts-as-Customers-Hedge-Freight-Risk-Across-Global-Trade-Routes/default.aspx",
+        "publication_date": "2026-10-05",
+        "verified_on": "2026-10-12"
+      },
+      "subcategory": "交易与清算",
+      "summary_cn": "ICE推出现金结算的VLCC油轮运费期货，覆盖TD34（阿曼湾至中国）和TD15（西非至中国）航线，并依据Baltic Exchange价格评估结算；同时推出亚洲至北欧、亚洲至美国西海岸航线的现金结算集装箱运费平均价格期权，挂钩NYSHEX运费指数。其运费市场ADV年初至今增长33%。",
+      "summary_en": "ICE launched cash-settled VLCC tanker freight futures for TD34 (Gulf of Oman to China) and TD15 (West Africa to China), based on Baltic Exchange assessments, plus cash-settled container freight average price options for Asia-North Europe and Asia-U.S. West Coast, indexed to NYSHEX freight indices. ADV across its freight markets is up 33% year-to-date.",
+      "supplement_id": "b5d1ce4d932f8172059f94921cb3a39ee0f63264e8e6f553e1d29abfed786f39",
+      "title_cn": "ICE推出VLCC油轮及集装箱运费合约，支持全球贸易航线运费风险对冲",
+      "title_en": "ICE Launches New VLCC Tanker and Container Freight Contracts as Customers Hedge Freight Risk Across Global Trade Routes",
+      "url": "https://ir.theice.com/press/news-details/2026/ICE-Launches-New-VLCC-Tanker-and-Container-Freight-Contracts-as-Customers-Hedge-Freight-Risk-Across-Global-Trade-Routes/default.aspx"
+    },
+    {
+      "approval_status": "APPROVED",
+      "business_relevance": "International derivatives market growth and regional competitive positioning against Eurex.",
+      "canonical_url": "https://www.cmegroup.com/media-room/press-releases/2026/10/08/cme_group_s_internationalaveragedailyvolumerises22to9millioncont.html",
+      "category": "Competitor",
+      "content_sha256": "2ebbbb2398db5d0bdbf38c6160274c8f5082f748c03114dc21b8e793b846c2d8",
+      "editorial_origin": "manual_editorial_supplement",
+      "official_title": "CME Group's International Average Daily Volume Rises 22% to 9 Million Contracts in Q3 2026",
+      "publication_date": "2026-10-08",
+      "source_id": "SRC-149",
+      "source_name": "芝加哥商品交易所集团",
+      "source_verification": {
+        "method": "official_release_review",
+        "notes": [
+          "Official release is dated October 8, 2026.",
+          "International means outside the United States: 9 million contracts, +22% year-over-year.",
+          "EMEA 6.5 million/+20%; APAC 2.1 million/+28%; global 29.4 million/+16%, all Q3 2026."
+        ],
+        "official_title": "CME Group's International Average Daily Volume Rises 22% to 9 Million Contracts in Q3 2026",
+        "official_url": "https://www.cmegroup.com/media-room/press-releases/2026/10/08/cme_group_s_internationalaveragedailyvolumerises22to9millioncont.html",
+        "publication_date": "2026-10-08",
+        "verified_on": "2026-10-12"
+      },
+      "subcategory": "交易与清算",
+      "summary_cn": "CME Group公布2026年第三季度国际日均成交量（ADV，即美国境外交易）：900万份合约，同比增长22%。欧洲、中东及非洲（EMEA）ADV为650万份合约，同比增长20%；亚太（APAC）为210万份，同比增长28%。另行公布的全球第三季度ADV为2940万份合约，同比增长16%。",
+      "summary_en": "CME Group reported Q3 2026 international average daily volume (ADV), covering trading outside the United States, of 9 million contracts, up 22% year-over-year. EMEA ADV was 6.5 million contracts, up 20%, and APAC ADV was 2.1 million, up 28%, year-over-year. Global Q3 ADV was separately reported at 29.4 million contracts, up 16% year-over-year.",
+      "supplement_id": "b12be5569d7307c0c3b6766cf66bad19741f68b8d7b930da99ff886f0db53512",
+      "title_cn": "CME Group第三季度国际日均成交量同比增长22%，达到900万份合约",
+      "title_en": "CME Group's International Average Daily Volume Rises 22% to 9 Million Contracts in Q3 2026",
+      "url": "https://www.cmegroup.com/media-room/press-releases/2026/10/08/cme_group_s_internationalaveragedailyvolumerises22to9millioncont.html"
+    },
+    {
+      "approval_status": "APPROVED",
+      "business_relevance": "Research signals, index/risk analytics and AI workflows relevant to ISS STOXX and investment-management solutions.",
+      "canonical_url": "https://ir.msci.com/news-releases/news-release-details/msci-launches-signallab-giving-investment-teams-access-trusted",
+      "category": "Competitor",
+      "content_sha256": "d98b670fa35f3f62cb3cc0cf225dca3d4d4f75437b31919de34d00e6c7c1694b",
+      "editorial_origin": "manual_editorial_supplement",
+      "official_title": "MSCI Launches SignalLab Giving Investment Teams Access to Trusted and Integrated Signals",
+      "publication_date": "2026-10-07",
+      "source_id": "SRC-186",
+      "source_name": "MSCI",
+      "source_verification": {
+        "method": "official_release_review",
+        "notes": [
+          "Official release is dated October 7, 2026.",
+          "More than 600 signals; Risk Premia, Micro-Industries, FactorLab and Crowding are current areas.",
+          "Research/model-validation teams validate AI-generated work; Fundamental Momentum and AI Exposure Intelligence are future modules."
+        ],
+        "official_title": "MSCI Launches SignalLab Giving Investment Teams Access to Trusted and Integrated Signals",
+        "official_url": "https://ir.msci.com/news-releases/news-release-details/msci-launches-signallab-giving-investment-teams-access-trusted",
+        "publication_date": "2026-10-07",
+        "verified_on": "2026-10-12"
+      },
+      "subcategory": "信息技术",
+      "summary_cn": "MSCI推出投资研究与信号分析平台SignalLab，提供逾600项研究级信号，涵盖风险溢价（Risk Premia）、微行业（Micro-Industries）、FactorLab及拥挤度（Crowding）。平台在研究流程中使用AI，并保留人工验证及方法论治理。新增模块仍处于规划阶段；平台帮助团队测试和应用信号，并非代替客户作出投资决策。",
+      "summary_en": "MSCI launched SignalLab, an investment research and signal analytics platform with more than 600 research-grade signals spanning Risk Premia, Micro-Industries, FactorLab and Crowding. AI supports research workflows, with human validation and methodological governance. Additional modules are planned; the platform helps teams test and deploy signals rather than making investment decisions on their behalf.",
+      "supplement_id": "afcfe3f52e368259e260457b5f18f648c32b390bb823a118f1171a5cc7bb9c60",
+      "title_cn": "MSCI推出SignalLab，为投资团队提供可信且整合的研究信号",
+      "title_en": "MSCI Launches SignalLab Giving Investment Teams Access to Trusted and Integrated Signals",
+      "url": "https://ir.msci.com/news-releases/news-release-details/msci-launches-signallab-giving-investment-teams-access-trusted"
+    }
+  ],
+  "schema_version": 1,
+  "week_end": "2026-10-11",
+  "week_start": "2026-10-05"
+}
