@@ -1,0 +1,42 @@
+{
+  "approval": {
+    "approved_at": "2026-10-13T12:03:53+08:00",
+    "reviewed_by": "6b6mdgnb6j-cpu"
+  },
+  "approval_status": "APPROVED",
+  "records": [
+    {
+      "approval_status": "APPROVED",
+      "article_id": "1c71278375032e12738e384b10fa3a3c1d88429e529b4239b8ba22c8067e6fec",
+      "content_sha256": "c9ffc4a44e5bb53275a5f8530673524d1619eedd8c4577a36c45be629d3807ea",
+      "date": "2026-10-07",
+      "origin": "manual_editorial_summary",
+      "original_summary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_title_sha256": "19bf593907ffcb36bf0af77df07aba4b0d3207f3528f238cebd6c7d6864d2340",
+      "source": "联邦储备系统",
+      "source_id": "SRC-011",
+      "source_verification": {
+        "method": "official_document_review",
+        "official_urls": [
+          "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm",
+          "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260916.htm"
+        ],
+        "verified_facts": [
+          "Release page: October 7, 2026; full minutes: meeting September 15-16.",
+          "Committee Policy Actions and 12-0 vote: increase 25 basis points to 3.75-4.00 percent.",
+          "Participants and policy actions: elevated inflation and solid economic activity.",
+          "Policy outlook: most participants expected another increase by year end; future meetings depend on incoming information."
+        ],
+        "verified_on": "2026-10-13"
+      },
+      "summary_basis": "human_authored_summary_of_official_evidence",
+      "summary_cn": "美联储于10月7日公布9月15日至16日FOMC会议纪要。纪要显示，委员会一致同意将联邦基金利率目标区间上调25个基点至3.75%—4.00%，认为通胀仍然偏高，而经济活动保持稳健。多数与会者认为年底前可能还需进一步加息，但强调未来政策决定仍将取决于后续经济数据。",
+      "summary_en": "The Federal Reserve released the minutes of its September 15–16 FOMC meeting on October 7. The Committee unanimously raised the federal funds rate target range by 25 basis points to 3.75–4.00%, citing elevated inflation and resilient economic activity. Most participants considered another rate increase by year-end likely appropriate, while emphasizing that future decisions would depend on incoming economic data.",
+      "summary_id": "502c146012fb90794aa929fb9493b39574d7023d091de130ff15553c7db09b93",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm"
+    }
+  ],
+  "schema_version": 1,
+  "week_end": "2026-10-11",
+  "week_start": "2026-10-05"
+}

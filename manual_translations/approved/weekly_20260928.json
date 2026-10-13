@@ -85,7 +85,7 @@
       "date": "2026-09-29",
       "field": "summary",
       "item_id": "983c64cfedca57ecdd1d95afc6b29747b9f4104d26a6e33e56e4f95afc29faa2",
-      "manual_translation": "更多能源合约纳入 ICE Risk Model 2。\n\nICE 的 JKM LNG（Platts）是东北亚天然气的基准价格。\n\n洲际交易所（Intercontinental Exchange, Inc.，NYSE: ICE）是全球领先的金融市场技术与数据提供商之一，为全球资本市场提供支持，并运营着全球规模最大、流动性最强的能源衍生品交易及清算市场。该公司今日宣布推出新的 JKM LNG（Platts）期权、LNG Balmo（月内剩余期间）运费期货以及英国基荷电力期权，以拓展 ICE 的全球天然气及电力市场。新的 JKM 期权（JKZ）是对 ICE 现有 JKM 平均价格期权的补充，其结算方式与 ICE 的 TTF 期权类似，在月底以标的期货的结算价进行结算。新期权使客户能够管理某一特定时点的亚洲天然气价格风险，与用于管理月内累积风险敞口的平均价格期权相配合。此外，ICE……",
+      "manual_translation": "ICE宣布推出新的JKM LNG（Platts）期权、LNG Balmo运费期货及英国基荷电力期权，拓展天然气及电力衍生品业务。其中，新JKM期权（JKZ）与现有月均价期权形成互补，按月末标的期货结算价结算，为市场参与者提供亚洲天然气价格风险管理工具。",
       "original_sha256": "77c1f6f830073b2f7a331d5f35b0b1bf9c38a606350fa460bf3de1d477be3b76",
       "source": "洲际交易所",
       "url": "https://ir.theice.com/press/news-details/2026/ICE-Launches-New-JKM-LNG-Platts-Options-LNG-Balmo-Freight-Futures-and-U-K--Electricity-Options-in-an-Expansion-of-Global-Natural-Gas-and-Power-Markets/default.aspx"
@@ -188,6 +188,33 @@
       "original_sha256": "f5636a3360b6da5cd3d50eba8d7f285ff90da531444e2b8c9fe22d4f472bc498",
       "source": "韩国金融监督委员会",
       "url": "https://www.fsc.go.kr/eng/pr010101/87834?srchCtgry=&curPage=&srchKey=&srchText=&srchBeginDt=&srchEndDt="
+    },
+    {
+      "date": "2026-09-28",
+      "field": "summary",
+      "item_id": "0aad741a583a764797cbce912c0386fc89859d6cabf9be6e018a5309f0d189d0",
+      "manual_translation": "欧洲波动性市场的流动性不断增强，市场参与者可利用日益丰富的产品开展波动性交易策略。",
+      "original_sha256": "0ead8d1cfcc87542e6471f1e6684cb0eca700286de5bbff67466d8a1aaa19c98",
+      "source": "欧洲期交所",
+      "url": "https://www.eurex.com/ex-en/find/news-center/news/building-liquidity-in-europes-volatility-markets-5594946"
+    },
+    {
+      "date": "2026-10-01",
+      "field": "summary",
+      "item_id": "80eaff24416a7451161ab1f4425aeb8741dc6c8c7d60826a8d0d1d8e6c1e9a95",
+      "manual_translation": "美国证券交易委员会（SEC）提出新规则及修订案，为注册投资顾问及受监管基金的加密资产托管提供专门框架。",
+      "original_sha256": "da6043874b3f7c9cdb0be27151fbd4803f7361e854ebe108e4c34fe810db5ebc",
+      "source": "证券交易委员会",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-100-sec-proposal-would-address-how-investment-advisers-funds-can-custody-crypto-assets-under-federal"
+    },
+    {
+      "date": "2026-09-29",
+      "field": "title",
+      "item_id": "53fbbcd7204ce41ba4c7c7afdd3491eeb2061ca9d9d0e1c870a7ee371ea5115d",
+      "manual_translation": "Cboe与标普道琼斯指数将独家许可协议延长25年，合作延续至2051年",
+      "original_sha256": "dc7fafbbea7cf4d899467a0f958e1a75b6cecc21baec9a96b3717c8db09cb958",
+      "source": "芝加哥期权交易所",
+      "url": "https://ir.cboe.com/news/news-details/2026/Cboe-and-SP-Dow-Jones-Indices-Sign-25-Year-Extension-of-Exclusive-Licensing-Agreement-Through-2051/default.aspx"
     }
   ],
   "schema_version": 1,

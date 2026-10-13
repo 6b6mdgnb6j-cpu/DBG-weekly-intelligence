@@ -9,6 +9,7 @@ from pathlib import Path
 from automation_pipeline import AutomationValidationError, validate_manifest, write_review_manifest
 from crawler.manual_translations import apply_approved_overrides_with_report, atomic_write_json
 from crawler.manual_supplements import load_supplements, supplement_provenance
+from crawler.manual_editorial_summaries import load_editorial_summaries, summary_provenance
 from generate_weekly import render_report
 from qa_gate import FAIL, run_qa
 
@@ -47,12 +48,15 @@ def replay_snapshot(
     collection_run_id, collection_sha, collection_artifact_id, collection_artifact_name,
     generation_run_id, generation_sha,
     supplement_file=None, supplement_sha256=None,
+    editorial_summary_file=None, editorial_summary_sha256=None,
 ):
     snapshot_zip = Path(snapshot_zip)
     output_dir = Path(output_dir)
     approved_file = Path(approved_file)
     if bool(supplement_file) != bool(supplement_sha256):
         raise SnapshotReplayError("supplement file and SHA-256 must be supplied together")
+    if bool(editorial_summary_file) != bool(editorial_summary_sha256):
+        raise SnapshotReplayError("editorial summary file and SHA-256 must be supplied together")
     actual_archive_hash = sha256(snapshot_zip)
     if actual_archive_hash != expected_snapshot_sha256:
         raise SnapshotReplayError("snapshot ZIP SHA-256 mismatch")
@@ -84,6 +88,16 @@ def replay_snapshot(
                 "approved translation identity conflict or ambiguity: "
                 f"conflicts={conflicts}, ambiguous={ambiguities}"
             )
+        summaries = None
+        if editorial_summary_file:
+            if report["absent"]:
+                raise SnapshotReplayError("editorial replay requires all translation approvals to match")
+            enriched, summary_data = load_editorial_summaries(
+                editorial_summary_file, editorial_summary_sha256, week_start, weekly["items"]
+            )
+            summaries = summary_provenance(editorial_summary_file, editorial_summary_sha256,
+                                           summary_data, weekly["items"])
+            weekly["items"] = enriched
         supplements = None
         if supplement_file:
             if report["absent"]:
@@ -102,6 +116,8 @@ def replay_snapshot(
         weekly_output = output_dir / weekly_input.name
         status_output = output_dir / status_input.name
         shutil.copyfile(status_input, status_output)
+        if summaries:
+            shutil.copyfile(editorial_summary_file, output_dir / summaries["artifact_filename"])
         if supplements:
             # Bind the exact approved document, not a regenerated representation.
             shutil.copyfile(supplement_file, output_dir / supplements["artifact_filename"])
@@ -136,6 +152,8 @@ def replay_snapshot(
         }
         if supplements:
             provenance["editorial_supplements"] = supplements
+        if summaries:
+            provenance["editorial_summaries"] = summaries
         manifest_path = write_review_manifest(
             output_dir, week_start, generation_sha, generation_run_id,
             snapshot_provenance=provenance,
@@ -162,6 +180,8 @@ def cli(argv=None):
     parser.add_argument("--generation-sha", required=True)
     parser.add_argument("--supplement-file", help="Explicit approved editorial supplement JSON (snapshot only).")
     parser.add_argument("--supplement-sha256", help="Required SHA-256 when --supplement-file is supplied.")
+    parser.add_argument("--editorial-summary-file", help="Explicit approved empty-source summary file (snapshot only).")
+    parser.add_argument("--editorial-summary-sha256", help="Required SHA-256 for the editorial summary file.")
     args = parser.parse_args(argv)
     try:
         result = replay_snapshot(**vars(args))

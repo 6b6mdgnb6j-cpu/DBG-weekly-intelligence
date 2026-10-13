@@ -52,6 +52,17 @@ def record_hash(record):
     return content_hash({key: value for key, value in record.items() if key != "content_sha256"})
 
 
+def _validate_approval(approval):
+    if not isinstance(approval, dict):
+        raise ManualSupplementError("supplement human approval metadata is missing")
+    try:
+        approved_at = datetime.fromisoformat(approval.get("approved_at", "").replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        raise ManualSupplementError("supplement approval timestamp is missing or invalid")
+    if not isinstance(approval.get("reviewed_by"), str) or not approval["reviewed_by"].strip() or not approved_at.tzinfo:
+        raise ManualSupplementError("supplement human approval metadata is missing")
+
+
 def _text(value):
     return " ".join(re.findall(r"\w+", (value or "").casefold()))
 
@@ -103,12 +114,11 @@ def load_supplements(path, expected_sha256, week_start, existing, sources_path=S
     if data.get("approval_status") != "APPROVED":
         raise ManualSupplementError("supplements require explicit human approval")
     approval = data.get("approval") or {}
-    try:
-        approved_at = datetime.fromisoformat(approval.get("approved_at", "").replace("Z", "+00:00"))
-    except (ValueError, TypeError):
-        raise ManualSupplementError("supplement approval timestamp is missing or invalid")
-    if not isinstance(approval.get("reviewed_by"), str) or not approval["reviewed_by"].strip() or not approved_at.tzinfo:
-        raise ManualSupplementError("supplement human approval metadata is missing")
+    _validate_approval(approval)
+    if "revision_approval" in data:
+        _validate_approval(data["revision_approval"])
+        if not re.fullmatch(r"[0-9a-f]{64}", data["revision_approval"].get("previous_file_sha256", "")):
+            raise ManualSupplementError("supplement revision approval lacks previous file binding")
     records = data.get("records")
     if not isinstance(records, list) or not records:
         raise ManualSupplementError("approved supplement records are missing")
@@ -126,6 +136,8 @@ def load_supplements(path, expected_sha256, week_start, existing, sources_path=S
             raise ManualSupplementError("supplement required content or identity is missing")
         if record.get("approval_status") != "APPROVED" or record.get("editorial_origin") != ORIGIN:
             raise ManualSupplementError("supplement record is not approved editorial content")
+        record_approval = record.get("approval", approval)
+        _validate_approval(record_approval)
         if record_hash(record) != record["content_sha256"] or supplement_id(record) != record["supplement_id"]:
             raise ManualSupplementError("supplement content hash or identity mismatch")
         if record["supplement_id"] in ids:
@@ -172,7 +184,7 @@ def load_supplements(path, expected_sha256, week_start, existing, sources_path=S
             "editorial_provenance": {
                 "origin": ORIGIN, "summary_basis": SUMMARY_BASIS, "source_id": source["id"],
                 "supplement_id": record["supplement_id"], "content_sha256": record["content_sha256"],
-                "approval_status": "APPROVED", "approval": deepcopy(approval),
+                "approval_status": "APPROVED", "approval": deepcopy(record_approval),
                 "source_verification": deepcopy(evidence),
             },
         }
@@ -182,7 +194,7 @@ def load_supplements(path, expected_sha256, week_start, existing, sources_path=S
 
 
 def supplement_provenance(path, expected_sha256, data, original_items):
-    return {
+    provenance = {
         "file_name": Path(path).name, "artifact_filename": "editorial_supplements_" + data["week_start"].replace("-", "") + ".json",
         "file_sha256": expected_sha256, "approval_status": "APPROVED", "approval": data["approval"],
         "inserted_count": len(data["records"]), "original_item_count": len(original_items),
@@ -191,6 +203,9 @@ def supplement_provenance(path, expected_sha256, data, original_items):
                                                   "publication_date", "url", "approval_status")}
                     for record in data["records"]],
     }
+    if "revision_approval" in data:
+        provenance["revision_approval"] = data["revision_approval"]
+    return provenance
 
 
 def validate_supplement_bundle(bundle_dir, weekly, provenance, artifacts):
