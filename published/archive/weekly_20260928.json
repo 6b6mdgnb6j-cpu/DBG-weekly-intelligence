@@ -4,7 +4,7 @@
   "translation_mode": "bilingual",
   "source_count": 68,
   "registered_source_count": 189,
-  "item_count": 45,
+  "item_count": 48,
   "items": [
     {
       "brand": "Eurex",
@@ -310,7 +310,7 @@
       "source": "洲际交易所",
       "subcategory": "交易与清算",
       "summary": "Additional Energy Contracts Join ICE Risk Model 2 ICE's JKM LNG (Platts) is the Benchmark Price for North-East Asia Natural Gas Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and home to the largest and most liquid markets in the world to trade and clear energy derivatives, today announced the launch of new JKM LNG (Platts) options, LNG Balmo freight futures, and U.K. base electricity options, in an expansion of ICE’s global natural gas and power markets. The new JKM options (JKZ) complement ICE's existing JKM average price options, settling in a similar manner to ICE's TTF options at the end of the month against the underlying future's settlement price. The new options give customers a way to manage Asian natural gas price risk at a specific point in time, alongside the average price options which are used to manage exposure that accumulates over the month. In addition, ICE",
-      "summary_cn": "更多能源合约纳入 ICE Risk Model 2。\n\nICE 的 JKM LNG（Platts）是东北亚天然气的基准价格。\n\n洲际交易所（Intercontinental Exchange, Inc.，NYSE: ICE）是全球领先的金融市场技术与数据提供商之一，为全球资本市场提供支持，并运营着全球规模最大、流动性最强的能源衍生品交易及清算市场。该公司今日宣布推出新的 JKM LNG（Platts）期权、LNG Balmo（月内剩余期间）运费期货以及英国基荷电力期权，以拓展 ICE 的全球天然气及电力市场。新的 JKM 期权（JKZ）是对 ICE 现有 JKM 平均价格期权的补充，其结算方式与 ICE 的 TTF 期权类似，在月底以标的期货的结算价进行结算。新期权使客户能够管理某一特定时点的亚洲天然气价格风险，与用于管理月内累积风险敞口的平均价格期权相配合。此外，ICE……",
+      "summary_cn": "ICE宣布推出新的JKM LNG（Platts）期权、LNG Balmo运费期货及英国基荷电力期权，拓展天然气及电力衍生品业务。其中，新JKM期权（JKZ）与现有月均价期权形成互补，按月末标的期货结算价结算，为市场参与者提供亚洲天然气价格风险管理工具。",
       "summary_en": "Additional Energy Contracts Join ICE Risk Model 2 ICE's JKM LNG (Platts) is the Benchmark Price for North-East Asia Natural Gas Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and home to the largest and most liquid markets in the world to trade and clear energy derivatives, today announced the launch of new JKM LNG (Platts) options, LNG Balmo freight futures, and U.K. base electricity options, in an expansion of ICE’s global natural gas and power markets. The new JKM options (JKZ) complement ICE's existing JKM average price options, settling in a similar manner to ICE's TTF options at the end of the month against the underlying future's settlement price. The new options give customers a way to manage Asian natural gas price risk at a specific point in time, alongside the average price options which are used to manage exposure that accumulates over the month. In addition, ICE",
       "summary_original": "Additional Energy Contracts Join ICE Risk Model 2 ICE's JKM LNG (Platts) is the Benchmark Price for North-East Asia Natural Gas Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and home to the largest and most liquid markets in the world to trade and clear energy derivatives, today announced the launch of new JKM LNG (Platts) options, LNG Balmo freight futures, and U.K. base electricity options, in an expansion of ICE’s global natural gas and power markets. The new JKM options (JKZ) complement ICE's existing JKM average price options, settling in a similar manner to ICE's TTF options at the end of the month against the underlying future's settlement price. The new options give customers a way to manage Asian natural gas price risk at a specific point in time, alongside the average price options which are used to manage exposure that accumulates over the month. In addition, ICE",
       "summary_original_lang": "en",
@@ -399,12 +399,13 @@
       "summary_en": "Cboe Global Markets, Inc. (Cboe: CBOE), a leading global markets operator and pioneer in equity and index derivatives, and S&P Dow Jones Indices (\"S&P DJI\"), the world's leading index provider, today announced a 25-year extension of their exclusive licensing agreement that will continue their longstanding collaboration through 2051. Under the extended agreement, Cboe will continue to have the exclusive rights to offer trading in its flagship S&P 500® Index (SPX) options. Cboe and S&P DJI may also collaborate to pursue innovation beyond traditional index derivatives, including new products like tokenized options contracts. The agreement builds on more than 40 years of collaboration between Cboe and S&P DJI that began in 1983 with the launch of SPX options – a breakthrough innovation that has since become the global standard for how investors worldwide gain and manage U.S. equity market exposure. \"Cboe and S&P DJI have created one of the industry's great success",
       "summary_original": "Cboe Global Markets, Inc. (Cboe: CBOE), a leading global markets operator and pioneer in equity and index derivatives, and S&P Dow Jones Indices (\"S&P DJI\"), the world's leading index provider, today announced a 25-year extension of their exclusive licensing agreement that will continue their longstanding collaboration through 2051. Under the extended agreement, Cboe will continue to have the exclusive rights to offer trading in its flagship S&P 500® Index (SPX) options. Cboe and S&P DJI may also collaborate to pursue innovation beyond traditional index derivatives, including new products like tokenized options contracts. The agreement builds on more than 40 years of collaboration between Cboe and S&P DJI that began in 1983 with the launch of SPX options – a breakthrough innovation that has since become the global standard for how investors worldwide gain and manage U.S. equity market exposure. \"Cboe and S&P DJI have created one of the industry's great success",
       "summary_original_lang": "en",
-      "title_cn": "Cboe和S&P道斯指数签署了25年延长独家许可协议,到2051年",
+      "title_cn": "Cboe与标普道琼斯指数将独家许可协议延长25年，合作延续至2051年",
       "title_en": "Cboe and S&P Dow Jones Indices Sign 25-Year Extension of Exclusive Licensing Agreement, Through 2051",
       "title_original": "Cboe and S&P Dow Jones Indices Sign 25-Year Extension of Exclusive Licensing Agreement, Through 2051",
       "title_original_lang": "en",
       "translation_provenance": {
-        "summary": "manual_approved"
+        "summary": "manual_approved",
+        "title": "manual_approved"
       },
       "url": "https://ir.cboe.com/news/news-details/2026/Cboe-and-SP-Dow-Jones-Indices-Sign-25-Year-Extension-of-Exclusive-Licensing-Agreement-Through-2051/default.aspx"
     },
@@ -590,7 +591,7 @@
       "source": "欧洲期交所",
       "subcategory": "交易与清算",
       "summary": "European volatility markets are becoming increasingly liquid and offering market participants a growing product suite to pursue volatility trading strategies...",
-      "summary_cn": "欧洲波动性市场正在变得越来越流动,",
+      "summary_cn": "欧洲波动性市场的流动性不断增强，市场参与者可利用日益丰富的产品开展波动性交易策略。",
       "summary_en": "European volatility markets are becoming increasingly liquid and offering market participants a growing product suite to pursue volatility trading strategies...",
       "summary_original": "European volatility markets are becoming increasingly liquid and offering market participants a growing product suite to pursue volatility trading strategies...",
       "summary_original_lang": "en",
@@ -598,6 +599,9 @@
       "title_en": "Building liquidity in Europe’s volatility markets",
       "title_original": "Building liquidity in Europe’s volatility markets",
       "title_original_lang": "en",
+      "translation_provenance": {
+        "summary": "manual_approved"
+      },
       "url": "https://www.eurex.com/ex-en/find/news-center/news/building-liquidity-in-europes-volatility-markets-5594946"
     },
     {
@@ -1115,7 +1119,7 @@
       "source": "证券交易委员会",
       "subcategory": "美国",
       "summary": "The Securities and Exchange Commission today proposed new rules and amendments to provide a tailored framework for the custody of crypto assets for registered investment advisers and regulated funds, i.e. registered investment companies and business…",
-      "summary_cn": "SEC今天提出了新的规则和修正案, 已注册的投资顾问和监管基金的加密资产保管,即 已注册的投资公司和企业...",
+      "summary_cn": "美国证券交易委员会（SEC）提出新规则及修订案，为注册投资顾问及受监管基金的加密资产托管提供专门框架。",
       "summary_en": "The Securities and Exchange Commission today proposed new rules and amendments to provide a tailored framework for the custody of crypto assets for registered investment advisers and regulated funds, i.e. registered investment companies and business…",
       "summary_original": "The Securities and Exchange Commission today proposed new rules and amendments to provide a tailored framework for the custody of crypto assets for registered investment advisers and regulated funds, i.e. registered investment companies and business…",
       "summary_original_lang": "en",
@@ -1124,6 +1128,7 @@
       "title_original": "SEC Proposal Would Address How Investment Advisers and Funds Can Custody Crypto Assets Under the Federal Securities Laws",
       "title_original_lang": "en",
       "translation_provenance": {
+        "summary": "manual_approved",
         "title": "manual_approved"
       },
       "url": "https://www.sec.gov/newsroom/press-releases/2026-100-sec-proposal-would-address-how-investment-advisers-funds-can-custody-crypto-assets-under-federal"
@@ -1269,6 +1274,151 @@
       "title_original": "AIMA praises SEC custody proposal",
       "title_original_lang": "en",
       "url": "https://www.aima.org/article/aima-praises-sec-custody-proposal.html"
+    },
+    {
+      "brand": "Eurex",
+      "category": "Competitor",
+      "competitor_business": "derivatives_trading_clearing",
+      "competitor_group": "CME",
+      "competitor_type": "international",
+      "date": "2026-10-02",
+      "editorial_provenance": {
+        "approval": {
+          "approved_at": "2026-10-13T12:03:53+08:00",
+          "reviewed_by": "6b6mdgnb6j-cpu"
+        },
+        "approval_status": "APPROVED",
+        "content_sha256": "73613a12c56875a6c5cb0b2e7d491400b529ee5fedb5635d10e1c7aeb24d3da8",
+        "origin": "manual_editorial_supplement",
+        "source_id": "SRC-149",
+        "source_verification": {
+          "method": "official_release_review",
+          "notes": [
+            "Eurex竞争、全球衍生品及利率市场规模。区别于10/08国际ADV新闻，但Q3全球数字重叠，编辑需避免重复强调。",
+            "Exact bilingual draft reviewed and explicitly approved by the human user; official release date and content verified in the two-week audit."
+          ],
+          "official_title": "CME Group Reports Record Average Daily Volume for September and Q3, Driven by Growth Across Asset Classes",
+          "official_url": "https://investor.cmegroup.com/news-releases/news-release-details/cme-group-reports-record-average-daily-volume-september-and-q3",
+          "publication_date": "2026-10-02",
+          "verified_on": "2026-10-13"
+        },
+        "summary_basis": "editorial_paraphrase_of_official_release",
+        "supplement_id": "9b3042ef3d80a716845e263cb895fd6dd855e4aa0f52e0da9a609a27ebb2bf44"
+      },
+      "mapped_dbg_business": "Eurex",
+      "mapping_confidence": "medium",
+      "mapping_reason": "source_default: derivatives exchange and clearing competitor",
+      "official": true,
+      "priority": 1,
+      "relevance_reason": "volume, official, priority=1",
+      "relevance_score": 4,
+      "source": "芝加哥商品交易所集团",
+      "subcategory": "交易与清算",
+      "summary": "CME Group reported September ADV of 31.8 million contracts, up 22% year over year, and Q3 ADV of 29.4 million, up 16%. September interest-rate ADV reached 16.2 million contracts, up 22%.",
+      "summary_cn": "CME Group公布9月日均成交量达3180万份合约，同比增长22%；第三季度达2940万份，同比增长16%。9月利率产品日均成交量达1620万份合约，同比增长22%。",
+      "summary_en": "CME Group reported September ADV of 31.8 million contracts, up 22% year over year, and Q3 ADV of 29.4 million, up 16%. September interest-rate ADV reached 16.2 million contracts, up 22%.",
+      "summary_original": "CME Group reported September ADV of 31.8 million contracts, up 22% year over year, and Q3 ADV of 29.4 million, up 16%. September interest-rate ADV reached 16.2 million contracts, up 22%.",
+      "summary_original_lang": "en",
+      "title_cn": "CME Group公布9月及第三季度创纪录日均成交量，各资产类别推动增长",
+      "title_en": "CME Group Reports Record Average Daily Volume for September and Q3, Driven by Growth Across Asset Classes",
+      "title_original": "CME Group Reports Record Average Daily Volume for September and Q3, Driven by Growth Across Asset Classes",
+      "title_original_lang": "en",
+      "url": "https://investor.cmegroup.com/news-releases/news-release-details/cme-group-reports-record-average-daily-volume-september-and-q3"
+    },
+    {
+      "brand": "DTCC",
+      "category": "Competitor",
+      "competitor_business": "post_trade",
+      "competitor_group": "DTCC",
+      "competitor_type": "international",
+      "date": "2026-09-28",
+      "editorial_provenance": {
+        "approval": {
+          "approved_at": "2026-10-13T12:03:53+08:00",
+          "reviewed_by": "6b6mdgnb6j-cpu"
+        },
+        "approval_status": "APPROVED",
+        "content_sha256": "ae5df41b41617cfe740eb5d8fdb1ca56f376906831fe4748e48e1c1d658d395b",
+        "origin": "manual_editorial_supplement",
+        "source_id": "SRC-184",
+        "source_verification": {
+          "method": "official_release_review",
+          "notes": [
+            "Clearstream及基金服务竞争、私募市场交易后基础设施。投资金额未披露，不补数字。",
+            "Exact bilingual draft reviewed and explicitly approved by the human user; official release date and content verified in the two-week audit."
+          ],
+          "official_title": "DTCC and iCapital Collaborate to Advance Private Market Infrastructure, Expand Access and Support the Industry’s Next Phase of Growth and Scale",
+          "official_url": "https://www.dtcc.com/press-releases/2026/dtcc-and-icapital-collaborate-to-advance-private-market-infrastructure",
+          "publication_date": "2026-09-28",
+          "verified_on": "2026-10-13"
+        },
+        "summary_basis": "editorial_paraphrase_of_official_release",
+        "supplement_id": "c2be4775ea0c480cc57a254820884cc78ffd4dc51254c0dd1b8aaa12d28cff9b"
+      },
+      "mapped_dbg_business": "Clearstream",
+      "mapping_confidence": "high",
+      "mapping_reason": "source_default: post-trade, settlement and market infrastructure competitor",
+      "official": true,
+      "priority": 1,
+      "relevance_reason": "product, important:market infrastructure, official, priority=1",
+      "relevance_score": 6,
+      "source": "DTCC",
+      "subcategory": "证券与基金服务",
+      "summary": "DTCC and iCapital announced a collaboration connecting private-market infrastructure and investment workflows. DTCC also made a strategic investment in iCapital. Initial plans include further integration of DTCC's Alternative Investment Product with iCapital's platform.",
+      "summary_cn": "DTCC与iCapital宣布合作，连接私募市场基础设施与投资流程；DTCC同时对iCapital作出战略投资。双方初期计划进一步整合DTCC的Alternative Investment Product（AIP）与iCapital平台。",
+      "summary_en": "DTCC and iCapital announced a collaboration connecting private-market infrastructure and investment workflows. DTCC also made a strategic investment in iCapital. Initial plans include further integration of DTCC's Alternative Investment Product with iCapital's platform.",
+      "summary_original": "DTCC and iCapital announced a collaboration connecting private-market infrastructure and investment workflows. DTCC also made a strategic investment in iCapital. Initial plans include further integration of DTCC's Alternative Investment Product with iCapital's platform.",
+      "summary_original_lang": "en",
+      "title_cn": "DTCC与iCapital合作推进私募市场基础设施，扩大准入并支持规模化发展",
+      "title_en": "DTCC and iCapital Collaborate to Advance Private Market Infrastructure, Expand Access and Support the Industry’s Next Phase of Growth and Scale",
+      "title_original": "DTCC and iCapital Collaborate to Advance Private Market Infrastructure, Expand Access and Support the Industry’s Next Phase of Growth and Scale",
+      "title_original_lang": "en",
+      "url": "https://www.dtcc.com/press-releases/2026/dtcc-and-icapital-collaborate-to-advance-private-market-infrastructure"
+    },
+    {
+      "brand": "",
+      "category": "Macro",
+      "competitor_type": "",
+      "date": "2026-10-01",
+      "editorial_provenance": {
+        "approval": {
+          "approved_at": "2026-10-13T12:03:53+08:00",
+          "reviewed_by": "6b6mdgnb6j-cpu"
+        },
+        "approval_status": "APPROVED",
+        "content_sha256": "975e3d30da5aa811e2acf8e5cd78580c2f4a74b5bf92e4e39524845b27a51013",
+        "origin": "manual_editorial_supplement",
+        "source_id": "SRC-013",
+        "source_verification": {
+          "method": "official_release_review",
+          "notes": [
+            "跨境衍生品交易与清算监管连续性；不是永久规则或委员会正式豁免。",
+            "Exact bilingual draft reviewed and explicitly approved by the human user; official release date and content verified in the two-week audit."
+          ],
+          "official_title": "CFTC Staff Extends Brexit-Related No-Action Positions",
+          "official_url": "https://www.cftc.gov/PressRoom/PressReleases/9306-26",
+          "publication_date": "2026-10-01",
+          "verified_on": "2026-10-13"
+        },
+        "summary_basis": "editorial_paraphrase_of_official_release",
+        "supplement_id": "05b3b12ae7ee2463eb453e0f479e73d2102eab1e9ad347707596ff87f555a9e5"
+      },
+      "official": true,
+      "priority": 1,
+      "relevance_reason": "derivatives, clearing, important:clearing, important:derivatives, official, priority=1",
+      "relevance_score": 10,
+      "source": "商品期货交易委员会",
+      "subcategory": "美国",
+      "summary": "CFTC staff extended temporary Brexit-related no-action positions to maintain regulatory certainty for UK-US derivatives trading and clearing while relevant UK comparability determinations and exemptions are assessed.",
+      "summary_cn": "CFTC工作人员延长英国脱欧相关临时不采取执法行动安排，在评估英国相关等效性认定及豁免期间，维持英美衍生品交易和清算的监管确定性。",
+      "summary_en": "CFTC staff extended temporary Brexit-related no-action positions to maintain regulatory certainty for UK-US derivatives trading and clearing while relevant UK comparability determinations and exemptions are assessed.",
+      "summary_original": "CFTC staff extended temporary Brexit-related no-action positions to maintain regulatory certainty for UK-US derivatives trading and clearing while relevant UK comparability determinations and exemptions are assessed.",
+      "summary_original_lang": "en",
+      "title_cn": "CFTC工作人员延长英国脱欧相关不采取执法行动安排",
+      "title_en": "CFTC Staff Extends Brexit-Related No-Action Positions",
+      "title_original": "CFTC Staff Extends Brexit-Related No-Action Positions",
+      "title_original_lang": "en",
+      "url": "https://www.cftc.gov/PressRoom/PressReleases/9306-26"
     }
   ],
   "highlights": [
@@ -1289,7 +1439,7 @@
       "source": "证券交易委员会",
       "subcategory": "美国",
       "summary": "The Securities and Exchange Commission today proposed new rules and amendments to provide a tailored framework for the custody of crypto assets for registered investment advisers and regulated funds, i.e. registered investment companies and business…",
-      "summary_cn": "SEC今天提出了新的规则和修正案, 已注册的投资顾问和监管基金的加密资产保管,即 已注册的投资公司和企业...",
+      "summary_cn": "美国证券交易委员会（SEC）提出新规则及修订案，为注册投资顾问及受监管基金的加密资产托管提供专门框架。",
       "summary_en": "The Securities and Exchange Commission today proposed new rules and amendments to provide a tailored framework for the custody of crypto assets for registered investment advisers and regulated funds, i.e. registered investment companies and business…",
       "summary_original": "The Securities and Exchange Commission today proposed new rules and amendments to provide a tailored framework for the custody of crypto assets for registered investment advisers and regulated funds, i.e. registered investment companies and business…",
       "summary_original_lang": "en",
@@ -1298,6 +1448,7 @@
       "title_original": "SEC Proposal Would Address How Investment Advisers and Funds Can Custody Crypto Assets Under the Federal Securities Laws",
       "title_original_lang": "en",
       "translation_provenance": {
+        "summary": "manual_approved",
         "title": "manual_approved"
       },
       "url": "https://www.sec.gov/newsroom/press-releases/2026-100-sec-proposal-would-address-how-investment-advisers-funds-can-custody-crypto-assets-under-federal",
@@ -1320,7 +1471,7 @@
       "source": "欧洲期交所",
       "subcategory": "交易与清算",
       "summary": "European volatility markets are becoming increasingly liquid and offering market participants a growing product suite to pursue volatility trading strategies...",
-      "summary_cn": "欧洲波动性市场正在变得越来越流动,",
+      "summary_cn": "欧洲波动性市场的流动性不断增强，市场参与者可利用日益丰富的产品开展波动性交易策略。",
       "summary_en": "European volatility markets are becoming increasingly liquid and offering market participants a growing product suite to pursue volatility trading strategies...",
       "summary_original": "European volatility markets are becoming increasingly liquid and offering market participants a growing product suite to pursue volatility trading strategies...",
       "summary_original_lang": "en",
@@ -1328,6 +1479,9 @@
       "title_en": "Building liquidity in Europe’s volatility markets",
       "title_original": "Building liquidity in Europe’s volatility markets",
       "title_original_lang": "en",
+      "translation_provenance": {
+        "summary": "manual_approved"
+      },
       "url": "https://www.eurex.com/ex-en/find/news-center/news/building-liquidity-in-europes-volatility-markets-5594946",
       "highlight_score": 10
     },
@@ -1348,7 +1502,7 @@
       "source": "洲际交易所",
       "subcategory": "交易与清算",
       "summary": "Additional Energy Contracts Join ICE Risk Model 2 ICE's JKM LNG (Platts) is the Benchmark Price for North-East Asia Natural Gas Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and home to the largest and most liquid markets in the world to trade and clear energy derivatives, today announced the launch of new JKM LNG (Platts) options, LNG Balmo freight futures, and U.K. base electricity options, in an expansion of ICE’s global natural gas and power markets. The new JKM options (JKZ) complement ICE's existing JKM average price options, settling in a similar manner to ICE's TTF options at the end of the month against the underlying future's settlement price. The new options give customers a way to manage Asian natural gas price risk at a specific point in time, alongside the average price options which are used to manage exposure that accumulates over the month. In addition, ICE",
-      "summary_cn": "更多能源合约纳入 ICE Risk Model 2。\n\nICE 的 JKM LNG（Platts）是东北亚天然气的基准价格。\n\n洲际交易所（Intercontinental Exchange, Inc.，NYSE: ICE）是全球领先的金融市场技术与数据提供商之一，为全球资本市场提供支持，并运营着全球规模最大、流动性最强的能源衍生品交易及清算市场。该公司今日宣布推出新的 JKM LNG（Platts）期权、LNG Balmo（月内剩余期间）运费期货以及英国基荷电力期权，以拓展 ICE 的全球天然气及电力市场。新的 JKM 期权（JKZ）是对 ICE 现有 JKM 平均价格期权的补充，其结算方式与 ICE 的 TTF 期权类似，在月底以标的期货的结算价进行结算。新期权使客户能够管理某一特定时点的亚洲天然气价格风险，与用于管理月内累积风险敞口的平均价格期权相配合。此外，ICE……",
+      "summary_cn": "ICE宣布推出新的JKM LNG（Platts）期权、LNG Balmo运费期货及英国基荷电力期权，拓展天然气及电力衍生品业务。其中，新JKM期权（JKZ）与现有月均价期权形成互补，按月末标的期货结算价结算，为市场参与者提供亚洲天然气价格风险管理工具。",
       "summary_en": "Additional Energy Contracts Join ICE Risk Model 2 ICE's JKM LNG (Platts) is the Benchmark Price for North-East Asia Natural Gas Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and home to the largest and most liquid markets in the world to trade and clear energy derivatives, today announced the launch of new JKM LNG (Platts) options, LNG Balmo freight futures, and U.K. base electricity options, in an expansion of ICE’s global natural gas and power markets. The new JKM options (JKZ) complement ICE's existing JKM average price options, settling in a similar manner to ICE's TTF options at the end of the month against the underlying future's settlement price. The new options give customers a way to manage Asian natural gas price risk at a specific point in time, alongside the average price options which are used to manage exposure that accumulates over the month. In addition, ICE",
       "summary_original": "Additional Energy Contracts Join ICE Risk Model 2 ICE's JKM LNG (Platts) is the Benchmark Price for North-East Asia Natural Gas Intercontinental Exchange, Inc. (NYSE: ICE), one of the world's leading providers of financial market technology and data powering global capital markets, and home to the largest and most liquid markets in the world to trade and clear energy derivatives, today announced the launch of new JKM LNG (Platts) options, LNG Balmo freight futures, and U.K. base electricity options, in an expansion of ICE’s global natural gas and power markets. The new JKM options (JKZ) complement ICE's existing JKM average price options, settling in a similar manner to ICE's TTF options at the end of the month against the underlying future's settlement price. The new options give customers a way to manage Asian natural gas price risk at a specific point in time, alongside the average price options which are used to manage exposure that accumulates over the month. In addition, ICE",
       "summary_original_lang": "en",
@@ -1384,12 +1538,13 @@
       "summary_en": "Cboe Global Markets, Inc. (Cboe: CBOE), a leading global markets operator and pioneer in equity and index derivatives, and S&P Dow Jones Indices (\"S&P DJI\"), the world's leading index provider, today announced a 25-year extension of their exclusive licensing agreement that will continue their longstanding collaboration through 2051. Under the extended agreement, Cboe will continue to have the exclusive rights to offer trading in its flagship S&P 500® Index (SPX) options. Cboe and S&P DJI may also collaborate to pursue innovation beyond traditional index derivatives, including new products like tokenized options contracts. The agreement builds on more than 40 years of collaboration between Cboe and S&P DJI that began in 1983 with the launch of SPX options – a breakthrough innovation that has since become the global standard for how investors worldwide gain and manage U.S. equity market exposure. \"Cboe and S&P DJI have created one of the industry's great success",
       "summary_original": "Cboe Global Markets, Inc. (Cboe: CBOE), a leading global markets operator and pioneer in equity and index derivatives, and S&P Dow Jones Indices (\"S&P DJI\"), the world's leading index provider, today announced a 25-year extension of their exclusive licensing agreement that will continue their longstanding collaboration through 2051. Under the extended agreement, Cboe will continue to have the exclusive rights to offer trading in its flagship S&P 500® Index (SPX) options. Cboe and S&P DJI may also collaborate to pursue innovation beyond traditional index derivatives, including new products like tokenized options contracts. The agreement builds on more than 40 years of collaboration between Cboe and S&P DJI that began in 1983 with the launch of SPX options – a breakthrough innovation that has since become the global standard for how investors worldwide gain and manage U.S. equity market exposure. \"Cboe and S&P DJI have created one of the industry's great success",
       "summary_original_lang": "en",
-      "title_cn": "Cboe和S&P道斯指数签署了25年延长独家许可协议,到2051年",
+      "title_cn": "Cboe与标普道琼斯指数将独家许可协议延长25年，合作延续至2051年",
       "title_en": "Cboe and S&P Dow Jones Indices Sign 25-Year Extension of Exclusive Licensing Agreement, Through 2051",
       "title_original": "Cboe and S&P Dow Jones Indices Sign 25-Year Extension of Exclusive Licensing Agreement, Through 2051",
       "title_original_lang": "en",
       "translation_provenance": {
-        "summary": "manual_approved"
+        "summary": "manual_approved",
+        "title": "manual_approved"
       },
       "url": "https://ir.cboe.com/news/news-details/2026/Cboe-and-SP-Dow-Jones-Indices-Sign-25-Year-Extension-of-Exclusive-Licensing-Agreement-Through-2051/default.aspx",
       "highlight_score": 36
